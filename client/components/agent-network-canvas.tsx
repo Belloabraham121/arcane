@@ -1,113 +1,225 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Canvas, useFrame, useThree } from "@react-three/fiber"
+import { Canvas, useFrame } from "@react-three/fiber"
 import { PerspectiveCamera, OrbitControls } from "@react-three/drei"
 import * as THREE from "three"
+import {
+  createMarketplaceTradeEvent,
+  type TradeEvent,
+} from "@/components/agent-trade-feed"
+import {
+  DEFAULT_NETWORK_LAYOUT,
+  type NetworkLayoutConfig,
+} from "@/lib/network-layout-config"
+import {
+  buildNetworkNodes,
+  MARKETPLACE_NODE_INDEX,
+  type NetworkNode,
+} from "@/lib/network-nodes"
+
+const ROOT_AGENT_COUNT = 4
+const SUB_AGENTS_PER_ROOT = 4
+const ROOT_BASE_SCALE = 0.72
+const SUB_BASE_SCALE = 0.78
+
+type AgentRole = "user" | "root" | "sub"
+type SubTripPhase = "idle" | "to_marketplace" | "at_marketplace" | "to_home"
+type RootTripPhase = "at_protocol" | "to_protocol"
 
 interface Agent {
   id: string
+  role: AgentRole
+  /** Current protocol (color); root travels across all protocols */
+  homeProtocolIndex: number
+  rootId?: string
   position: [number, number, number]
-  velocity: [number, number, number]
   tvl: number
   reputation: number
-  isUserAgent: boolean
-  userAgentIndex?: number
-  signals: {
-    selling: number
-    buying: number
-  }
+  signals: { selling: number; buying: number }
   activity: "selling" | "buying" | "managing" | "idle"
-  protocolIndex: number
   orbitPhase: number
-  targetPhase?: number
-  isBuyingSignals: boolean
+  sourceNodeIndex: number
+  targetNodeIndex: number
+  routeProgress: number
+  routeSpeed: number
+  routeHeight: number
+  tripPhase: SubTripPhase
+  rootTripPhase: RootTripPhase
+  pauseRemaining: number
+  signalGlow: number
+  routeOrigin: [number, number, number]
 }
 
-interface Protocol {
-  id: string
-  name: string
-  position: [number, number, number]
-  amount: number
-  radius: number
-  color: string
+function protocolColor(nodes: NetworkNode[], protocolIndex: number) {
+  return nodes[protocolIndex]?.color ?? "#ffffff"
 }
 
-// Generate protocol objects
-const generateProtocols = (amounts: Record<string, number>): Protocol[] => {
-  const protocols: Protocol[] = [
-    { id: "uniswap", name: "Uniswap", position: [40, 0, 0], amount: amounts.uniswap || 50000000, radius: 15, color: "#ff007a" },
-    { id: "aave", name: "AAVE", position: [-40, 0, 0], amount: amounts.aave || 30000000, radius: 12, color: "#7928ca" },
-    { id: "compound", name: "Compound", position: [0, 0, 40], amount: amounts.compound || 25000000, radius: 11, color: "#00d4ff" },
-    { id: "lido", name: "Lido", position: [0, 0, -40], amount: amounts.lido || 35000000, radius: 13, color: "#00a3e0" },
+function protocolCount(nodes: NetworkNode[]) {
+  return nodes.filter((n) => n.kind === "protocol").length
+}
+
+function orbitAroundPoint(
+  center: [number, number, number],
+  orbitPhase: number,
+  laneOffset: number
+): [number, number, number] {
+  const r = 3 + laneOffset
+  return [
+    center[0] + Math.cos(orbitPhase) * r,
+    center[1] + Math.sin(orbitPhase * 0.5) * 0.6,
+    center[2] + Math.sin(orbitPhase) * r,
   ]
-
-  return protocols.map(p => ({
-    ...p,
-    radius: Math.max(8, Math.log(p.amount) * 2),
-  }))
 }
 
-// Generate initial agent particles distributed across protocols
-const generateAgents = (protocols: Protocol[]): Agent[] => {
-  const agents: Agent[] = []
-  const count = 60
+function nodeOrbitPosition(
+  node: NetworkNode,
+  orbitPhase: number,
+  laneOffset: number
+): [number, number, number] {
+  const r = node.radius + 4 + laneOffset
+  return [
+    node.position[0] + Math.cos(orbitPhase) * r,
+    node.position[1] + Math.sin(orbitPhase * 0.5) * 0.8,
+    node.position[2] + Math.sin(orbitPhase) * r,
+  ]
+}
 
-  // User's agents - positioned at center (we'll support multiple user agents)
+function interpolateRoute(
+  source: NetworkNode,
+  target: NetworkNode,
+  t: number,
+  arcHeight: number
+): [number, number, number] {
+  return interpolatePoints(
+    [source.position[0], source.position[1], source.position[2]],
+    [target.position[0], target.position[1], target.position[2]],
+    t,
+    arcHeight
+  )
+}
+
+function interpolatePoints(
+  from: [number, number, number],
+  to: [number, number, number],
+  t: number,
+  arcHeight: number
+): [number, number, number] {
+  const arc = Math.sin(t * Math.PI) * arcHeight
+  return [
+    from[0] + (to[0] - from[0]) * t,
+    from[1] + (to[1] - from[1]) * t + arc,
+    from[2] + (to[2] - from[2]) * t,
+  ]
+}
+
+function pickNextProtocol(current: number, total: number) {
+  let next = current
+  while (next === current) {
+    next = Math.floor(Math.random() * total)
+  }
+  return next
+}
+
+function getRootAgent(agents: Agent[], rootId?: string) {
+  return agents.find((a) => a.id === rootId && a.role === "root")
+}
+
+const generateAgents = (nodes: NetworkNode[]): Agent[] => {
+  const agents: Agent[] = []
+  const count = protocolCount(nodes)
+
   agents.push({
     id: "user-agent-0",
-    position: [0, 5, 0],
-    velocity: [0, 0, 0],
+    role: "user",
+    homeProtocolIndex: 0,
+    position: [0, 6, 0],
     tvl: 500000,
     reputation: 847,
-    isUserAgent: true,
-    userAgentIndex: 0,
     signals: { selling: 247, buying: 128 },
     activity: "managing",
-    protocolIndex: 0,
     orbitPhase: 0,
-    isBuyingSignals: false,
+    sourceNodeIndex: 0,
+    targetNodeIndex: 0,
+    routeProgress: 0,
+    routeSpeed: 0,
+    routeHeight: 0,
+    tripPhase: "idle",
+    rootTripPhase: "at_protocol",
+    pauseRemaining: 0,
+    signalGlow: 0,
+    routeOrigin: [0, 6, 0],
   })
 
-  // Other agents distributed across protocols
-  for (let i = 0; i < count - 1; i++) {
-    const protocolIndex = i % protocols.length
-    const protocol = protocols[protocolIndex]
+  for (let r = 0; r < ROOT_AGENT_COUNT; r++) {
+    const rootId = `root-${r}`
+    const startProtocol = r % count
+    const node = nodes[startProtocol]
     const orbitPhase = Math.random() * Math.PI * 2
-    const isBuyingSignals = Math.random() > 0.5
+    const startPos = nodeOrbitPosition(node, orbitPhase, 0)
 
     agents.push({
-      id: `agent-${i}`,
-      position: [
-        protocol.position[0] + Math.cos(orbitPhase) * (protocol.radius + 5),
-        protocol.position[1] + (Math.random() - 0.5) * 10,
-        protocol.position[2] + Math.sin(orbitPhase) * (protocol.radius + 5),
-      ],
-      velocity: [0, 0, 0],
-      tvl: Math.random() * 1000000 + 10000,
-      reputation: Math.random() * 1000,
-      isUserAgent: false,
+      id: rootId,
+      role: "root",
+      homeProtocolIndex: startProtocol,
+      position: startPos,
+      tvl: 800000 + Math.random() * 400000,
+      reputation: 700 + Math.random() * 200,
       signals: {
-        selling: Math.floor(Math.random() * 300),
-        buying: Math.floor(Math.random() * 200),
+        selling: Math.floor(Math.random() * 200),
+        buying: Math.floor(Math.random() * 150),
       },
-      activity: (["selling", "buying", "managing", "idle"] as const)[
-        Math.floor(Math.random() * 4)
-      ],
-      protocolIndex,
+      activity: "managing",
       orbitPhase,
-      isBuyingSignals,
+      sourceNodeIndex: startProtocol,
+      targetNodeIndex: startProtocol,
+      routeProgress: 0,
+      routeSpeed: 0.0014 + Math.random() * 0.0008,
+      routeHeight: 3 + Math.random() * 4,
+      tripPhase: "idle",
+      rootTripPhase: "at_protocol",
+      pauseRemaining: 2 + r * 0.7,
+      signalGlow: 0,
+      routeOrigin: startPos,
     })
+
+    for (let s = 0; s < SUB_AGENTS_PER_ROOT; s++) {
+      const subPhase =
+        (orbitPhase + (s / SUB_AGENTS_PER_ROOT) * Math.PI * 2) % (Math.PI * 2)
+      const subPos = orbitAroundPoint(startPos, subPhase, 1 + s * 0.4)
+
+      agents.push({
+        id: `sub-${r}-${s}`,
+        role: "sub",
+        rootId,
+        homeProtocolIndex: startProtocol,
+        position: subPos,
+        tvl: 50000 + Math.random() * 80000,
+        reputation: Math.random() * 500,
+        signals: { selling: 0, buying: 0 },
+        activity: "buying",
+        orbitPhase: subPhase,
+        sourceNodeIndex: startProtocol,
+        targetNodeIndex: MARKETPLACE_NODE_INDEX,
+        routeProgress: 0,
+        routeSpeed: 0.0016 + Math.random() * 0.001,
+        routeHeight: 8 + Math.random() * 6,
+        tripPhase: "idle",
+        rootTripPhase: "at_protocol",
+        pauseRemaining: 0.8 + s * 1.1 + r * 0.3,
+        signalGlow: 0,
+        routeOrigin: subPos,
+      })
+    }
   }
 
   return agents
 }
 
-// Protocol object component
-const ProtocolObject: React.FC<{ protocol: Protocol }> = ({ protocol }) => {
+const NetworkNodeObject: React.FC<{ node: NetworkNode }> = ({ node }) => {
   const meshRef = useRef<THREE.Mesh>(null)
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     if (meshRef.current) {
       meshRef.current.rotation.x += 0.0005
       meshRef.current.rotation.y += 0.0008
@@ -115,368 +227,432 @@ const ProtocolObject: React.FC<{ protocol: Protocol }> = ({ protocol }) => {
   })
 
   return (
-    <group position={protocol.position}>
-      {/* Main protocol sphere */}
+    <group position={node.position} scale={node.scale}>
       <mesh ref={meshRef}>
-        <icosahedronGeometry args={[protocol.radius, 4]} />
+        <icosahedronGeometry args={[node.radius, 4]} />
         <meshPhongMaterial
-          color={protocol.color}
-          emissive={protocol.color}
+          color={node.color}
+          emissive={node.color}
           emissiveIntensity={0.2}
-          wireframe={true}
-          transparent={true}
+          wireframe
+          transparent
           opacity={0.6}
         />
       </mesh>
-
-      {/* Orbital ring */}
       <mesh rotation={[Math.PI / 4, 0, 0]}>
-        <torusGeometry args={[protocol.radius + 2, 0.3, 8, 32]} />
+        <torusGeometry args={[node.radius + 2, 0.3, 8, 32]} />
         <meshPhongMaterial
-          color={protocol.color}
-          emissive={protocol.color}
+          color={node.color}
+          emissive={node.color}
           emissiveIntensity={0.3}
-        />
-      </mesh>
-
-      {/* Inner glow ring */}
-      <mesh rotation={[0, 0, Math.PI / 3]}>
-        <torusGeometry args={[protocol.radius * 0.7, 0.2, 8, 32]} />
-        <meshPhongMaterial
-          color={protocol.color}
-          emissive={protocol.color}
-          emissiveIntensity={0.4}
         />
       </mesh>
     </group>
   )
 }
 
-// Buy signals zone (top node)
-const BuySignalsZone: React.FC = () => {
+const UserAgentMesh: React.FC<{ isHovered: boolean }> = ({ isHovered }) => {
   const meshRef = useRef<THREE.Mesh>(null)
+  const ringRef = useRef<THREE.Mesh>(null)
 
   useFrame(({ clock }) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x += 0.001
-      meshRef.current.rotation.y += 0.002
-      const pulse = 1 + Math.sin(clock.getElapsedTime() * 2) * 0.1
-      meshRef.current.scale.set(pulse * 12, pulse * 12, pulse * 12)
-    }
+    if (!meshRef.current) return
+    const pulse = 1 + Math.sin(clock.getElapsedTime() * 3) * 0.15
+    const scale = 1.05 * pulse
+    meshRef.current.scale.set(scale, scale, scale)
+    meshRef.current.rotation.y += 0.01
+    if (ringRef.current) ringRef.current.rotation.z += 0.008
   })
 
   return (
-    <mesh ref={meshRef} position={[0, 80, 0]}>
-      <icosahedronGeometry args={[12, 3]} />
-      <meshPhongMaterial
-        color="#00ff88"
-        emissive="#00ff88"
-        emissiveIntensity={0.3}
-        wireframe={true}
-        transparent={true}
-        opacity={0.4}
-      />
-    </mesh>
+    <group position={[0, 6, 0]}>
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[2.2, 0.08, 8, 32]} />
+        <meshPhongMaterial color="#ea580c" emissive="#ea580c" emissiveIntensity={0.5} />
+      </mesh>
+      <mesh ref={meshRef}>
+        <octahedronGeometry args={[1, 0]} />
+        <meshPhongMaterial
+          color="#ea580c"
+          emissive={isHovered ? "#ff8c42" : "#ea580c"}
+          emissiveIntensity={0.45}
+        />
+      </mesh>
+    </group>
   )
 }
 
-// Agent particle component
-const AgentParticle: React.FC<{
+const RootAgentMesh: React.FC<{
   agent: Agent
-  hoveredAgent: string | null
-  protocol: Protocol
-  buySignalsZoneY: number
-}> = ({ agent, hoveredAgent, protocol, buySignalsZoneY }) => {
+  nodes: NetworkNode[]
+  isHovered: boolean
+}> = ({ agent, nodes, isHovered }) => {
   const meshRef = useRef<THREE.Mesh>(null)
-  const isHovered = hoveredAgent === agent.id
+  const ringRef = useRef<THREE.Mesh>(null)
+  const totalProtocols = protocolCount(nodes)
 
-  const sizeScale = Math.pow(agent.tvl / 100000, 0.3) * 0.5
-  const baseSize = agent.isUserAgent ? sizeScale * 2 : sizeScale
+  useFrame((_, delta) => {
+    const mesh = meshRef.current
+    if (!mesh || totalProtocols === 0) return
 
-  useFrame(({ clock }) => {
-    if (meshRef.current) {
-      if (agent.isUserAgent) {
-        // User agent pulsing at center
-        const pulse = 1 + Math.sin(clock.getElapsedTime() * 3) * 0.2
-        meshRef.current.scale.set(baseSize * pulse, baseSize * pulse, baseSize * pulse)
-      } else {
-        // Non-user agents with buy/sell routing
-        const orbitSpeed = 0.8
-        let newPhase = agent.orbitPhase + orbitSpeed * 0.01
-        agent.orbitPhase = newPhase
+    const color = protocolColor(nodes, agent.homeProtocolIndex)
 
-        // Smooth routing: agents buying signals go to top, then return
-        if (agent.isBuyingSignals) {
-          // Move up to buy signals zone, pause, then return
-          const cycleTime = clock.getElapsedTime() * 0.3
-          const cycleFraction = (cycleTime % 3) / 3 // 3 second cycle
+    if (agent.rootTripPhase === "at_protocol") {
+      agent.pauseRemaining -= delta
+      const node = nodes[agent.homeProtocolIndex]
+      if (!node) return
 
-          let targetY: number
-          if (cycleFraction < 0.4) {
-            // Going up
-            targetY = protocol.position[1] + (buySignalsZoneY - protocol.position[1]) * (cycleFraction / 0.4)
-          } else if (cycleFraction < 0.6) {
-            // At top (pause)
-            targetY = buySignalsZoneY
-          } else {
-            // Coming down
-            targetY = buySignalsZoneY - (buySignalsZoneY - protocol.position[1]) * ((cycleFraction - 0.6) / 0.4)
-          }
+      agent.orbitPhase += delta * 0.4
+      const pos = nodeOrbitPosition(node, agent.orbitPhase, 0)
+      mesh.position.set(pos[0], pos[1], pos[2])
+      agent.position = pos
 
-          const orbitRadius = protocol.radius + 8
-          meshRef.current.position.x =
-            protocol.position[0] + Math.cos(newPhase) * orbitRadius
-          meshRef.current.position.z =
-            protocol.position[2] + Math.sin(newPhase) * orbitRadius
-          meshRef.current.position.y = targetY
-        } else {
-          // Regular orbital animation
-          const orbitRadius = protocol.radius + 8
-          meshRef.current.position.x =
-            protocol.position[0] + Math.cos(newPhase) * orbitRadius
-          meshRef.current.position.z =
-            protocol.position[2] + Math.sin(newPhase) * orbitRadius
-          meshRef.current.position.y =
-            protocol.position[1] + Math.sin(newPhase * 0.5) * 5
+      if (agent.pauseRemaining <= 0) {
+        const next = pickNextProtocol(agent.homeProtocolIndex, totalProtocols)
+        agent.sourceNodeIndex = agent.homeProtocolIndex
+        agent.targetNodeIndex = next
+        agent.routeProgress = 0
+        agent.routeSpeed = 0.0012 + Math.random() * 0.0008
+        agent.routeHeight = 3 + Math.random() * 5
+        agent.rootTripPhase = "to_protocol"
+      }
+    } else {
+      agent.routeProgress += agent.routeSpeed
+      const source = nodes[agent.sourceNodeIndex]
+      const target = nodes[agent.targetNodeIndex]
+      if (!source || !target) return
+
+      const t = Math.min(agent.routeProgress, 1)
+      const pos = interpolateRoute(source, target, t, agent.routeHeight)
+      mesh.position.set(pos[0], pos[1], pos[2])
+      agent.position = pos
+
+      if (agent.routeProgress >= 1) {
+        agent.homeProtocolIndex = agent.targetNodeIndex
+        agent.rootTripPhase = "at_protocol"
+        agent.pauseRemaining = 2.5 + Math.random() * 2
+        agent.routeProgress = 0
+      }
+    }
+
+    agent.signalGlow = Math.max(0, agent.signalGlow - delta)
+    const glowPulse = 1 + agent.signalGlow * 0.35
+    const base = ROOT_BASE_SCALE * glowPulse * (isHovered ? 1.15 : 1)
+    mesh.scale.set(base, base, base)
+    mesh.rotation.y += 0.006
+
+    if (ringRef.current) {
+      ringRef.current.position.copy(mesh.position)
+      ringRef.current.rotation.x += 0.004
+      const ringMat = ringRef.current.material as THREE.MeshPhongMaterial
+      ringMat.color.set(color)
+      ringMat.emissive.set(color)
+    }
+
+    const bodyMat = mesh.material as THREE.MeshPhongMaterial
+    bodyMat.color.set(color)
+    bodyMat.emissive.set(color)
+  })
+
+  const initialColor = protocolColor(nodes, agent.homeProtocolIndex)
+
+  return (
+    <>
+      <mesh ref={ringRef}>
+        <torusGeometry args={[1.1, 0.05, 8, 24]} />
+        <meshPhongMaterial
+          color={initialColor}
+          emissive={initialColor}
+          emissiveIntensity={0.35}
+        />
+      </mesh>
+      <mesh ref={meshRef}>
+        <dodecahedronGeometry args={[0.55, 0]} />
+        <meshPhongMaterial
+          color={initialColor}
+          emissive={initialColor}
+          emissiveIntensity={isHovered ? 0.5 : 0.28}
+        />
+      </mesh>
+    </>
+  )
+}
+
+const SubAgentMesh: React.FC<{
+  agent: Agent
+  agents: Agent[]
+  nodes: NetworkNode[]
+  isHovered: boolean
+  onArriveAtNode: (agentId: string, nodeIndex: number) => void
+  onReturnHome: (subId: string, rootId: string) => void
+}> = ({ agent, agents, nodes, isHovered, onArriveAtNode, onReturnHome }) => {
+  const meshRef = useRef<THREE.Mesh>(null)
+  const marketNode = nodes[MARKETPLACE_NODE_INDEX]
+  const marketPos: [number, number, number] = marketNode
+    ? [marketNode.position[0], marketNode.position[1], marketNode.position[2]]
+    : [0, 34, 0]
+
+  useFrame((_, delta) => {
+    const mesh = meshRef.current
+    const root = getRootAgent(agents, agent.rootId)
+    if (!mesh || !root || !marketNode) return
+
+    const rootPos = root.position
+    agent.homeProtocolIndex = root.homeProtocolIndex
+    const rootColor = protocolColor(nodes, root.homeProtocolIndex)
+    const mat = mesh.material as THREE.MeshPhongMaterial
+    if (isHovered) {
+      mat.color.set("#ea580c")
+      mat.emissive.set("#ea580c")
+      mat.emissiveIntensity = 0.55
+    } else {
+      mat.color.set(rootColor)
+      mat.emissive.set(rootColor)
+      mat.emissiveIntensity = 0.38
+    }
+
+    if (agent.tripPhase === "idle") {
+      agent.pauseRemaining -= delta
+      if (agent.pauseRemaining <= 0) {
+        agent.tripPhase = "to_marketplace"
+        agent.routeProgress = 0
+        agent.routeSpeed = 0.0016 + Math.random() * 0.001
+        agent.routeHeight = 8 + Math.random() * 6
+        agent.routeOrigin = [...rootPos]
+      }
+      agent.orbitPhase += delta * 0.6
+      const pos = orbitAroundPoint(rootPos, agent.orbitPhase, 1.2)
+      mesh.position.set(pos[0], pos[1], pos[2])
+      agent.position = pos
+    } else if (agent.tripPhase === "at_marketplace") {
+      agent.pauseRemaining -= delta
+      mesh.position.set(marketPos[0], marketPos[1], marketPos[2])
+      agent.position = [...marketPos]
+
+      if (agent.pauseRemaining <= 0) {
+        agent.tripPhase = "to_home"
+        agent.routeProgress = 0
+        agent.routeSpeed = 0.0016 + Math.random() * 0.001
+        agent.routeHeight = 8 + Math.random() * 6
+        agent.routeOrigin = [...marketPos]
+      }
+    } else {
+      agent.routeProgress += agent.routeSpeed
+
+      if (agent.tripPhase === "to_marketplace") {
+        const t = Math.min(agent.routeProgress, 1)
+        const pos = interpolatePoints(agent.routeOrigin, marketPos, t, agent.routeHeight)
+        mesh.position.set(pos[0], pos[1], pos[2])
+        agent.position = pos
+
+        if (agent.routeProgress >= 1) {
+          agent.tripPhase = "at_marketplace"
+          agent.pauseRemaining = 0.45 + Math.random() * 0.35
+          agent.routeProgress = 0
+          onArriveAtNode(agent.id, MARKETPLACE_NODE_INDEX)
         }
+      } else if (agent.tripPhase === "to_home") {
+        const t = Math.min(agent.routeProgress, 1)
+        const pos = interpolatePoints(agent.routeOrigin, rootPos, t, agent.routeHeight)
+        mesh.position.set(pos[0], pos[1], pos[2])
+        agent.position = pos
 
-        // Hover animation
-        if (isHovered) {
-          meshRef.current.scale.lerp(
-            new THREE.Vector3(baseSize * 1.5, baseSize * 1.5, baseSize * 1.5),
-            0.1
-          )
-        } else {
-          meshRef.current.scale.lerp(
-            new THREE.Vector3(baseSize, baseSize, baseSize),
-            0.1
-          )
+        if (agent.routeProgress >= 1) {
+          agent.tripPhase = "idle"
+          agent.pauseRemaining = 1.2 + Math.random() * 1.5
+          if (agent.rootId) onReturnHome(agent.id, agent.rootId)
         }
       }
     }
+
+    const scale = SUB_BASE_SCALE * (isHovered ? 1.2 : 1)
+    mesh.scale.set(scale, scale, scale)
+    mesh.rotation.x += 0.02
+    mesh.rotation.y += 0.025
   })
 
   return (
-    <mesh ref={meshRef} position={agent.position}>
-      <octahedronGeometry args={[1, 0]} />
-      <meshPhongMaterial
-        color={agent.isUserAgent ? "#ea580c" : "#ffffff"}
-        emissive={isHovered ? "#ea580c" : agent.isUserAgent ? "#ea580c" : "#444444"}
-        wireframe={false}
-      />
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[0.85, 16, 16]} />
+      <meshPhongMaterial color="#ff007a" emissive="#ff007a" emissiveIntensity={0.38} />
     </mesh>
   )
 }
 
-// Connection lines between agents (signal flow)
-const AgentConnections: React.FC<{
+const AgentRouteTrails: React.FC<{
   agents: Agent[]
   hoveredAgent: string | null
 }> = ({ agents, hoveredAgent }) => {
   const linesRef = useRef<THREE.LineSegments>(null)
 
-  useEffect(() => {
+  useFrame(() => {
     if (!linesRef.current) return
 
-    const geometry = new THREE.BufferGeometry()
     const positions: number[] = []
     const colors: number[] = []
 
-    // Draw signal connections
-    agents.forEach((agent, idx) => {
-      if (agent.signals.selling > 0) {
-        // Connect to nearest buying agents
-        const nearest = agents
-          .filter((a) => a.signals.buying > 0 && a.id !== agent.id)
-          .sort(
-            (a, b) =>
-              Math.hypot(
-                a.position[0] - agent.position[0],
-                a.position[1] - agent.position[1]
-              ) -
-              Math.hypot(
-                b.position[0] - agent.position[0],
-                b.position[1] - agent.position[1]
-              )
-          )
-          .slice(0, 2)
+    agents.forEach((agent) => {
+      if (agent.role !== "sub") return
+      if (agent.tripPhase !== "to_marketplace" && agent.tripPhase !== "to_home") return
 
-        nearest.forEach((buyer) => {
-          positions.push(
-            agent.position[0],
-            agent.position[1],
-            agent.position[2]
-          )
-          positions.push(buyer.position[0], buyer.position[1], buyer.position[2])
+      const [x, y, z] = agent.position
+      const [ox, oy, oz] = agent.routeOrigin
 
-          const isActive = hoveredAgent === agent.id || hoveredAgent === buyer.id
-          colors.push(
-            ...(isActive
-              ? [1, 0.353, 0.047] // Orange #ea580c
-              : [0.2, 0.2, 0.2]
-            ) // Gray
-          )
-          colors.push(
-            ...(isActive
-              ? [1, 0.353, 0.047]
-              : [0.2, 0.2, 0.2]
-            )
-          )
-        })
-      }
+      positions.push(ox, oy, oz, x, y, z)
+
+      const isActive = hoveredAgent === agent.id
+      const color: [number, number, number] = isActive
+        ? [1, 0.353, 0.047]
+        : [0.45, 0.45, 0.45]
+      colors.push(...color, ...color)
     })
 
-    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3))
-    geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3))
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(positions), 3)
+    )
+    geometry.setAttribute(
+      "color",
+      new THREE.BufferAttribute(new Float32Array(colors), 3)
+    )
 
     linesRef.current.geometry.dispose()
     linesRef.current.geometry = geometry
-  }, [agents, hoveredAgent])
+  })
 
   return (
     <lineSegments ref={linesRef}>
-      <lineBasicMaterial vertexColors={true} linewidth={1} />
+      <lineBasicMaterial vertexColors linewidth={1} />
     </lineSegments>
   )
 }
 
-// Main canvas controller
 const AgentNetworkScene: React.FC<{
   agents: Agent[]
-  protocols: Protocol[]
+  nodes: NetworkNode[]
   hoveredAgent: string | null
-  viewMode: "activity" | "reputation" | "tvl"
-}> = ({ agents, protocols, hoveredAgent, viewMode }) => {
-  const buySignalsZoneY = 80
+  onArriveAtNode: (agentId: string, nodeIndex: number) => void
+  onReturnHome: (subId: string, rootId: string) => void
+}> = ({ agents, nodes, hoveredAgent, onArriveAtNode, onReturnHome }) => (
+  <>
+    <PerspectiveCamera makeDefault position={[120, 70, 120]} fov={75} />
+    <OrbitControls makeDefault enableDamping dampingFactor={0.05} enableZoom enablePan />
+    <ambientLight intensity={0.5} color={0xffffff} />
+    <pointLight position={[100, 100, 100]} intensity={1} color={0xffffff} />
+    <pointLight position={[-100, 50, -100]} intensity={0.6} color={0xff007a} />
+    <pointLight position={[0, 0, 0]} intensity={0.4} color={0xea580c} />
 
-  return (
-    <>
-      <PerspectiveCamera makeDefault position={[120, 70, 120]} fov={75} />
-      <OrbitControls
-        makeDefault
-        autoRotate={false}
-        autoRotateSpeed={0}
-        enableDamping={true}
-        dampingFactor={0.05}
-        enableZoom={true}
-        enablePan={true}
-      />
-      <ambientLight intensity={0.5} color={0xffffff} />
-      <pointLight position={[100, 100, 100]} intensity={1} color={0xffffff} />
-      <pointLight position={[-100, 50, -100]} intensity={0.6} color={0xff007a} />
-      <pointLight position={[0, 0, 0]} intensity={0.4} color={0xea580c} />
+    {nodes.map((node) => (
+      <NetworkNodeObject key={node.id} node={node} />
+    ))}
 
-      {/* Render protocol objects */}
-      {protocols.map((protocol) => (
-        <ProtocolObject key={protocol.id} protocol={protocol} />
-      ))}
-
-      {/* Buy signals zone at top */}
-      <BuySignalsZone />
-
-      {/* Render agents */}
-      {agents.map((agent) => {
-        const protocol = protocols[agent.protocolIndex] || protocols[0]
+    {agents.map((agent) => {
+      const isHovered = hoveredAgent === agent.id
+      if (agent.role === "user") {
+        return <UserAgentMesh key={agent.id} isHovered={isHovered} />
+      }
+      if (agent.role === "root") {
         return (
-          <AgentParticle
+          <RootAgentMesh
             key={agent.id}
             agent={agent}
-            hoveredAgent={hoveredAgent}
-            protocol={protocol}
-            buySignalsZoneY={buySignalsZoneY}
+            nodes={nodes}
+            isHovered={isHovered}
           />
         )
-      })}
+      }
+      return (
+        <SubAgentMesh
+          key={agent.id}
+          agent={agent}
+          agents={agents}
+          nodes={nodes}
+          isHovered={isHovered}
+          onArriveAtNode={onArriveAtNode}
+          onReturnHome={onReturnHome}
+        />
+      )
+    })}
 
-      {/* Render connections */}
-      <AgentConnections agents={agents} hoveredAgent={hoveredAgent} />
-
-      {/* Grid for reference */}
-      <gridHelper args={[200, 20]} position={[0, -40, 0]} />
-    </>
-  )
-}
+    <AgentRouteTrails agents={agents} hoveredAgent={hoveredAgent} />
+    <gridHelper args={[200, 20]} position={[0, -40, 0]} />
+  </>
+)
 
 export const AgentNetworkCanvas: React.FC<{
   viewMode: "activity" | "reputation" | "tvl"
   protocolAmounts?: Record<string, number>
-  onProtocolAmountsChange?: (amounts: Record<string, number>) => void
-}> = ({ viewMode, protocolAmounts = {}, onProtocolAmountsChange }) => {
-  const [protocols, setProtocols] = useState<Protocol[]>(() =>
-    generateProtocols(protocolAmounts)
-  )
+  onTradeEvent?: (event: TradeEvent) => void
+}> = ({ viewMode, protocolAmounts = {}, onTradeEvent }) => {
+  const layout: NetworkLayoutConfig = DEFAULT_NETWORK_LAYOUT
+  const [nodes, setNodes] = useState<NetworkNode[]>(() => buildNetworkNodes(layout))
   const [agents, setAgents] = useState<Agent[]>(() =>
-    generateAgents(generateProtocols(protocolAmounts))
+    generateAgents(buildNetworkNodes(layout))
   )
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null)
+  const agentsRef = useRef(agents)
+  agentsRef.current = agents
 
-  // Update protocols when amounts change
   useEffect(() => {
-    const newProtocols = generateProtocols(protocolAmounts)
-    setProtocols(newProtocols)
-    setAgents(generateAgents(newProtocols))
+    const nextNodes = buildNetworkNodes(layout)
+    setNodes(nextNodes)
+    setAgents(generateAgents(nextNodes))
   }, [protocolAmounts])
 
+  const handleArriveAtNode = (agentId: string, nodeIndex: number) => {
+    if (nodeIndex === MARKETPLACE_NODE_INDEX && onTradeEvent) {
+      onTradeEvent(createMarketplaceTradeEvent(agentId))
+    }
+  }
+
+  const handleReturnHome = (_subId: string, rootId: string) => {
+    const root = agentsRef.current.find((a) => a.id === rootId)
+    if (root) root.signalGlow = 1
+  }
+
   return (
-    <div
-      className="w-full h-screen relative"
-      style={{
-        backgroundImage: "radial-gradient(circle, hsl(0 0% 20%) 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
-      }}
-    >
+    <div className="relative h-full w-full min-w-0 flex-1 bg-background">
       <Canvas>
         <AgentNetworkScene
           agents={agents}
-          protocols={protocols}
+          nodes={nodes}
           hoveredAgent={hoveredAgent}
-          viewMode={viewMode}
+          onArriveAtNode={handleArriveAtNode}
+          onReturnHome={handleReturnHome}
         />
       </Canvas>
 
-      {/* Info panel */}
-      <div className="absolute bottom-6 left-6 text-xs font-mono text-white bg-black/80 border border-white/20 p-4 rounded">
-        <p>AGENT NETWORK VISUALIZATION</p>
-        <p>Rotate: auto-orbit | Hover: agent details</p>
-        <p>View Mode: {viewMode.toUpperCase()}</p>
-      </div>
-
-      {/* Protocol info */}
-      <div className="absolute top-6 left-6 text-xs font-mono text-white bg-black/90 border border-white/20 p-4 rounded max-w-sm">
-        <p className="text-white font-bold mb-3">PROTOCOLS</p>
-        <div className="space-y-2">
-          {protocols.map((protocol) => (
-            <div key={protocol.id} className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: protocol.color }}
-              />
-              <span>{protocol.name}</span>
-              <span className="text-white/50">
-                ${(protocol.amount / 1000000).toFixed(1)}M
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Hovered agent info */}
       {hoveredAgent && (
-        <div className="absolute top-6 right-6 text-xs font-mono text-white bg-black/90 border border-[#ea580c] p-4 rounded max-w-xs">
-          <p className="text-[#ea580c] font-bold">
-            {hoveredAgent === "user-agent" ? "YOUR AGENT" : hoveredAgent.toUpperCase()}
-          </p>
+        <div className="absolute bottom-6 left-1/2 z-10 max-w-xs -translate-x-1/2 rounded border border-[#ea580c] bg-card/95 p-4 font-mono text-xs text-foreground shadow-md backdrop-blur-sm">
           {agents
             .filter((a) => a.id === hoveredAgent)
-            .map((agent) => (
-              <div key={agent.id} className="mt-2 space-y-1">
-                <p>TVL: ${agent.tvl.toLocaleString()}</p>
-                <p>Reputation: {agent.reputation.toFixed(0)}/1000</p>
-                <p>Activity: {agent.activity.toUpperCase()}</p>
-                <p>Signals Selling: {agent.signals.selling}</p>
-                <p>Signals Buying: {agent.signals.buying}</p>
-              </div>
-            ))}
+            .map((agent) => {
+              const root = agent.rootId
+                ? agents.find((a) => a.id === agent.rootId)
+                : null
+              return (
+                <div key={agent.id}>
+                  <p className="font-bold text-[#ea580c]">
+                    {agent.role === "user"
+                      ? "YOUR AGENT"
+                      : agent.role === "root"
+                        ? `ROOT · ${nodes[agent.homeProtocolIndex]?.name ?? "Protocol"}`
+                        : `SUB · follows ${root?.id ?? "root"}`}
+                  </p>
+                  <div className="mt-2 space-y-1 text-muted-foreground">
+                    <p>TVL: ${agent.tvl.toLocaleString()}</p>
+                    <p>Reputation: {agent.reputation.toFixed(0)}/1000</p>
+                    {agent.role === "root" && (
+                      <p>Moving: {agent.rootTripPhase.replace(/_/g, " ")}</p>
+                    )}
+                    {agent.role === "sub" && (
+                      <p>Trip: {agent.tripPhase.replace(/_/g, " ")}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
         </div>
       )}
     </div>

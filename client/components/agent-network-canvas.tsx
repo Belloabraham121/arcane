@@ -1,9 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Canvas, useFrame, useThree } from "@react-three/fiber"
+import { Canvas, useFrame } from "@react-three/fiber"
 import { PerspectiveCamera, OrbitControls } from "@react-three/drei"
 import * as THREE from "three"
+import {
+  DEFAULT_NETWORK_LAYOUT,
+  type NetworkLayoutConfig,
+  type ProtocolNodeId,
+} from "@/lib/network-layout-config"
 
 interface Agent {
   id: string
@@ -22,30 +27,54 @@ interface Agent {
   orbitPhase: number
   targetPhase?: number
   isBuyingSignals: boolean
+  sourceProtocolIndex: number
+  targetProtocolIndex: number
+  routeProgress: number
+  routeSpeed: number
+  routeHeight: number
 }
 
 interface Protocol {
-  id: string
+  id: ProtocolNodeId
   name: string
   position: [number, number, number]
   amount: number
   radius: number
   color: string
+  scale: [number, number, number]
 }
 
-// Generate protocol objects
-const generateProtocols = (amounts: Record<string, number>): Protocol[] => {
-  const protocols: Protocol[] = [
-    { id: "uniswap", name: "Uniswap", position: [40, 0, 0], amount: amounts.uniswap || 50000000, radius: 15, color: "#ff007a" },
-    { id: "aave", name: "AAVE", position: [-40, 0, 0], amount: amounts.aave || 30000000, radius: 12, color: "#7928ca" },
-    { id: "compound", name: "Compound", position: [0, 0, 40], amount: amounts.compound || 25000000, radius: 11, color: "#00d4ff" },
-    { id: "lido", name: "Lido", position: [0, 0, -40], amount: amounts.lido || 35000000, radius: 13, color: "#00a3e0" },
-  ]
+const PROTOCOL_COLORS: Record<ProtocolNodeId, string> = {
+  uniswap: "#ff007a",
+  aave: "#7928ca",
+  compound: "#00d4ff",
+  lido: "#00a3e0",
+}
 
-  return protocols.map(p => ({
-    ...p,
-    radius: Math.max(8, Math.log(p.amount) * 2),
-  }))
+const PROTOCOL_NAMES: Record<ProtocolNodeId, string> = {
+  uniswap: "Uniswap",
+  aave: "AAVE",
+  compound: "Compound",
+  lido: "Lido",
+}
+
+// Generate protocol objects from layout + TVL amounts
+const generateProtocols = (
+  amounts: Record<string, number>,
+  layout: NetworkLayoutConfig
+): Protocol[] => {
+  return (Object.keys(layout.protocols) as ProtocolNodeId[]).map((id) => {
+    const node = layout.protocols[id]
+    return {
+      id,
+      name: PROTOCOL_NAMES[id],
+      position: [node.positionX, 0, node.positionZ],
+      amount: amounts[id] || 25000000,
+      radius: node.radius,
+      color: PROTOCOL_COLORS[id],
+      scale: [node.width, node.height, node.width],
+    }
+  })
 }
 
 // Generate initial agent particles distributed across protocols
@@ -67,6 +96,11 @@ const generateAgents = (protocols: Protocol[]): Agent[] => {
     protocolIndex: 0,
     orbitPhase: 0,
     isBuyingSignals: false,
+    sourceProtocolIndex: 0,
+    targetProtocolIndex: 0,
+    routeProgress: 0,
+    routeSpeed: 0,
+    routeHeight: 0,
   })
 
   // Other agents distributed across protocols
@@ -75,6 +109,7 @@ const generateAgents = (protocols: Protocol[]): Agent[] => {
     const protocol = protocols[protocolIndex]
     const orbitPhase = Math.random() * Math.PI * 2
     const isBuyingSignals = Math.random() > 0.5
+    const targetProtocolIndex = (protocolIndex + 1 + Math.floor(Math.random() * (protocols.length - 1))) % protocols.length
 
     agents.push({
       id: `agent-${i}`,
@@ -97,6 +132,11 @@ const generateAgents = (protocols: Protocol[]): Agent[] => {
       protocolIndex,
       orbitPhase,
       isBuyingSignals,
+      sourceProtocolIndex: protocolIndex,
+      targetProtocolIndex,
+      routeProgress: Math.random(),
+      routeSpeed: 0.0025 + Math.random() * 0.004,
+      routeHeight: 1.5 + Math.random() * 5,
     })
   }
 
@@ -115,7 +155,7 @@ const ProtocolObject: React.FC<{ protocol: Protocol }> = ({ protocol }) => {
   })
 
   return (
-    <group position={protocol.position}>
+    <group position={protocol.position} scale={protocol.scale}>
       {/* Main protocol sphere */}
       <mesh ref={meshRef}>
         <icosahedronGeometry args={[protocol.radius, 4]} />
@@ -152,31 +192,53 @@ const ProtocolObject: React.FC<{ protocol: Protocol }> = ({ protocol }) => {
   )
 }
 
-// Buy signals zone (top node)
-const BuySignalsZone: React.FC = () => {
+// Buy signals zone — same scale as protocol nodes, stacked above the quad
+const BuySignalsZone: React.FC<{
+  radius: number
+  y: number
+  scale: [number, number, number]
+}> = ({ radius, y, scale }) => {
   const meshRef = useRef<THREE.Mesh>(null)
 
   useFrame(({ clock }) => {
     if (meshRef.current) {
-      meshRef.current.rotation.x += 0.001
-      meshRef.current.rotation.y += 0.002
-      const pulse = 1 + Math.sin(clock.getElapsedTime() * 2) * 0.1
-      meshRef.current.scale.set(pulse * 12, pulse * 12, pulse * 12)
+      meshRef.current.rotation.x += 0.0005
+      meshRef.current.rotation.y += 0.0008
+      const pulse = 1 + Math.sin(clock.getElapsedTime() * 2) * 0.06
+      meshRef.current.scale.set(pulse, pulse, pulse)
     }
   })
 
   return (
-    <mesh ref={meshRef} position={[0, 80, 0]}>
-      <icosahedronGeometry args={[12, 3]} />
-      <meshPhongMaterial
-        color="#00ff88"
-        emissive="#00ff88"
-        emissiveIntensity={0.3}
-        wireframe={true}
-        transparent={true}
-        opacity={0.4}
-      />
-    </mesh>
+    <group position={[0, y, 0]} scale={scale}>
+      <mesh ref={meshRef}>
+        <icosahedronGeometry args={[radius, 4]} />
+        <meshPhongMaterial
+          color="#00ff88"
+          emissive="#00ff88"
+          emissiveIntensity={0.2}
+          wireframe={true}
+          transparent={true}
+          opacity={0.6}
+        />
+      </mesh>
+      <mesh rotation={[Math.PI / 4, 0, 0]}>
+        <torusGeometry args={[radius + 2, 0.3, 8, 32]} />
+        <meshPhongMaterial
+          color="#00ff88"
+          emissive="#00ff88"
+          emissiveIntensity={0.3}
+        />
+      </mesh>
+      <mesh rotation={[0, 0, Math.PI / 3]}>
+        <torusGeometry args={[radius * 0.7, 0.2, 8, 32]} />
+        <meshPhongMaterial
+          color="#00ff88"
+          emissive="#00ff88"
+          emissiveIntensity={0.4}
+        />
+      </mesh>
+    </group>
   )
 }
 
@@ -184,9 +246,8 @@ const BuySignalsZone: React.FC = () => {
 const AgentParticle: React.FC<{
   agent: Agent
   hoveredAgent: string | null
-  protocol: Protocol
-  buySignalsZoneY: number
-}> = ({ agent, hoveredAgent, protocol, buySignalsZoneY }) => {
+  protocols: Protocol[]
+}> = ({ agent, hoveredAgent, protocols }) => {
   const meshRef = useRef<THREE.Mesh>(null)
   const isHovered = hoveredAgent === agent.id
 
@@ -200,45 +261,34 @@ const AgentParticle: React.FC<{
         const pulse = 1 + Math.sin(clock.getElapsedTime() * 3) * 0.2
         meshRef.current.scale.set(baseSize * pulse, baseSize * pulse, baseSize * pulse)
       } else {
-        // Non-user agents with buy/sell routing
-        const orbitSpeed = 0.8
-        let newPhase = agent.orbitPhase + orbitSpeed * 0.01
-        agent.orbitPhase = newPhase
-
-        // Smooth routing: agents buying signals go to top, then return
-        if (agent.isBuyingSignals) {
-          // Move up to buy signals zone, pause, then return
-          const cycleTime = clock.getElapsedTime() * 0.3
-          const cycleFraction = (cycleTime % 3) / 3 // 3 second cycle
-
-          let targetY: number
-          if (cycleFraction < 0.4) {
-            // Going up
-            targetY = protocol.position[1] + (buySignalsZoneY - protocol.position[1]) * (cycleFraction / 0.4)
-          } else if (cycleFraction < 0.6) {
-            // At top (pause)
-            targetY = buySignalsZoneY
-          } else {
-            // Coming down
-            targetY = buySignalsZoneY - (buySignalsZoneY - protocol.position[1]) * ((cycleFraction - 0.6) / 0.4)
+        // Each agent independently travels between protocols on its own route.
+        agent.routeProgress += agent.routeSpeed
+        if (agent.routeProgress >= 1) {
+          agent.routeProgress = 0
+          agent.sourceProtocolIndex = agent.targetProtocolIndex
+          let nextTarget = agent.sourceProtocolIndex
+          while (nextTarget === agent.sourceProtocolIndex) {
+            nextTarget = Math.floor(Math.random() * protocols.length)
           }
-
-          const orbitRadius = protocol.radius + 8
-          meshRef.current.position.x =
-            protocol.position[0] + Math.cos(newPhase) * orbitRadius
-          meshRef.current.position.z =
-            protocol.position[2] + Math.sin(newPhase) * orbitRadius
-          meshRef.current.position.y = targetY
-        } else {
-          // Regular orbital animation
-          const orbitRadius = protocol.radius + 8
-          meshRef.current.position.x =
-            protocol.position[0] + Math.cos(newPhase) * orbitRadius
-          meshRef.current.position.z =
-            protocol.position[2] + Math.sin(newPhase) * orbitRadius
-          meshRef.current.position.y =
-            protocol.position[1] + Math.sin(newPhase * 0.5) * 5
+          agent.targetProtocolIndex = nextTarget
+          agent.routeSpeed = 0.0025 + Math.random() * 0.004
+          agent.routeHeight = 1.5 + Math.random() * 5
         }
+
+        const source = protocols[agent.sourceProtocolIndex]
+        const target = protocols[agent.targetProtocolIndex]
+        if (!source || !target) return
+
+        const t = agent.routeProgress
+        const sx = source.position[0]
+        const sz = source.position[2]
+        const tx = target.position[0]
+        const tz = target.position[2]
+        const arc = Math.sin(t * Math.PI) * agent.routeHeight
+
+        meshRef.current.position.x = sx + (tx - sx) * t
+        meshRef.current.position.z = sz + (tz - sz) * t
+        meshRef.current.position.y = arc
 
         // Hover animation
         if (isHovered) {
@@ -268,70 +318,48 @@ const AgentParticle: React.FC<{
   )
 }
 
-// Connection lines between agents (signal flow)
-const AgentConnections: React.FC<{
+// Dynamic route trails behind each moving agent.
+const AgentRouteTrails: React.FC<{
   agents: Agent[]
+  protocols: Protocol[]
   hoveredAgent: string | null
-}> = ({ agents, hoveredAgent }) => {
+}> = ({ agents, protocols, hoveredAgent }) => {
   const linesRef = useRef<THREE.LineSegments>(null)
 
-  useEffect(() => {
+  useFrame(() => {
     if (!linesRef.current) return
 
-    const geometry = new THREE.BufferGeometry()
     const positions: number[] = []
     const colors: number[] = []
 
-    // Draw signal connections
-    agents.forEach((agent, idx) => {
-      if (agent.signals.selling > 0) {
-        // Connect to nearest buying agents
-        const nearest = agents
-          .filter((a) => a.signals.buying > 0 && a.id !== agent.id)
-          .sort(
-            (a, b) =>
-              Math.hypot(
-                a.position[0] - agent.position[0],
-                a.position[1] - agent.position[1]
-              ) -
-              Math.hypot(
-                b.position[0] - agent.position[0],
-                b.position[1] - agent.position[1]
-              )
-          )
-          .slice(0, 2)
+    agents.forEach((agent) => {
+      if (agent.isUserAgent) return
+      const source = protocols[agent.sourceProtocolIndex]
+      const target = protocols[agent.targetProtocolIndex]
+      if (!source || !target) return
 
-        nearest.forEach((buyer) => {
-          positions.push(
-            agent.position[0],
-            agent.position[1],
-            agent.position[2]
-          )
-          positions.push(buyer.position[0], buyer.position[1], buyer.position[2])
+      const t = agent.routeProgress
+      const x = source.position[0] + (target.position[0] - source.position[0]) * t
+      const z = source.position[2] + (target.position[2] - source.position[2]) * t
+      const y = Math.sin(t * Math.PI) * agent.routeHeight
 
-          const isActive = hoveredAgent === agent.id || hoveredAgent === buyer.id
-          colors.push(
-            ...(isActive
-              ? [1, 0.353, 0.047] // Orange #ea580c
-              : [0.2, 0.2, 0.2]
-            ) // Gray
-          )
-          colors.push(
-            ...(isActive
-              ? [1, 0.353, 0.047]
-              : [0.2, 0.2, 0.2]
-            )
-          )
-        })
-      }
+      // Trail is drawn from source protocol to current agent position.
+      positions.push(source.position[0], 0, source.position[2])
+      positions.push(x, y, z)
+
+      const isActive = hoveredAgent === agent.id
+      const color: [number, number, number] = isActive ? [1, 0.353, 0.047] : [0.3, 0.3, 0.3]
+      colors.push(...color)
+      colors.push(...color)
     })
 
+    const geometry = new THREE.BufferGeometry()
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3))
     geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3))
 
     linesRef.current.geometry.dispose()
     linesRef.current.geometry = geometry
-  }, [agents, hoveredAgent])
+  })
 
   return (
     <lineSegments ref={linesRef}>
@@ -346,8 +374,14 @@ const AgentNetworkScene: React.FC<{
   protocols: Protocol[]
   hoveredAgent: string | null
   viewMode: "activity" | "reputation" | "tvl"
-}> = ({ agents, protocols, hoveredAgent, viewMode }) => {
-  const buySignalsZoneY = 80
+  layout: NetworkLayoutConfig
+}> = ({ agents, protocols, hoveredAgent, viewMode, layout }) => {
+  const buySignalsZoneY = layout.buySignals.positionY
+  const buySignalsScale: [number, number, number] = [
+    layout.buySignals.width,
+    layout.buySignals.height,
+    layout.buySignals.width,
+  ]
 
   return (
     <>
@@ -371,25 +405,27 @@ const AgentNetworkScene: React.FC<{
         <ProtocolObject key={protocol.id} protocol={protocol} />
       ))}
 
-      {/* Buy signals zone at top */}
-      <BuySignalsZone />
+      {/* Buy signals zone — small node centered above the four protocols */}
+      <BuySignalsZone
+        radius={layout.buySignals.radius}
+        y={buySignalsZoneY}
+        scale={buySignalsScale}
+      />
 
       {/* Render agents */}
       {agents.map((agent) => {
-        const protocol = protocols[agent.protocolIndex] || protocols[0]
         return (
           <AgentParticle
             key={agent.id}
             agent={agent}
             hoveredAgent={hoveredAgent}
-            protocol={protocol}
-            buySignalsZoneY={buySignalsZoneY}
+            protocols={protocols}
           />
         )
       })}
 
-      {/* Render connections */}
-      <AgentConnections agents={agents} hoveredAgent={hoveredAgent} />
+      {/* Render dynamic path trails */}
+      <AgentRouteTrails agents={agents} protocols={protocols} hoveredAgent={hoveredAgent} />
 
       {/* Grid for reference */}
       <gridHelper args={[200, 20]} position={[0, -40, 0]} />
@@ -402,17 +438,18 @@ export const AgentNetworkCanvas: React.FC<{
   protocolAmounts?: Record<string, number>
   onProtocolAmountsChange?: (amounts: Record<string, number>) => void
 }> = ({ viewMode, protocolAmounts = {}, onProtocolAmountsChange }) => {
+  const layout: NetworkLayoutConfig = DEFAULT_NETWORK_LAYOUT
   const [protocols, setProtocols] = useState<Protocol[]>(() =>
-    generateProtocols(protocolAmounts)
+    generateProtocols(protocolAmounts, DEFAULT_NETWORK_LAYOUT)
   )
   const [agents, setAgents] = useState<Agent[]>(() =>
-    generateAgents(generateProtocols(protocolAmounts))
+    generateAgents(generateProtocols(protocolAmounts, DEFAULT_NETWORK_LAYOUT))
   )
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null)
 
-  // Update protocols when amounts change
+  // Update protocols when TVL amounts change
   useEffect(() => {
-    const newProtocols = generateProtocols(protocolAmounts)
+    const newProtocols = generateProtocols(protocolAmounts, layout)
     setProtocols(newProtocols)
     setAgents(generateAgents(newProtocols))
   }, [protocolAmounts])
@@ -431,6 +468,7 @@ export const AgentNetworkCanvas: React.FC<{
           protocols={protocols}
           hoveredAgent={hoveredAgent}
           viewMode={viewMode}
+          layout={layout}
         />
       </Canvas>
 
@@ -462,7 +500,7 @@ export const AgentNetworkCanvas: React.FC<{
 
       {/* Hovered agent info */}
       {hoveredAgent && (
-        <div className="absolute top-6 right-6 text-xs font-mono text-white bg-black/90 border border-[#ea580c] p-4 rounded max-w-xs">
+        <div className="absolute bottom-24 right-6 text-xs font-mono text-white bg-black/90 border border-[#ea580c] p-4 rounded max-w-xs z-10">
           <p className="text-[#ea580c] font-bold">
             {hoveredAgent === "user-agent" ? "YOUR AGENT" : hoveredAgent.toUpperCase()}
           </p>

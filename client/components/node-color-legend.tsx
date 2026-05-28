@@ -5,7 +5,7 @@ const LEGEND_ITEMS = [
   { label: "AAVE", color: "#7928ca" },
   { label: "Compound", color: "#00d4ff" },
   { label: "Lido", color: "#00a3e0" },
-  { label: "Marketplace (Buy Signals)", color: "#00ff88" },
+  { label: "Marketplace", color: "#00ff88" },
 ] as const;
 
 export function NodeColorLegend() {

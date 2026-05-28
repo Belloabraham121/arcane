@@ -126,10 +126,10 @@ export default function AgentsPage() {
                 key={mode}
                 type="button"
                 onClick={() => setViewMode(mode)}
-                className={`block w-full rounded px-3 py-2 text-left transition-all ${
+                className={`block w-full rounded border px-3 py-2 text-left transition-all ${
                   viewMode === mode
-                    ? "bg-[#ea580c] font-bold text-background"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "border-[#ea580c] bg-[#ea580c] font-bold text-white"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-white hover:text-foreground"
                 }`}
               >
                 {mode === "activity" && "Activity Flow"}
@@ -192,7 +192,9 @@ export default function AgentsPage() {
             <p>• Cyan node = Compound</p>
             <p>• Blue node = Lido</p>
             <p>• Green top node = Marketplace</p>
-            <p>• Gray trails = Agent routes</p>
+            <p>• Gray trails = Sub route (root ↔ marketplace)</p>
+            <p>• Small shape = Root (visits protocols)</p>
+            <p>• Larger shape = Sub (follows its root)</p>
           </div>
         </DraggableGridPanel>
 

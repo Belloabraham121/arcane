@@ -148,18 +148,18 @@ export function DraggableGridPanel({
       ref={panelRef}
       id={`panel-${id}`}
       className={cn(
-        "absolute z-20 flex flex-col overflow-hidden rounded border border-border bg-black/90 font-mono text-xs shadow-lg",
+        "absolute z-20 flex flex-col overflow-hidden rounded border border-border bg-card/95 font-mono text-xs text-foreground shadow-md backdrop-blur-sm",
         dragging && "ring-1 ring-[#ea580c]/60",
         className
       )}
       style={style}
     >
-      <div className="flex items-center gap-1 border-b border-border bg-black/95 px-1 py-1">
+      <div className="flex items-center gap-1 border-b border-border bg-muted/50 px-1 py-1">
         <button
           type="button"
           aria-label={`Drag ${title}`}
           onPointerDown={onPointerDownHandle}
-          className="flex cursor-grab items-center justify-center rounded p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground active:cursor-grabbing"
+          className="flex cursor-grab items-center justify-center rounded p-1.5 text-muted-foreground hover:bg-background hover:text-foreground active:cursor-grabbing"
         >
           <GripVertical size={14} />
         </button>
@@ -170,7 +170,7 @@ export function DraggableGridPanel({
           type="button"
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           onClick={onToggleCollapsed}
-          className="rounded p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+          className="rounded p-1.5 text-muted-foreground hover:bg-background hover:text-foreground"
         >
           {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
         </button>

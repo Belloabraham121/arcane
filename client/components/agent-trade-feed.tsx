@@ -83,7 +83,7 @@ export function AgentTradeFeed({ events, className }: AgentTradeFeedProps) {
           {events.map((event) => (
             <li
               key={event.id}
-              className="rounded border border-border/80 bg-background/40 px-3 py-2.5"
+              className="rounded border border-border bg-white px-3 py-2.5 hover:bg-white"
             >
               <div className="flex items-start justify-between gap-2">
                 <p

@@ -22,7 +22,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arcane} -d ${POSTGRES_DB:-arcane}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-arcane} -d ${POSTGRES_DB:-arcane}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,34 +53,9 @@ services:
     networks:
       - arcane
 
-  rabbitmq:
-    build:
-      context: ./docker/rabbitmq
-      dockerfile: Dockerfile
-    container_name: arcane-rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-arcane}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-arcane}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
-    ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - arcane
-
 volumes:
   postgres_data:
   redis_data:
-  rabbitmq_data:
 
 networks:
   arcane:

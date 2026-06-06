@@ -49,6 +49,8 @@ npm run smoke:llm:tools    # inferToolsChat (no MCP URLs by default)
 
 Fund STT: [testnet faucet](https://testnet.somnia.network). Gas model: [Gas Fees](https://docs.somnia.network/agents/invoking-agents/gas-fees).
 
+Logging uses **Winston** (`src/shared/logger.ts`): colorized dev output, JSON in production. Every request gets an `x-correlation-id` header and structured HTTP logs. Set `LOG_LEVEL=debug|info|warn|error`.
+
 ## Email → wallet (deterministic)
 
 On sign-up/sign-in, derive a Somnia address from the user’s normalized email using a server-held `MASTER_SEED` (BIP-44). Same email always maps to the same address; private keys are encrypted at rest with `ENCRYPTION_SECRET_KEY`.

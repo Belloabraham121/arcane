@@ -13,10 +13,12 @@ function optional(name: string, fallback: string): string {
 }
 
 export function getServerEnv() {
+  const nodeEnv = optional("NODE_ENV", "development");
   return {
     port: Number(optional("PORT", "8080")),
-    nodeEnv: optional("NODE_ENV", "development"),
+    nodeEnv,
     apiDefaultVersion: optional("API_DEFAULT_VERSION", "v1"),
+    logLevel: optional("LOG_LEVEL", nodeEnv === "production" ? "info" : "debug"),
   };
 }
 

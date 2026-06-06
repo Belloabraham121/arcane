@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { getMe } from "@/lib/api/auth"
@@ -15,6 +15,8 @@ import { PoolAllocationEditor } from "@/components/setup/pool-allocation-editor"
 import { SetupNav } from "@/components/setup/setup-nav"
 import { SubAgentEditor } from "@/components/setup/sub-agent-editor"
 import { useQuickSwapPools } from "@/hooks/use-quickswap-pools"
+import { useWalletBalances } from "@/hooks/use-wallet-balances"
+import { allocatedPoolIds, tokensFromAllocatedPools } from "@/lib/supported-tokens"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { activePoolAllocations, mergeStrategyPoolAllocations } from "@/lib/pool-allocations"
 import { DEFAULT_CUSTOM_SUB_AGENTS } from "@/lib/strategy-presets"
@@ -43,6 +45,18 @@ function CustomSetupContent() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const activePoolIds = useMemo(() => allocatedPoolIds(poolAmounts), [poolAmounts])
+  const supportedTokens = useMemo(
+    () => tokensFromAllocatedPools(pools, poolAmounts),
+    [pools, poolAmounts],
+  )
+  const {
+    balances,
+    loading: balancesLoading,
+    error: balancesError,
+    reload: reloadBalances,
+  } = useWalletBalances(activePoolIds)
 
   useEffect(() => {
     async function load() {
@@ -168,6 +182,11 @@ function CustomSetupContent() {
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
           <DepositAddressCard
             address={walletAddress}
+            supportedTokens={supportedTokens}
+            balances={balances}
+            balancesLoading={balancesLoading}
+            balancesError={balancesError}
+            onRefreshBalances={reloadBalances}
             depositAmount={depositInput}
             onDepositAmountChange={setDepositInput}
           />
@@ -188,7 +207,11 @@ function CustomSetupContent() {
           onClick={saveSetup}
           className="bg-foreground px-8 py-3 font-mono text-xs uppercase tracking-widest text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {saving ? "Saving…" : isEditing ? "Save changes" : "Launch dashboard"}
+          {saving
+            ? "Activating agent…"
+            : isEditing
+              ? "Save changes"
+              : "Activate agent & launch"}
         </button>
       </main>
     </div>

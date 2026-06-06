@@ -1,22 +1,10 @@
-export const PROTOCOL_IDS = ["uniswap", "aave", "compound", "lido"] as const;
-export type ProtocolId = (typeof PROTOCOL_IDS)[number];
-
-/** QuickSwap seed pool ids (Somnia mainnet). */
 export const POOL_IDS = ["usdce-wsomi", "usdce-weth", "wsomi-weth"] as const;
 export type PoolId = (typeof POOL_IDS)[number];
 
 export type StrategyType = "auto" | "custom";
 export type StrategyStatus = "draft" | "active";
 
-export type ProtocolAllocations = Record<ProtocolId, number>;
 export type PoolAllocations = Record<PoolId, number>;
-
-export const DEFAULT_PROTOCOL_ALLOCATIONS: ProtocolAllocations = {
-  uniswap: 50_000_000,
-  aave: 30_000_000,
-  compound: 25_000_000,
-  lido: 35_000_000,
-};
 
 export const DEFAULT_POOL_ALLOCATIONS: PoolAllocations = {
   "usdce-wsomi": 50_000_000,
@@ -62,7 +50,8 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
     id: "risk-manager",
     name: "Risk Manager",
     model: "gpt-4o-mini",
-    systemPrompt: "Caps exposure per QuickSwap pool and pauses risky routes when drawdown limits are breached.",
+    systemPrompt:
+      "Caps exposure per QuickSwap pool and pauses risky routes when drawdown limits are breached.",
     enabled: true,
   },
 ];
@@ -103,10 +92,10 @@ export type AgentStrategyResponse = {
   strategyType: StrategyType;
   status: StrategyStatus;
   depositAmount: number;
-  /** @deprecated Use poolAllocations — kept for legacy rows. */
-  protocolAllocations: ProtocolAllocations;
   poolAllocations: PoolAllocations;
   subAgents: SubAgentConfigItem[];
+  tradingEnabledAt: string | null;
+  lastCycleAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

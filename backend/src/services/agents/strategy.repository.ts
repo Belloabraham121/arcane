@@ -1,19 +1,55 @@
 import type { Prisma } from "@prisma/client";
 import type {
   PoolAllocations,
-  ProtocolId,
   StrategyStatus,
   StrategyType,
   SubAgentConfigItem,
 } from "./strategy.types";
 import { prisma } from "../../infrastructure/postgres/client";
 
-type AllocationInput = Record<ProtocolId, number>;
+const strategyInclude = {
+  poolAllocations: true,
+} as const;
 
 export async function findStrategyByUserId(userId: string) {
   return prisma.agentStrategy.findUnique({
     where: { userId },
-    include: { protocolAllocations: true },
+    include: strategyInclude,
+  });
+}
+
+async function syncPoolAllocationRows(
+  tx: Prisma.TransactionClient,
+  strategyId: string,
+  poolAllocations: PoolAllocations,
+): Promise<void> {
+  const poolIds = Object.keys(poolAllocations);
+
+  for (const poolId of poolIds) {
+    const amount = poolAllocations[poolId as keyof PoolAllocations];
+    await tx.poolAllocation.upsert({
+      where: {
+        strategyId_poolId: {
+          strategyId,
+          poolId,
+        },
+      },
+      create: {
+        strategyId,
+        poolId,
+        amount,
+      },
+      update: {
+        amount,
+      },
+    });
+  }
+
+  await tx.poolAllocation.deleteMany({
+    where: {
+      strategyId,
+      poolId: { notIn: poolIds },
+    },
   });
 }
 
@@ -23,13 +59,19 @@ export async function upsertStrategy(
     strategyType: StrategyType;
     status?: StrategyStatus;
     depositAmount: number;
-    protocolAllocations: AllocationInput;
     poolAllocations: PoolAllocations;
     subAgentConfig?: SubAgentConfigItem[];
   },
 ) {
   return prisma.$transaction(async (tx) => {
-    const poolJson = input.poolAllocations as Prisma.InputJsonValue;
+    const existing = await tx.agentStrategy.findUnique({ where: { userId } });
+
+    const activating = input.status === "active";
+    const tradingEnabledAt =
+      activating && !existing?.tradingEnabledAt
+        ? new Date()
+        : existing?.tradingEnabledAt ?? null;
+
     const strategy = await tx.agentStrategy.upsert({
       where: { userId },
       create: {
@@ -37,49 +79,32 @@ export async function upsertStrategy(
         strategyType: input.strategyType,
         status: input.status ?? "draft",
         depositAmount: input.depositAmount,
-        poolAllocations: poolJson,
+        tradingEnabledAt,
         subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue | undefined,
       },
       update: {
         strategyType: input.strategyType,
         status: input.status ?? "draft",
         depositAmount: input.depositAmount,
-        poolAllocations: poolJson,
+        tradingEnabledAt,
         ...(input.subAgentConfig !== undefined
           ? { subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue }
           : {}),
       },
     });
 
-    for (const protocol of Object.keys(input.protocolAllocations) as ProtocolId[]) {
-      await tx.protocolAllocation.upsert({
-        where: {
-          strategyId_protocol: {
-            strategyId: strategy.id,
-            protocol,
-          },
-        },
-        create: {
-          strategyId: strategy.id,
-          protocol,
-          amount: input.protocolAllocations[protocol],
-        },
-        update: {
-          amount: input.protocolAllocations[protocol],
-        },
-      });
-    }
+    await syncPoolAllocationRows(tx, strategy.id, input.poolAllocations);
 
     return tx.agentStrategy.findUniqueOrThrow({
       where: { id: strategy.id },
-      include: { protocolAllocations: true },
+      include: strategyInclude,
     });
   });
 }
 
-export async function updateProtocolAllocations(
+export async function updatePoolAllocations(
   userId: string,
-  protocolAllocations: AllocationInput,
+  poolAllocations: PoolAllocations,
 ) {
   const existing = await findStrategyByUserId(userId);
   if (!existing) {
@@ -87,24 +112,7 @@ export async function updateProtocolAllocations(
   }
 
   return prisma.$transaction(async (tx) => {
-    for (const protocol of Object.keys(protocolAllocations) as ProtocolId[]) {
-      await tx.protocolAllocation.upsert({
-        where: {
-          strategyId_protocol: {
-            strategyId: existing.id,
-            protocol,
-          },
-        },
-        create: {
-          strategyId: existing.id,
-          protocol,
-          amount: protocolAllocations[protocol],
-        },
-        update: {
-          amount: protocolAllocations[protocol],
-        },
-      });
-    }
+    await syncPoolAllocationRows(tx, existing.id, poolAllocations);
 
     await tx.agentStrategy.update({
       where: { id: existing.id },
@@ -113,21 +121,8 @@ export async function updateProtocolAllocations(
 
     return tx.agentStrategy.findUniqueOrThrow({
       where: { id: existing.id },
-      include: { protocolAllocations: true },
+      include: strategyInclude,
     });
-  });
-}
-
-export async function updatePoolAllocations(userId: string, poolAllocations: PoolAllocations) {
-  const existing = await findStrategyByUserId(userId);
-  if (!existing) {
-    return null;
-  }
-
-  return prisma.agentStrategy.update({
-    where: { id: existing.id },
-    data: { poolAllocations: poolAllocations as Prisma.InputJsonValue },
-    include: { protocolAllocations: true },
   });
 }
 
@@ -140,6 +135,14 @@ export async function updateSubAgentConfig(userId: string, subAgentConfig: SubAg
   return prisma.agentStrategy.update({
     where: { id: existing.id },
     data: { subAgentConfig: subAgentConfig as Prisma.InputJsonValue },
-    include: { protocolAllocations: true },
+    include: strategyInclude,
+  });
+}
+
+export async function touchLastCycleAt(strategyId: string, at: Date = new Date()) {
+  return prisma.agentStrategy.update({
+    where: { id: strategyId },
+    data: { lastCycleAt: at },
+    include: strategyInclude,
   });
 }

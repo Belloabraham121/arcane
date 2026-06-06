@@ -5,10 +5,8 @@ import {
   StrategyError,
   getUserStrategy,
   parsePoolAllocations,
-  parseProtocolAllocations,
   parseSubAgents,
   patchPoolAllocations,
-  patchProtocolAllocations,
   patchSubAgents,
   upsertUserStrategy,
 } from "../../../../services/agents/strategy.service";
@@ -18,7 +16,6 @@ const upsertSchema = z.object({
   strategyType: z.enum(["auto", "custom"]),
   status: z.enum(["draft", "active"]).optional(),
   depositAmount: z.number().nonnegative().optional(),
-  protocolAllocations: z.record(z.number().nonnegative()).optional(),
   poolAllocations: z.record(z.number().nonnegative()).optional(),
   subAgents: z.array(
     z.object({
@@ -29,10 +26,6 @@ const upsertSchema = z.object({
       enabled: z.boolean(),
     }),
   ).optional(),
-});
-
-const patchAllocationsSchema = z.object({
-  protocolAllocations: z.record(z.number().nonnegative()),
 });
 
 const patchPoolAllocationsSchema = z.object({
@@ -82,9 +75,6 @@ agentStrategyRouter.put("/api/v1/agents/strategy", requireAuth, async (req, res)
   }
 
   try {
-    const allocations = parsed.data.protocolAllocations
-      ? parseProtocolAllocations(parsed.data.protocolAllocations)
-      : undefined;
     const poolAllocations = parsed.data.poolAllocations
       ? parsePoolAllocations(parsed.data.poolAllocations)
       : undefined;
@@ -96,7 +86,6 @@ agentStrategyRouter.put("/api/v1/agents/strategy", requireAuth, async (req, res)
       strategyType: parsed.data.strategyType,
       status: parsed.data.status,
       depositAmount: parsed.data.depositAmount,
-      protocolAllocations: allocations,
       poolAllocations,
       subAgents,
     });
@@ -109,39 +98,6 @@ agentStrategyRouter.put("/api/v1/agents/strategy", requireAuth, async (req, res)
     throw err;
   }
 });
-
-agentStrategyRouter.patch(
-  "/api/v1/agents/strategy/protocol-allocations",
-  requireAuth,
-  async (req, res) => {
-    const parsed = patchAllocationsSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return fail(req, res, 400, {
-        code: "VALIDATION_ERROR",
-        message: "Invalid protocol allocation payload",
-        details: parsed.error.flatten().fieldErrors,
-      });
-    }
-
-    try {
-      const allocations = parseProtocolAllocations(parsed.data.protocolAllocations);
-      if (!allocations) {
-        return fail(req, res, 400, {
-          code: "VALIDATION_ERROR",
-          message: "protocolAllocations required",
-        });
-      }
-
-      const strategy = await patchProtocolAllocations(req.user.id, allocations);
-      return ok(req, res, { strategy });
-    } catch (err) {
-      if (err instanceof StrategyError) {
-        return fail(req, res, err.status, { code: err.code, message: err.message });
-      }
-      throw err;
-    }
-  },
-);
 
 agentStrategyRouter.patch(
   "/api/v1/agents/strategy/pool-allocations",

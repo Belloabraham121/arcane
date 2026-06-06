@@ -17,13 +17,6 @@ enum StrategyStatus {
   active
 }
 
-enum ProtocolId {
-  uniswap
-  aave
-  compound
-  lido
-}
-
 model User {
   id                   String         @id @default(uuid()) @db.Uuid
   email                String         @unique @db.Text
@@ -41,31 +34,33 @@ model User {
 }
 
 model AgentStrategy {
-  id                  String               @id @default(uuid()) @db.Uuid
-  userId              String               @unique @map("user_id") @db.Uuid
-  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  strategyType        StrategyType         @map("strategy_type")
-  status              StrategyStatus       @default(draft)
-  depositAmount       Float                @default(0) @map("deposit_amount")
-  subAgentConfig      Json?                @map("sub_agent_config")
-  /** QuickSwap pool id → allocation amount (e.g. usdce-wsomi). */
-  poolAllocations     Json?                @map("pool_allocations")
-  protocolAllocations ProtocolAllocation[]
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @unique @map("user_id") @db.Uuid
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategyType     StrategyType     @map("strategy_type")
+  status           StrategyStatus   @default(draft)
+  depositAmount    Float            @default(0) @map("deposit_amount")
+  subAgentConfig   Json?            @map("sub_agent_config")
+  tradingEnabledAt DateTime?        @map("trading_enabled_at") @db.Timestamptz
+  lastCycleAt      DateTime?        @map("last_cycle_at") @db.Timestamptz
+  poolAllocations  PoolAllocation[]
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("agent_strategy")
 }
 
-model ProtocolAllocation {
+/// QuickSwap pool capital allocation (pool id e.g. usdce-wsomi).
+model PoolAllocation {
   id         String        @id @default(uuid()) @db.Uuid
   strategyId String        @map("strategy_id") @db.Uuid
   strategy   AgentStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
-  protocol   ProtocolId
+  poolId     String        @map("pool_id") @db.Text
   amount     Float
   createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt  DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
-  @@unique([strategyId, protocol], map: "uk_protocol_allocation_strategy_protocol")
-  @@map("protocol_allocation")
+  @@unique([strategyId, poolId], map: "uk_pool_allocation_strategy_pool")
+  @@index([poolId], map: "idx_pool_allocation_pool_id")
+  @@map("pool_allocation")
 }

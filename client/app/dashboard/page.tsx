@@ -9,10 +9,14 @@ import { getMe } from "@/lib/api/auth"
 import { fetchPools } from "@/lib/api/quickswap"
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import { getAgentStrategy } from "@/lib/api/strategy"
+import { fetchTradingStatus, type TradingStatus } from "@/lib/api/trading"
 import type { AgentStrategy } from "@/lib/api/strategy-types"
 import { APP_ROUTES, setupRouteFor } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
+import { WalletBalancesList } from "@/components/setup/wallet-balances-list"
+import { useWalletBalances } from "@/hooks/use-wallet-balances"
 import { buildPoolMarketRows } from "@/lib/pool-allocations"
+import { allocatedPoolIds } from "@/lib/supported-tokens"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 
 const ease = [0.22, 1, 0.36, 1] as const
@@ -25,6 +29,7 @@ export default function DashboardPage() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"overview" | "markets" | "agents">("overview")
   const [loading, setLoading] = useState(true)
+  const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -58,6 +63,29 @@ export default function DashboardPage() {
     load()
   }, [router])
 
+  useEffect(() => {
+    if (!strategy || strategy.status !== "active") {
+      return
+    }
+
+    let cancelled = false
+
+    async function loadTradingStatus() {
+      const result = await fetchTradingStatus()
+      if (!cancelled && result.success && result.data) {
+        setTradingStatus(result.data.status)
+      }
+    }
+
+    loadTradingStatus()
+    const timer = window.setInterval(loadTradingStatus, 10_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [strategy])
+
   const marketRows = useMemo(
     () =>
       strategy
@@ -65,6 +93,16 @@ export default function DashboardPage() {
         : [],
     [strategy, pools],
   )
+
+  const activePoolIds = useMemo(
+    () => (strategy ? allocatedPoolIds(strategy.poolAllocations) : []),
+    [strategy],
+  )
+  const {
+    balances,
+    loading: balancesLoading,
+    error: balancesError,
+  } = useWalletBalances(activePoolIds)
 
   if (loading || !strategy) {
     return (
@@ -173,6 +211,7 @@ export default function DashboardPage() {
           </div>
 
           {activeTab === "overview" && (
+            <div className="space-y-6">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="border border-border p-6">
                 <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
@@ -211,6 +250,59 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            <div className="border border-border p-6">
+              <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                Agent trading status
+              </p>
+              <div className="space-y-2 font-mono text-xs">
+                <p>
+                  <span className="text-muted-foreground">Phase: </span>
+                  <span className="text-foreground">
+                    {tradingStatus?.phase ?? "idle"}
+                  </span>
+                </p>
+                {strategy.tradingEnabledAt && (
+                  <p className="text-muted-foreground">
+                    Trading since{" "}
+                    {new Date(strategy.tradingEnabledAt).toLocaleString()}
+                  </p>
+                )}
+                {(tradingStatus?.lastCycleAt ?? strategy.lastCycleAt) && (
+                  <p className="text-muted-foreground">
+                    Last cycle{" "}
+                    {new Date(
+                      tradingStatus?.lastCycleAt ?? strategy.lastCycleAt!,
+                    ).toLocaleString()}
+                  </p>
+                )}
+                {tradingStatus?.lastCycle?.message && (
+                  <p className="text-muted-foreground">
+                    {tradingStatus.lastCycle.message}
+                  </p>
+                )}
+                {tradingStatus?.lastError && (
+                  <p className="text-[#ea580c]">{tradingStatus.lastError}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="border border-border p-6">
+              <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                Agent wallet balances
+              </p>
+              <p className="mb-4 font-mono text-[10px] text-muted-foreground">
+                Live balances on Somnia mainnet for tokens in your selected pools. Deposit any
+                supported token — the agent swaps to hit your pool targets.
+              </p>
+              <WalletBalancesList
+                balances={balances}
+                loading={balancesLoading}
+                error={balancesError}
+                emptyLabel="No supported tokens in active pools"
+              />
+            </div>
             </div>
           )}
 

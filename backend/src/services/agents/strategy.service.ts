@@ -1,18 +1,18 @@
 import { createLogger } from "../../shared/logger";
+import {
+  scheduleTradingCycle,
+  shouldTriggerCycleOnActivate,
+} from "./trading-runner.service";
 import * as repo from "./strategy.repository";
 import {
   DEFAULT_AUTO_SUB_AGENTS,
   DEFAULT_CUSTOM_SUB_AGENTS,
   DEFAULT_DEPOSIT_AMOUNT,
   DEFAULT_POOL_ALLOCATIONS,
-  DEFAULT_PROTOCOL_ALLOCATIONS,
   POOL_IDS,
-  PROTOCOL_IDS,
   type AgentStrategyResponse,
   type PoolAllocations,
   type PoolId,
-  type ProtocolAllocations,
-  type ProtocolId,
   type StrategyType,
   type SubAgentConfigItem,
 } from "./strategy.types";
@@ -28,10 +28,6 @@ export class StrategyError extends Error {
     super(message);
     this.name = "StrategyError";
   }
-}
-
-function isProtocolId(value: string): value is ProtocolId {
-  return (PROTOCOL_IDS as readonly string[]).includes(value);
 }
 
 function isPoolId(value: string): value is PoolId {
@@ -77,40 +73,6 @@ export function parsePoolAllocations(input: unknown): PoolAllocations | undefine
       "VALIDATION_ERROR",
       "At least one pool must have a positive allocation",
     );
-  }
-
-  return result;
-}
-
-export function parseProtocolAllocations(
-  input: unknown,
-): ProtocolAllocations | undefined {
-  if (input == null) {
-    return undefined;
-  }
-  if (typeof input !== "object") {
-    throw new StrategyError("VALIDATION_ERROR", "protocolAllocations must be an object");
-  }
-
-  const result = {} as ProtocolAllocations;
-  for (const id of PROTOCOL_IDS) {
-    const value = (input as Record<string, unknown>)[id];
-    if (value === undefined) {
-      throw new StrategyError("VALIDATION_ERROR", `Missing allocation for ${id}`);
-    }
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-      throw new StrategyError(
-        "VALIDATION_ERROR",
-        `Invalid allocation for ${id}: must be a non-negative number`,
-      );
-    }
-    result[id] = value;
-  }
-
-  for (const key of Object.keys(input as object)) {
-    if (!isProtocolId(key)) {
-      throw new StrategyError("VALIDATION_ERROR", `Unknown protocol: ${key}`);
-    }
   }
 
   return result;
@@ -184,47 +146,38 @@ function subAgentsFromDb(
   }
 }
 
-function allocationsFromDb(
-  rows: { protocol: string; amount: number }[],
-): ProtocolAllocations {
-  const map = { ...DEFAULT_PROTOCOL_ALLOCATIONS };
+function poolAllocationsFromRows(
+  rows: { poolId: string; amount: number }[],
+): PoolAllocations {
+  if (rows.length === 0) {
+    return { ...DEFAULT_POOL_ALLOCATIONS };
+  }
+
+  const map = {} as PoolAllocations;
   for (const row of rows) {
-    if (isProtocolId(row.protocol)) {
-      map[row.protocol] = row.amount;
+    if (isPoolId(row.poolId)) {
+      map[row.poolId] = row.amount;
     }
   }
-  return map;
-}
 
-function poolAllocationsFromDb(raw: unknown): PoolAllocations {
-  if (raw == null) {
-    return { ...DEFAULT_POOL_ALLOCATIONS };
-  }
-  try {
-    return parsePoolAllocations(raw) ?? { ...DEFAULT_POOL_ALLOCATIONS };
-  } catch {
-    return { ...DEFAULT_POOL_ALLOCATIONS };
-  }
+  return Object.keys(map).length > 0 ? map : { ...DEFAULT_POOL_ALLOCATIONS };
 }
 
 function toResponse(
-  strategy: Awaited<ReturnType<typeof repo.findStrategyByUserId>> & {
-    protocolAllocations: { protocol: string; amount: number }[];
-    poolAllocations?: unknown;
-    subAgentConfig?: unknown;
-  },
+  strategy: NonNullable<Awaited<ReturnType<typeof repo.findStrategyByUserId>>>,
 ): AgentStrategyResponse {
-  const strategyType = strategy!.strategyType as StrategyType;
+  const strategyType = strategy.strategyType as StrategyType;
   return {
-    id: strategy!.id,
+    id: strategy.id,
     strategyType,
-    status: strategy!.status as AgentStrategyResponse["status"],
-    depositAmount: strategy!.depositAmount,
-    protocolAllocations: allocationsFromDb(strategy!.protocolAllocations),
-    poolAllocations: poolAllocationsFromDb(strategy!.poolAllocations),
-    subAgents: subAgentsFromDb(strategyType, strategy!.subAgentConfig),
-    createdAt: strategy!.createdAt.toISOString(),
-    updatedAt: strategy!.updatedAt.toISOString(),
+    status: strategy.status as AgentStrategyResponse["status"],
+    depositAmount: strategy.depositAmount,
+    poolAllocations: poolAllocationsFromRows(strategy.poolAllocations),
+    subAgents: subAgentsFromDb(strategyType, strategy.subAgentConfig),
+    tradingEnabledAt: strategy.tradingEnabledAt?.toISOString() ?? null,
+    lastCycleAt: strategy.lastCycleAt?.toISOString() ?? null,
+    createdAt: strategy.createdAt.toISOString(),
+    updatedAt: strategy.updatedAt.toISOString(),
   };
 }
 
@@ -242,7 +195,6 @@ export async function upsertUserStrategy(
     strategyType: StrategyType;
     status?: AgentStrategyResponse["status"];
     depositAmount?: number;
-    protocolAllocations?: ProtocolAllocations;
     poolAllocations?: PoolAllocations;
     subAgents?: SubAgentConfigItem[];
   },
@@ -275,18 +227,23 @@ export async function upsertUserStrategy(
     );
   }
 
-  const protocolAllocations = input.protocolAllocations ?? { ...DEFAULT_PROTOCOL_ALLOCATIONS };
-
   const subAgentConfig =
     input.subAgents ??
     (input.strategyType === "auto"
       ? DEFAULT_AUTO_SUB_AGENTS
       : DEFAULT_CUSTOM_SUB_AGENTS);
 
+  const existing = await repo.findStrategyByUserId(userId);
+  const triggerFirstCycle = shouldTriggerCycleOnActivate(
+    existing?.status,
+    existing?.lastCycleAt,
+    status,
+    depositAmount,
+  );
+
   const strategy = await repo.upsertStrategy(userId, {
     strategyType: input.strategyType,
     depositAmount,
-    protocolAllocations,
     poolAllocations,
     status,
     subAgentConfig,
@@ -296,21 +253,13 @@ export async function upsertUserStrategy(
     userId,
     strategyType: input.strategyType,
     depositAmount,
+    status,
+    triggerFirstCycle,
   });
 
-  return toResponse(strategy);
-}
-
-export async function patchProtocolAllocations(
-  userId: string,
-  protocolAllocations: ProtocolAllocations,
-): Promise<AgentStrategyResponse> {
-  const strategy = await repo.updateProtocolAllocations(userId, protocolAllocations);
-  if (!strategy) {
-    throw new StrategyError("STRATEGY_NOT_FOUND", "No agent strategy found for user", 404);
+  if (triggerFirstCycle) {
+    scheduleTradingCycle(userId, "activation");
   }
-
-  log.info("Protocol allocations updated", { userId });
 
   return toResponse(strategy);
 }

@@ -73,13 +73,15 @@ Persist auto vs custom strategy and protocol allocation (Uniswap, AAVE, Compound
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/agents/strategy` | Current user's strategy |
-| `PUT` | `/api/v1/agents/strategy` | Upsert `{ strategyType, depositAmount?, protocolAllocations? }` |
-| `PATCH` | `/api/v1/agents/strategy/protocol-allocations` | Update custom protocol splits |
+| `PUT` | `/api/v1/agents/strategy` | Upsert `{ strategyType, depositAmount?, poolAllocations?, subAgents? }` |
+| `PATCH` | `/api/v1/agents/strategy/pool-allocations` | Update QuickSwap pool splits |
+| `PATCH` | `/api/v1/agents/strategy/sub-agents` | Update sub-agent config |
 
-Requires auth cookie. Run `npm run db:push` after pulling schema changes.
+Requires auth cookie. After pulling schema changes:
 
 ```bash
-npm run db:push          # after docker compose up (Postgres)
+npm run db:upgrade       # migrate legacy protocol/JSON → pool_allocation table
+npm run db:push          # or db:upgrade alone (includes push)
 npm run dev              # http://localhost:8080
 
 # Client: cp .env.local.example .env.local

@@ -110,10 +110,10 @@ sequenceDiagram
 
 ### 2.1 Database schema migration
 - [x] Replace `ProtocolId` enum (`uniswap`, `aave`, …) with pool-based allocation:
-  - Option B: JSON column `poolAllocations` on `AgentStrategy` (MVP — done)
-- [ ] Migration: `protocol_allocation` → `pool_allocation` (legacy table still present)
-- [ ] Deprecate `ProtocolId` enum in Prisma
-- [ ] Add `tradingEnabledAt`, `lastCycleAt` on `AgentStrategy`
+  - Normalized `pool_allocation` table (`pool_id`, `amount`, `strategy_id`)
+- [x] Migration: `protocol_allocation` / JSON → `pool_allocation` (`npm run db:migrate-pools`)
+- [x] Deprecate `ProtocolId` enum in Prisma (removed)
+- [x] Add `tradingEnabledAt`, `lastCycleAt` on `AgentStrategy`
 
 ### 2.2 Backend strategy types & service
 - [x] Update `strategy.types.ts`: `PoolAllocations = Record<poolId, number>`
@@ -134,8 +134,8 @@ sequenceDiagram
 - [x] `client/app/setup/auto/page.tsx` — use `PoolAllocationEditor` + live pools
 - [x] `client/app/setup/custom/page.tsx` — same pool picker, user toggles sub-agents
 - [x] `client/app/onboarding/strategy/page.tsx` — copy update: "pools" not "protocols"
-- [ ] Deposit step unchanged: user sends funds to agent wallet address
-- [ ] On activate: `status: "active"` triggers first trading cycle (see Phase 4)
+- [x] Deposit step unchanged: user sends funds to agent wallet address
+- [x] On activate: `status: "active"` triggers first trading cycle (see Phase 4)
 
 ---
 
@@ -204,7 +204,7 @@ sequenceDiagram
 - [ ] Custom: respect user sub-agent config + pool selection only
 
 ### 4.3 Trading runner service (core loop)
-- [ ] `backend/src/services/agents/trading-runner.service.ts`:
+- [x] `backend/src/services/agents/trading-runner.service.ts` (MVP — portfolio drift + `lastCycleAt`; LLM/tools pending):
 
 ```
 runCycle(userId):
@@ -230,16 +230,16 @@ runCycle(userId):
   - Risk limits from sub-agent config (max drawdown, max single move %)
 
 ### 4.4 Triggering trading (user side, not scripts)
-- [ ] **On activate:** first cycle runs when user sets `status: "active"` after deposit
+- [x] **On activate:** first cycle runs when user sets `status: "active"` after deposit (portfolio analysis MVP; LLM execution Phase 4.1–4.3)
 - [ ] **Scheduled worker:** `backend/src/workers/trading-cycle.worker.ts`
   - Poll active strategies every N minutes (configurable per auto/custom)
   - Auto: every 5–15 min; Custom: user-defined interval in strategy config
-- [ ] **Manual trigger:** `POST /api/v1/agents/trading/run-cycle` (authenticated)
+- [x] **Manual trigger:** `POST /api/v1/agents/trading/run-cycle` (authenticated)
 - [ ] **Deposit detection:** optional — watch agent wallet balance; start cycle when deposit confirmed
 
 ### 4.5 REST API — trading
-- [ ] `POST /api/v1/agents/trading/run-cycle` — trigger one LLM + execution cycle
-- [ ] `GET /api/v1/agents/trading/status` — last cycle time, pending request, agent state
+- [x] `POST /api/v1/agents/trading/run-cycle` — trigger one cycle (analysis MVP)
+- [x] `GET /api/v1/agents/trading/status` — last cycle time, phase, agent state
 - [ ] `GET /api/v1/agents/trading/history` — paginated list of swaps/rebalances
 - [ ] `GET /api/v1/agents/trading/history/:id` — single action detail + tx hash
 

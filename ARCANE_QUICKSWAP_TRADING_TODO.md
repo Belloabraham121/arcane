@@ -84,10 +84,10 @@ sequenceDiagram
   - Filter out pools where address is `0x0`
 
 ### 1.2 Pool metrics & quoting
-- [ ] `backend/src/services/defi/quickswap/quote.service.ts`:
+- [x] `backend/src/services/defi/quickswap/quote.service.ts`:
   - `quoteExactIn(tokenIn, tokenOut, amountIn)` via QuoterV2 (`deployer: ZERO`)
   - Handle viem uint160 decode edge case (raw `eth_call` fallback if needed)
-- [ ] `backend/src/services/defi/quickswap/pool-metrics.service.ts`:
+- [x] `backend/src/services/defi/quickswap/pool-metrics.service.ts`:
   - Price of token1 per token0 from pool
   - Implied APR / volume (on-chain first; Ormi subgraph later)
 

@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { parseAbi } from "viem";
 
 const require = createRequire(import.meta.url);
 
@@ -17,6 +18,11 @@ export const swapRouterAbi = require(
 export const quoterV2Abi = require(
   "@cryptoalgebra/integral-periphery/artifacts/contracts/lens/QuoterV2.sol/QuoterV2.json",
 ).abi;
+
+/** Trimmed ABI for quotes — full artifact ABI breaks viem tuple encoding on some calls. */
+export const quoterV2QuoteAbi = parseAbi([
+  "function quoteExactInputSingle((address tokenIn, address tokenOut, address deployer, uint256 amountIn, uint160 limitSqrtPrice) params) external returns (uint256 amountOut, uint256 amountIn, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate, uint16 fee)",
+]);
 
 export const nonfungiblePositionManagerAbi = require(
   "@cryptoalgebra/integral-periphery/artifacts/contracts/NonfungiblePositionManager.sol/NonfungiblePositionManager.json",

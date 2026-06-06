@@ -149,6 +149,9 @@ function stateToMetrics(state: PoolOnChainState): PoolMetrics {
     reserve0: state.reserve0,
     reserve1: state.reserve1,
     lastFee: state.globalState.lastFee,
+    token1PerToken0: null,
+    token0PerToken1: null,
+    feeTierPercent: null,
     feeApr: null,
     lastUpdated: new Date().toISOString(),
   };

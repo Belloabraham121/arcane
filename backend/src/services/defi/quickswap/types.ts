@@ -15,9 +15,26 @@ export type PoolMetrics = {
   reserve0: string;
   reserve1: string;
   lastFee: number;
-  /** Populated when subgraph/indexer is wired (Phase 1.2). */
+  /** Human-readable: how many token1 per 1 token0 (pool-metrics.service). */
+  token1PerToken0: string | null;
+  /** Human-readable: how many token0 per 1 token1. */
+  token0PerToken1: string | null;
+  /** Swap fee tier as percent (e.g. 0.05 for lastFee 500). */
+  feeTierPercent: number | null;
+  /** True APR requires volume — subgraph later. */
   feeApr: number | null;
   lastUpdated: string;
+};
+
+export type SwapQuote = {
+  tokenIn: Address;
+  tokenOut: Address;
+  amountIn: string;
+  amountOut: string;
+  sqrtPriceX96After: string;
+  initializedTicksCrossed: number;
+  gasEstimate: string;
+  fee: number;
 };
 
 export type QuickSwapPool = {

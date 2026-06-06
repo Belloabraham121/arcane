@@ -94,6 +94,8 @@ export type AgentStrategyResponse = {
   depositAmount: number;
   poolAllocations: PoolAllocations;
   subAgents: SubAgentConfigItem[];
+  /** Custom agents only — minutes between scheduled trading cycles. */
+  cycleIntervalMinutes: number | null;
   tradingEnabledAt: string | null;
   lastCycleAt: string | null;
   createdAt: string;

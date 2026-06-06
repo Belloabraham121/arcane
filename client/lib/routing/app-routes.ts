@@ -5,6 +5,7 @@ export const APP_ROUTES = {
   setupCustom: "/setup/custom",
   dashboard: "/dashboard",
   agentCanvas: "/dashboard/agents",
+  tradingHistory: "/dashboard/trading",
 } as const
 
 export function setupRouteFor(strategyType: "auto" | "custom") {

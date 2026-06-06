@@ -1,11 +1,21 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../../../middleware/auth";
 import {
   TradingError,
   getTradingStatusForUser,
   runTradingCycle,
 } from "../../../../services/agents/trading-runner.service";
+import {
+  getTradingCycleDetail,
+  listTradingCycles,
+} from "../../../../services/agents/trading.repository";
 import { fail, ok } from "../../../../utils/http-response";
+
+const historyQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
 
 export const agentTradingRouter = Router();
 
@@ -32,3 +42,57 @@ agentTradingRouter.post("/api/v1/agents/trading/run-cycle", requireAuth, async (
     throw err;
   }
 });
+
+agentTradingRouter.get("/api/v1/agents/trading/history", requireAuth, async (req, res) => {
+  const parsed = historyQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return fail(req, res, 400, {
+      code: "VALIDATION_ERROR",
+      message: "Invalid history query parameters",
+      details: parsed.error.flatten().fieldErrors,
+    });
+  }
+
+  const { page, limit } = parsed.data;
+  const { items, total } = await listTradingCycles(req.user.id, page, limit);
+
+  return res.status(200).json({
+    success: true,
+    data: { items },
+    meta: {
+      correlation_id: req.correlationId,
+      timestamp: new Date().toISOString(),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    },
+    error: null,
+  });
+});
+
+agentTradingRouter.get(
+  "/api/v1/agents/trading/history/:id",
+  requireAuth,
+  async (req, res) => {
+    const cycleId = req.params.id;
+    if (!cycleId || typeof cycleId !== "string") {
+      return fail(req, res, 400, {
+        code: "VALIDATION_ERROR",
+        message: "Cycle id is required",
+      });
+    }
+
+    const detail = await getTradingCycleDetail(req.user.id, cycleId);
+    if (!detail) {
+      return fail(req, res, 404, {
+        code: "CYCLE_NOT_FOUND",
+        message: "Trading cycle not found",
+      });
+    }
+
+    return ok(req, res, { cycle: detail });
+  },
+);

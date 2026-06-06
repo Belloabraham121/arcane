@@ -17,6 +17,25 @@ enum StrategyStatus {
   active
 }
 
+enum TradingCycleStatus {
+  completed
+  failed
+}
+
+enum TradingActionType {
+  approve
+  swap
+  rebalance
+  quote
+  tool
+}
+
+enum TradingActionStatus {
+  success
+  failed
+  reverted
+}
+
 model User {
   id                   String         @id @default(uuid()) @db.Uuid
   email                String         @unique @db.Text
@@ -43,11 +62,59 @@ model AgentStrategy {
   subAgentConfig   Json?            @map("sub_agent_config")
   tradingEnabledAt DateTime?        @map("trading_enabled_at") @db.Timestamptz
   lastCycleAt      DateTime?        @map("last_cycle_at") @db.Timestamptz
+  /// Custom agents: user-defined interval; auto uses env default when null.
+  cycleIntervalMinutes Int?         @map("cycle_interval_minutes")
+  /// Fingerprint of last observed wallet balances (deposit detection).
+  lastObservedBalanceFingerprint String? @map("last_observed_balance_fingerprint") @db.Text
   poolAllocations  PoolAllocation[]
+  tradingCycles    TradingCycle[]
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("agent_strategy")
+}
+
+model TradingCycle {
+  id          String             @id @default(uuid()) @db.Uuid
+  userId      String             @map("user_id") @db.Uuid
+  strategyId  String             @map("strategy_id") @db.Uuid
+  strategy    AgentStrategy      @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  reason      String             @db.Text
+  status      TradingCycleStatus @default(completed)
+  message     String             @db.Text
+  llmPending  Boolean            @default(true) @map("llm_pending")
+  llmResponse String?            @map("llm_response") @db.Text
+  llmSummary  String?            @map("llm_summary") @db.Text
+  poolDrift   Json?              @map("pool_drift")
+  startedAt   DateTime           @map("started_at") @db.Timestamptz
+  finishedAt  DateTime           @map("finished_at") @db.Timestamptz
+  actions     TradingAction[]
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId, startedAt(sort: Desc)], map: "idx_trading_cycle_user_started")
+  @@index([strategyId], map: "idx_trading_cycle_strategy_id")
+  @@map("trading_cycle")
+}
+
+model TradingAction {
+  id        String              @id @default(uuid()) @db.Uuid
+  cycleId   String              @map("cycle_id") @db.Uuid
+  cycle     TradingCycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  type      TradingActionType
+  toolName  String?             @map("tool_name") @db.Text
+  tokenIn   String?             @map("token_in") @db.Text
+  tokenOut  String?             @map("token_out") @db.Text
+  amountIn  String?             @map("amount_in") @db.Text
+  amountOut String?             @map("amount_out") @db.Text
+  poolFrom  String?             @map("pool_from") @db.Text
+  poolTo    String?             @map("pool_to") @db.Text
+  txHash    String?             @map("tx_hash") @db.Text
+  status    TradingActionStatus @default(success)
+  metadata  Json?
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([cycleId], map: "idx_trading_action_cycle_id")
+  @@map("trading_action")
 }
 
 /// QuickSwap pool capital allocation (pool id e.g. usdce-wsomi).

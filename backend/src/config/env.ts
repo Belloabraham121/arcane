@@ -160,5 +160,19 @@ export function getTradingExecutionEnv() {
     ),
     /** Minimum token balance (raw units) before attempting a swap. */
     minSwapAmountRaw: BigInt(optional("TRADING_MIN_SWAP_AMOUNT_RAW", "1000")),
+    maxLlmToolRounds: Number(optional("TRADING_MAX_LLM_TOOL_ROUNDS", "5")),
+    llmMaxIterations: BigInt(optional("SOMNIA_LLM_MAX_ITERATIONS", "3")),
+    workerEnabled: optional("TRADING_WORKER_ENABLED", "true") === "true",
+    workerPollIntervalMs: Number(
+      optional("TRADING_WORKER_POLL_INTERVAL_MS", "60000"),
+    ),
+    autoCycleIntervalMinutes: Number(
+      optional("TRADING_AUTO_CYCLE_INTERVAL_MINUTES", "10"),
+    ),
+    customCycleIntervalMinutes: Number(
+      optional("TRADING_CUSTOM_CYCLE_INTERVAL_MINUTES", "15"),
+    ),
+    depositDetectionEnabled:
+      optional("TRADING_DEPOSIT_DETECTION_ENABLED", "true") === "true",
   };
 }

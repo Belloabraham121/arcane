@@ -1,14 +1,14 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AppNavBar } from "@/components/auth/app-nav-bar"
-import { AgentNetworkCanvas } from "@/components/agent-network-canvas"
-import { AgentTradeFeed } from "@/components/agent-trade-feed"
 import { DraggableGridPanel } from "@/components/draggable-grid-panel"
-import { NodesLegendContent } from "@/components/nodes-legend-content"
-import { useTradeEvents } from "@/hooks/use-trade-events"
+import { LiveTradingFeed } from "@/components/live-trading-feed"
+import { PoolNodesLegend } from "@/components/pool-nodes-legend"
+import { PoolTradingCanvas } from "@/components/pool-trading-canvas"
+import { useTradingSocket } from "@/hooks/use-trading-socket"
 import { getMe } from "@/lib/api/auth"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import {
@@ -16,6 +16,7 @@ import {
   type PoolAllocations,
 } from "@/lib/api/strategy-types"
 import { POOL_LABELS } from "@/lib/strategy-presets"
+import { activePoolIds } from "@/lib/pool-network-layout"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
 import {
@@ -27,16 +28,18 @@ import {
 
 export default function AgentsPage() {
   const router = useRouter()
-  const [viewMode, setViewMode] = useState<"activity" | "reputation" | "tvl">(
-    "activity",
-  )
   const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>(DEFAULT_POOL_ALLOCATIONS)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const { events, pushEvent } = useTradeEvents()
   const workspaceRef = useRef<HTMLDivElement>(null)
   const { layouts, updatePanel, toggleCollapsed, hydrated } = usePanelLayout()
   const [defaultsApplied, setDefaultsApplied] = useState(false)
+
+  const poolIds = useMemo(() => activePoolIds(poolAmounts), [poolAmounts])
+
+  const { connected, feedItems, routeCommand, cycleActive } = useTradingSocket({
+    enabled: !loading,
+  })
 
   useEffect(() => {
     async function load() {
@@ -108,7 +111,13 @@ export default function AgentsPage() {
         <div className="mx-auto max-w-7xl px-6 py-4 lg:px-12">
           <div className="flex items-center justify-between">
             <div className="font-mono text-xs text-muted-foreground">
-              Agent Network | Real-Time Particle Visualization
+              QuickSwap Agent Network
+              {cycleActive && (
+                <span className="ml-2 text-[#ea580c]">· cycle active</span>
+              )}
+              {connected && (
+                <span className="ml-2 text-[#16a34a]">· live</span>
+              )}
             </div>
             <Link
               href={APP_ROUTES.dashboard}
@@ -129,46 +138,11 @@ export default function AgentsPage() {
           backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
         }}
       >
-        <AgentNetworkCanvas
-          viewMode={viewMode}
-          protocolAmounts={poolAmounts}
-          onTradeEvent={pushEvent}
-        />
-
-        <DraggableGridPanel
-          id="graph-settings"
-          title="Graph Settings"
-          x={layouts["graph-settings"].x}
-          y={layouts["graph-settings"].y}
-          collapsed={layouts["graph-settings"].collapsed}
-          onPositionChange={setPosition("graph-settings")}
-          onToggleCollapsed={() => toggleCollapsed("graph-settings")}
-          containerRef={workspaceRef}
-          width={240}
-        >
-          <div className="space-y-2">
-            {(["activity", "reputation", "tvl"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setViewMode(mode)}
-                className={`block w-full rounded border px-3 py-2 text-left transition-all ${
-                  viewMode === mode
-                    ? "border-[#ea580c] bg-[#ea580c] font-bold text-white"
-                    : "border-transparent text-muted-foreground hover:border-border hover:bg-white hover:text-foreground"
-                }`}
-              >
-                {mode === "activity" && "Activity Flow"}
-                {mode === "reputation" && "Reputation Tiers"}
-                {mode === "tvl" && "TVL Distribution"}
-              </button>
-            ))}
-          </div>
-        </DraggableGridPanel>
+        <PoolTradingCanvas poolIds={poolIds} routeCommand={routeCommand} />
 
         <DraggableGridPanel
           id="nodes-legend"
-          title="Nodes"
+          title="Pool nodes"
           x={layouts["nodes-legend"].x}
           y={layouts["nodes-legend"].y}
           collapsed={layouts["nodes-legend"].collapsed}
@@ -178,7 +152,7 @@ export default function AgentsPage() {
           width={520}
           contentClassName="py-2"
         >
-          <NodesLegendContent />
+          <PoolNodesLegend poolIds={poolIds} />
         </DraggableGridPanel>
 
         <DraggableGridPanel
@@ -194,34 +168,11 @@ export default function AgentsPage() {
           alignRight
           contentClassName="p-0"
         >
-          <AgentTradeFeed
-            events={events}
+          <LiveTradingFeed
+            items={feedItems}
+            connected={connected}
             className="max-h-[min(50vh,360px)] border-0 bg-transparent"
           />
-        </DraggableGridPanel>
-
-        <DraggableGridPanel
-          id="legend"
-          title="Legend"
-          x={layouts.legend.x}
-          y={layouts.legend.y}
-          collapsed={layouts.legend.collapsed}
-          onPositionChange={setPosition("legend")}
-          onToggleCollapsed={() => toggleCollapsed("legend")}
-          containerRef={workspaceRef}
-          width={280}
-          alignRight
-        >
-          <div className="space-y-2 text-muted-foreground">
-            <p>• Pink node = Uniswap</p>
-            <p>• Purple node = AAVE</p>
-            <p>• Cyan node = Compound</p>
-            <p>• Blue node = Lido</p>
-            <p>• Green top node = Marketplace</p>
-            <p>• Gray trails = Sub route (root ↔ marketplace)</p>
-            <p>• Small shape = Root (visits protocols)</p>
-            <p>• Larger shape = Sub (follows its root)</p>
-          </div>
         </DraggableGridPanel>
 
         <DraggableGridPanel
@@ -239,15 +190,15 @@ export default function AgentsPage() {
             {Object.entries(poolAmounts)
               .filter(([, amount]) => amount > 0)
               .map(([key, amount]) => (
-              <div key={key} className="flex items-center justify-between gap-3">
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {POOL_LABELS[key] ?? key}
-                </span>
-                <span className="font-mono text-xs text-foreground">
-                  {(amount / 1_000_000).toFixed(0)}M
-                </span>
-              </div>
-            ))}
+                <div key={key} className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {POOL_LABELS[key] ?? key}
+                  </span>
+                  <span className="font-mono text-xs text-foreground">
+                    {(amount / 1_000_000).toFixed(0)}M
+                  </span>
+                </div>
+              ))}
           </div>
         </DraggableGridPanel>
 
@@ -263,8 +214,8 @@ export default function AgentsPage() {
           width={280}
         >
           <div className="space-y-1 text-muted-foreground">
-            <p>Agents route to all nodes including Marketplace.</p>
-            <p>View mode: {viewMode.toUpperCase()}</p>
+            <p>Real-time WebSocket feed from trading cycles.</p>
+            <p>Swaps and rebalances animate between pool nodes.</p>
             <p className="text-[10px]">
               Hold the grip icon to drag. Panels snap to the grid.
             </p>

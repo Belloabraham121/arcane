@@ -163,6 +163,31 @@ function poolAllocationsFromRows(
   return Object.keys(map).length > 0 ? map : { ...DEFAULT_POOL_ALLOCATIONS };
 }
 
+function parseCycleIntervalMinutes(
+  _strategyType: StrategyType,
+  value: number | null | undefined,
+): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "cycleIntervalMinutes must be a number between 5 and 1440",
+    );
+  }
+  if (value < 5 || value > 24 * 60) {
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "cycleIntervalMinutes must be between 5 and 1440",
+    );
+  }
+  return Math.round(value);
+}
+
 function toResponse(
   strategy: NonNullable<Awaited<ReturnType<typeof repo.findStrategyByUserId>>>,
 ): AgentStrategyResponse {
@@ -174,6 +199,7 @@ function toResponse(
     depositAmount: strategy.depositAmount,
     poolAllocations: poolAllocationsFromRows(strategy.poolAllocations),
     subAgents: subAgentsFromDb(strategyType, strategy.subAgentConfig),
+    cycleIntervalMinutes: strategy.cycleIntervalMinutes,
     tradingEnabledAt: strategy.tradingEnabledAt?.toISOString() ?? null,
     lastCycleAt: strategy.lastCycleAt?.toISOString() ?? null,
     createdAt: strategy.createdAt.toISOString(),
@@ -197,6 +223,7 @@ export async function upsertUserStrategy(
     depositAmount?: number;
     poolAllocations?: PoolAllocations;
     subAgents?: SubAgentConfigItem[];
+    cycleIntervalMinutes?: number | null;
   },
 ): Promise<AgentStrategyResponse> {
   const status = input.status ?? "draft";
@@ -233,6 +260,20 @@ export async function upsertUserStrategy(
       ? DEFAULT_AUTO_SUB_AGENTS
       : DEFAULT_CUSTOM_SUB_AGENTS);
 
+  const cycleIntervalMinutes =
+    input.cycleIntervalMinutes !== undefined
+      ? parseCycleIntervalMinutes(input.strategyType, input.cycleIntervalMinutes)
+      : undefined;
+  if (
+    input.strategyType === "auto" &&
+    input.cycleIntervalMinutes != null
+  ) {
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "cycleIntervalMinutes applies to custom agents only",
+    );
+  }
+
   const existing = await repo.findStrategyByUserId(userId);
   const triggerFirstCycle = shouldTriggerCycleOnActivate(
     existing?.status,
@@ -247,6 +288,7 @@ export async function upsertUserStrategy(
     poolAllocations,
     status,
     subAgentConfig,
+    cycleIntervalMinutes,
   });
 
   log.info("Agent strategy saved", {

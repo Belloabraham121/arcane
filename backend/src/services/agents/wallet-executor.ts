@@ -46,7 +46,8 @@ function normalizePrivateKey(privateKey: string): Hex {
   return (trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`) as Hex;
 }
 
-async function loadAgentAccount(userId: string): Promise<{
+/** Load the user's custodial agent account for signing (mainnet swaps + testnet LLM). */
+export async function getUserAgentAccount(userId: string): Promise<{
   account: AgentAccount;
   walletAddress: Address;
 }> {
@@ -161,7 +162,7 @@ export async function submitAgentTransaction(
   kind: SubmittedTransaction["kind"],
   meta?: Pick<SubmittedTransaction, "tokenIn" | "tokenOut" | "amountIn" | "amountOut">,
 ): Promise<SubmittedTransaction> {
-  const { account, walletAddress } = await loadAgentAccount(userId);
+  const { account, walletAddress } = await getUserAgentAccount(userId);
   await assertSufficientGas(walletAddress);
 
   const walletClient = getAgentWalletClient(account);
@@ -214,7 +215,7 @@ export async function ensureTokenApproval(
   amount: bigint,
   allowedPoolIds: readonly string[],
 ): Promise<SubmittedTransaction | null> {
-  const { walletAddress } = await loadAgentAccount(userId);
+  const { walletAddress } = await getUserAgentAccount(userId);
   await assertTokenAllowed(userId, token, allowedPoolIds);
 
   const allowance = await getTokenAllowance(walletAddress, token, spender);
@@ -254,7 +255,7 @@ export async function executeRebalancePlan(
     );
   }
 
-  const { walletAddress } = await loadAgentAccount(userId);
+  const { walletAddress } = await getUserAgentAccount(userId);
   await assertTokenAllowed(userId, plan.tokenIn, allowedPoolIds);
   await assertTokenAllowed(userId, plan.tokenOut, allowedPoolIds);
   await assertSufficientBalance(walletAddress, plan.tokenIn, plan.amountIn);
@@ -287,6 +288,67 @@ export async function executeRebalancePlan(
     hops: plan.hops,
     txs: submitted.map((tx) => tx.hash),
   });
+
+  return submitted;
+}
+
+export type ExecuteSwapExactInInput = {
+  userId: string;
+  tokenIn: Address;
+  tokenOut: Address;
+  amountIn: bigint;
+  allowedPoolIds: readonly string[];
+  slippageBps?: number;
+};
+
+/** Auto-approve (if needed) + single-hop swap from the user's agent wallet. */
+export async function executeSwapExactIn(
+  input: ExecuteSwapExactInInput,
+): Promise<SubmittedTransaction[]> {
+  const { userId, tokenIn, tokenOut, amountIn, allowedPoolIds } = input;
+  const { defaultSlippageBps, maxSlippageBps } = getQuickSwapEnv();
+  const slippageBps = input.slippageBps ?? defaultSlippageBps;
+
+  if (slippageBps > maxSlippageBps) {
+    throw new WalletExecutorError(
+      `Slippage ${slippageBps} bps exceeds cap ${maxSlippageBps}`,
+      "SLIPPAGE_CAP_EXCEEDED",
+    );
+  }
+
+  const { walletAddress } = await getUserAgentAccount(userId);
+  await assertTokenAllowed(userId, tokenIn, allowedPoolIds);
+  await assertTokenAllowed(userId, tokenOut, allowedPoolIds);
+  await assertSufficientBalance(walletAddress, tokenIn, amountIn);
+
+  const { quickSwapAdapter } = await import("../defi/quickswap/quickswap.adapter");
+  const { quote, swap } = await quickSwapAdapter.buildSwapExactInWithQuote(
+    tokenIn,
+    tokenOut,
+    amountIn,
+    walletAddress,
+    slippageBps,
+  );
+
+  const submitted: SubmittedTransaction[] = [];
+  const approval = await ensureTokenApproval(
+    userId,
+    tokenIn,
+    swap.router,
+    amountIn,
+    allowedPoolIds,
+  );
+  if (approval) {
+    submitted.push(approval);
+  }
+
+  const swapTx = await submitAgentTransaction(userId, swap.call, "swap", {
+    tokenIn,
+    tokenOut,
+    amountIn,
+    amountOut: BigInt(quote.amountOut),
+  });
+  submitted.push(swapTx);
 
   return submitted;
 }

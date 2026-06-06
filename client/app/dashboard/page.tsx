@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { AppNavBar } from "@/components/auth/app-nav-bar"
@@ -9,15 +9,31 @@ import { getMe } from "@/lib/api/auth"
 import { fetchPools } from "@/lib/api/quickswap"
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import { getAgentStrategy } from "@/lib/api/strategy"
-import { fetchTradingStatus, type TradingStatus } from "@/lib/api/trading"
+import {
+  fetchTradingCycleDetail,
+  fetchTradingHistory,
+  fetchTradingStatus,
+  type TradingStatus,
+} from "@/lib/api/trading"
 import type { AgentStrategy } from "@/lib/api/strategy-types"
 import { APP_ROUTES, setupRouteFor } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
 import { WalletBalancesList } from "@/components/setup/wallet-balances-list"
+import { ActivePoolsPanel } from "@/components/dashboard/active-pools-panel"
+import { AgentStatusBadge } from "@/components/dashboard/agent-status-badge"
+import { LastTradeCard } from "@/components/dashboard/last-trade-card"
+import { PoolMetricsStrip } from "@/components/dashboard/pool-metrics-strip"
 import { useWalletBalances } from "@/hooks/use-wallet-balances"
+import { useTradingSocket } from "@/hooks/use-trading-socket"
 import { buildPoolMarketRows } from "@/lib/pool-allocations"
 import { allocatedPoolIds } from "@/lib/supported-tokens"
-import { POOL_LABELS } from "@/lib/strategy-presets"
+import {
+  buildActivePoolRows,
+  deriveAgentDisplayStatus,
+  lastTradeFromCycle,
+  lastTradeFromHistoryDetail,
+  type LastTradeInfo,
+} from "@/lib/trading-helpers"
 
 const ease = [0.22, 1, 0.36, 1] as const
 
@@ -30,6 +46,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "markets" | "agents">("overview")
   const [loading, setLoading] = useState(true)
   const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
+  const [lastTrade, setLastTrade] = useState<LastTradeInfo | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -63,6 +80,53 @@ export default function DashboardPage() {
     load()
   }, [router])
 
+  const refreshTradingData = useCallback(async () => {
+    const [statusResult, historyResult] = await Promise.all([
+      fetchTradingStatus(),
+      fetchTradingHistory(1, 1),
+    ])
+    if (statusResult.success && statusResult.data) {
+      setTradingStatus(statusResult.data.status)
+    }
+
+    const status = statusResult.success ? statusResult.data?.status : null
+    const fromCycle = lastTradeFromCycle(
+      status?.lastCycle ?? null,
+      status?.lastCycleAt ?? null,
+    )
+    if (fromCycle) {
+      setLastTrade(fromCycle)
+      return
+    }
+
+    const latest = historyResult.success ? historyResult.data?.items[0] : undefined
+    if (!latest) {
+      setLastTrade(null)
+      return
+    }
+
+    const detailResult = await fetchTradingCycleDetail(latest.id)
+    if (detailResult.success && detailResult.data?.cycle) {
+      setLastTrade(lastTradeFromHistoryDetail(detailResult.data.cycle))
+    }
+  }, [])
+
+  const { connected: socketConnected, cycleActive: socketCycleActive } =
+    useTradingSocket({
+      enabled: strategy?.status === "active",
+      onCycleStarted: () => {
+        setTradingStatus((prev) =>
+          prev ? { ...prev, phase: "analyzing" } : prev,
+        )
+      },
+      onCycleCompleted: () => {
+        void refreshTradingData()
+      },
+      onActionExecuted: () => {
+        void refreshTradingData()
+      },
+    })
+
   useEffect(() => {
     if (!strategy || strategy.status !== "active") {
       return
@@ -71,20 +135,20 @@ export default function DashboardPage() {
     let cancelled = false
 
     async function loadTradingStatus() {
-      const result = await fetchTradingStatus()
-      if (!cancelled && result.success && result.data) {
-        setTradingStatus(result.data.status)
+      if (cancelled) {
+        return
       }
+      await refreshTradingData()
     }
 
     loadTradingStatus()
-    const timer = window.setInterval(loadTradingStatus, 10_000)
+    const timer = window.setInterval(loadTradingStatus, 30_000)
 
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [strategy])
+  }, [strategy, refreshTradingData])
 
   const marketRows = useMemo(
     () =>
@@ -118,9 +182,18 @@ export default function DashboardPage() {
   const netEarned = depositedAmount * 0.0006
   const totalAPR = 16.43
   const enabledSubAgents = strategy.subAgents.filter((agent) => agent.enabled)
-  const allocationTotal = Object.values(strategy.poolAllocations ?? {}).reduce(
-    (sum, value) => sum + value,
-    0,
+  const agentDisplayStatus = socketCycleActive
+    ? tradingStatus?.lastCycle?.executedTransactions?.length
+      ? "executing"
+      : "analyzing"
+    : deriveAgentDisplayStatus({
+        strategyActive: strategy.status === "active",
+        tradingStatus,
+        walletBalances: balances,
+      })
+  const activePoolRows = buildActivePoolRows(
+    strategy.poolAllocations,
+    tradingStatus?.lastCycle?.poolDrift,
   )
 
   return (
@@ -212,98 +285,83 @@ export default function DashboardPage() {
 
           {activeTab === "overview" && (
             <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="border border-border p-6">
-                <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  QuickSwap pool allocation
-                </p>
-                <div className="space-y-3">
-                  {Object.entries(strategy.poolAllocations ?? {})
-                    .filter(([, amount]) => amount > 0)
-                    .map(([key, amount]) => (
-                      <div key={key} className="flex items-center justify-between">
-                        <span className="font-mono text-sm">{POOL_LABELS[key] ?? key}</span>
-                        <span className="font-mono text-sm text-muted-foreground">
-                          {allocationTotal > 0
-                            ? `${((amount / allocationTotal) * 100).toFixed(1)}%`
-                            : "0%"}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-              <div className="border border-border p-6">
-                <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  Active sub-agents
-                </p>
-                <div className="space-y-3">
-                  {enabledSubAgents.map((agent) => (
-                    <div key={agent.id}>
-                      <p className="font-mono text-sm text-foreground">{agent.name}</p>
-                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#ea580c]">
-                        {agent.model}
-                      </p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {agent.systemPrompt}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <PoolMetricsStrip
+              poolAllocations={strategy.poolAllocations}
+              pools={pools}
+              loading={loading}
+            />
 
-            <div className="border border-border p-6">
-              <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                Agent trading status
-              </p>
-              <div className="space-y-2 font-mono text-xs">
-                <p>
-                  <span className="text-muted-foreground">Phase: </span>
-                  <span className="text-foreground">
-                    {tradingStatus?.phase ?? "idle"}
-                  </span>
+            <div className="flex flex-wrap items-center justify-between gap-4 border border-border px-4 py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                  Agent status
                 </p>
+                <AgentStatusBadge status={agentDisplayStatus} />
+                {socketConnected && (
+                  <span className="font-mono text-[10px] text-[#16a34a]">live</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-4 font-mono text-[10px] text-muted-foreground">
                 {strategy.tradingEnabledAt && (
-                  <p className="text-muted-foreground">
-                    Trading since{" "}
-                    {new Date(strategy.tradingEnabledAt).toLocaleString()}
-                  </p>
+                  <span>
+                    Since {new Date(strategy.tradingEnabledAt).toLocaleString()}
+                  </span>
                 )}
                 {(tradingStatus?.lastCycleAt ?? strategy.lastCycleAt) && (
-                  <p className="text-muted-foreground">
+                  <span>
                     Last cycle{" "}
                     {new Date(
                       tradingStatus?.lastCycleAt ?? strategy.lastCycleAt!,
                     ).toLocaleString()}
-                  </p>
+                  </span>
                 )}
-                {tradingStatus?.lastCycle?.message && (
-                  <p className="text-muted-foreground">
-                    {tradingStatus.lastCycle.message}
-                  </p>
-                )}
-                {(tradingStatus?.lastCycle?.executedTransactions?.length ?? 0) >
-                  0 && (
-                  <div className="mt-2 space-y-1 border-t border-border pt-2">
-                    <p className="text-muted-foreground">
-                      Auto-executed (no approval required):
+                <Link
+                  href={APP_ROUTES.tradingHistory}
+                  className="uppercase tracking-widest text-[#ea580c] hover:text-[#ff7a2a]"
+                >
+                  Trading history
+                </Link>
+              </div>
+            </div>
+
+            {tradingStatus?.lastError && (
+              <p className="border border-[#ea580c]/30 bg-[#ea580c]/5 px-4 py-3 font-mono text-xs text-[#ea580c]">
+                {tradingStatus.lastError}
+              </p>
+            )}
+
+            {tradingStatus?.lastCycle?.llmResponse && (
+              <div className="border border-border px-4 py-4">
+                <p className="mb-1 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                  Latest LLM summary
+                </p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {tradingStatus.lastCycle.llmResponse}
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <ActivePoolsPanel pools={activePoolRows} />
+              <LastTradeCard trade={lastTrade} />
+            </div>
+
+            <div className="border border-border p-6">
+              <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                Active sub-agents
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {enabledSubAgents.map((agent) => (
+                  <div key={agent.id}>
+                    <p className="font-mono text-sm text-foreground">{agent.name}</p>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-[#ea580c]">
+                      {agent.model}
                     </p>
-                    {tradingStatus!.lastCycle!.executedTransactions.map((tx) => (
-                      <p key={tx.hash} className="text-foreground">
-                        {tx.kind}{" "}
-                        {tx.amountIn && tx.tokenIn
-                          ? `${tx.amountIn} → ${tx.amountOut ?? "?"} `
-                          : ""}
-                        <span className="text-muted-foreground">
-                          {tx.hash.slice(0, 10)}…
-                        </span>
-                      </p>
-                    ))}
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {agent.systemPrompt}
+                    </p>
                   </div>
-                )}
-                {tradingStatus?.lastError && (
-                  <p className="text-[#ea580c]">{tradingStatus.lastError}</p>
-                )}
+                ))}
               </div>
             </div>
 

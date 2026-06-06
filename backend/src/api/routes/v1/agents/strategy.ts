@@ -26,6 +26,7 @@ const upsertSchema = z.object({
       enabled: z.boolean(),
     }),
   ).optional(),
+  cycleIntervalMinutes: z.number().int().min(5).max(1440).nullable().optional(),
 });
 
 const patchPoolAllocationsSchema = z.object({
@@ -88,6 +89,7 @@ agentStrategyRouter.put("/api/v1/agents/strategy", requireAuth, async (req, res)
       depositAmount: parsed.data.depositAmount,
       poolAllocations,
       subAgents,
+      cycleIntervalMinutes: parsed.data.cycleIntervalMinutes,
     });
 
     return ok(req, res, { strategy });

@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
@@ -14,6 +15,8 @@ import { getAuthEnv, getServerEnv } from "./config/env";
 import { createCorsOptions } from "./config/cors";
 import { prisma } from "./infrastructure/postgres/client";
 import { logger } from "./shared/logger";
+import { startTradingCycleWorker } from "./workers/trading-cycle.worker";
+import { initTradingSocketServer } from "./websocket/socket-server";
 
 const app = express();
 
@@ -53,7 +56,12 @@ async function start() {
   await prisma.$connect();
   logger.info("Database connected");
 
-  const server = app.listen(port, () => {
+  startTradingCycleWorker();
+
+  const httpServer = createServer(app);
+  initTradingSocketServer(httpServer);
+
+  const server = httpServer.listen(port, () => {
     const { corsOrigin } = getAuthEnv();
     logger.info("Server started", {
       port,
@@ -72,11 +80,14 @@ async function start() {
         "PATCH /api/v1/agents/strategy/pool-allocations",
         "GET /api/v1/agents/trading/status",
         "POST /api/v1/agents/trading/run-cycle",
+        "GET /api/v1/agents/trading/history",
+        "GET /api/v1/agents/trading/history/:id",
         "PATCH /api/v1/agents/strategy/sub-agents",
         "GET /api/v1/quickswap/pools",
         "GET /api/v1/quickswap/pools/:poolId",
         "GET /api/v1/quickswap/pools/:poolId/quote",
         "GET /api/v1/wallets/balances",
+        "WS  /socket.io (trading:cycle_started|action_executed|cycle_completed)",
       ],
     });
   });

@@ -194,18 +194,18 @@ sequenceDiagram
 - [x] Scripts remain **dev-only** smoke tests; production uses `agent-caller.ts`
 
 ### 4.2 LLM tool definitions (onchain tools for inferToolsChat)
-- [ ] `backend/src/services/somnia/quickswap-llm-tools.ts` — register tools the LLM can call:
+- [x] `backend/src/services/somnia/quickswap-llm-tools.ts` — register tools the LLM can call:
   - `listPools()` — pools user allocated to + live metrics
   - `quoteSwap(tokenIn, tokenOut, amountIn)` — read-only quote
   - `swapExactIn(tokenIn, tokenOut, amountIn)` — move between pools
   - `rebalanceToPool(targetPoolId, amount)` — route planner + swap
   - `getPortfolio()` — agent wallet balances per pool token
-- [ ] System prompt template per strategy type (auto vs custom)
-- [ ] Auto: "Optimise yield across selected pools; rebalance when spread > X%"
-- [ ] Custom: respect user sub-agent config + pool selection only
+- [x] System prompt template per strategy type (auto vs custom)
+- [x] Auto: "Optimise yield across selected pools; rebalance when spread > X%"
+- [x] Custom: respect user sub-agent config + pool selection only
 
 ### 4.3 Trading runner service (core loop)
-- [x] `backend/src/services/agents/trading-runner.service.ts` (MVP — portfolio drift + `lastCycleAt`; LLM/tools pending):
+- [x] `backend/src/services/agents/trading-runner.service.ts` (inferToolsChat + tool loop + per-user wallet):
 
 ```
 runCycle(userId):
@@ -222,7 +222,7 @@ runCycle(userId):
   8. Return cycle summary to API / WebSocket
 ```
 
-- [ ] Decision factors fed to LLM:
+- [x] Decision factors fed to LLM:
   - Current allocation vs target allocation per pool
   - Price spread between pool pairs
   - Time since last rebalance (`lastCycleAt`)
@@ -232,30 +232,30 @@ runCycle(userId):
 
 ### 4.4 Triggering trading (user side, not scripts)
 - [x] **On activate:** first cycle runs when user sets `status: "active"` after deposit (portfolio analysis MVP; LLM execution Phase 4.1–4.3)
-- [ ] **Scheduled worker:** `backend/src/workers/trading-cycle.worker.ts`
+- [x] **Scheduled worker:** `backend/src/workers/trading-cycle.worker.ts`
   - Poll active strategies every N minutes (configurable per auto/custom)
   - Auto: every 5–15 min; Custom: user-defined interval in strategy config
 - [x] **Manual trigger:** `POST /api/v1/agents/trading/run-cycle` (authenticated)
-- [ ] **Deposit detection:** optional — watch agent wallet balance; start cycle when deposit confirmed
+- [x] **Deposit detection:** optional — watch agent wallet balance; start cycle when deposit confirmed
 
 ### 4.5 REST API — trading
 - [x] `POST /api/v1/agents/trading/run-cycle` — trigger one cycle (analysis MVP)
 - [x] `GET /api/v1/agents/trading/status` — last cycle time, phase, agent state
-- [ ] `GET /api/v1/agents/trading/history` — paginated list of swaps/rebalances
-- [ ] `GET /api/v1/agents/trading/history/:id` — single action detail + tx hash
+- [x] `GET /api/v1/agents/trading/history` — paginated list of swaps/rebalances
+- [x] `GET /api/v1/agents/trading/history/:id` — single action detail + tx hash
 
 ---
 
 ## Phase 5 — Persistence & activity tracking
 
 ### 5.1 Database models
-- [ ] `TradingCycle` — userId, strategyId, somniaRequestId, startedAt, finishedAt, status, llmSummary
-- [ ] `TradingAction` — cycleId, type (swap|rebalance|add_liquidity|remove_liquidity), tokenIn, tokenOut, amountIn, amountOut, poolFrom, poolTo, txHash, status
+- [x] `TradingCycle` — userId, strategyId, startedAt, finishedAt, status, llmSummary
+- [x] `TradingAction` — cycleId, type (swap|rebalance|approve|quote|tool), tokenIn, tokenOut, amountIn, amountOut, poolFrom, poolTo, txHash, status
 - [ ] `PoolSnapshot` — optional cache of pool metrics at cycle time (for audit / signals)
 
 ### 5.2 Repositories
-- [ ] `trading.repository.ts` — CRUD for cycles + actions
-- [ ] Link actions to user + strategy for dashboard history
+- [x] `trading.repository.ts` — CRUD for cycles + actions
+- [x] Link actions to user + strategy for dashboard history
 
 ---
 
@@ -264,19 +264,19 @@ runCycle(userId):
 > User sees agent working on their behalf after setup.
 
 ### 6.1 Dashboard widgets
-- [ ] Active pools panel — pools agent is managing + current allocation %
-- [ ] Last trade card — most recent swap/rebalance (pair, amount, time, tx link)
-- [ ] Agent status — `idle` | `analyzing` | `executing` | `waiting_deposit`
-- [ ] Pool metrics strip — live prices from selected pools
+- [x] Active pools panel — pools agent is managing + current allocation %
+- [x] Last trade card — most recent swap/rebalance (pair, amount, time, tx link)
+- [x] Agent status — `idle` | `analyzing` | `executing` | `waiting_deposit`
+- [x] Pool metrics strip — live prices from selected pools
 
 ### 6.2 Trading history page
-- [ ] `client/app/dashboard/trading/page.tsx` — list of cycles + actions
-- [ ] Link to Somnia explorer for tx hashes
-- [ ] Show LLM reasoning summary per cycle (from `TradingCycle.llmSummary`)
+- [x] `client/app/dashboard/trading/page.tsx` — list of cycles + actions
+- [x] Link to Somnia explorer for tx hashes
+- [x] Show LLM reasoning summary per cycle (from `TradingCycle.llmSummary`)
 
 ### 6.3 Real-time updates (later)
-- [ ] WebSocket event: `trading:cycle_started`, `trading:action_executed`, `trading:cycle_completed`
-- [ ] Push to dashboard particle visualiser (agent moves between pool nodes)
+- [x] WebSocket event: `trading:cycle_started`, `trading:action_executed`, `trading:cycle_completed`
+- [x] Push to dashboard particle visualiser (agent moves between pool nodes)
 
 ---
 
@@ -300,7 +300,7 @@ runCycle(userId):
 | LLM prompt | Aggressive yield optimisation | Respect user constraints |
 
 - [ ] Implement strategy-type-specific prompts in `trading-runner.service.ts`
-- [ ] Store `cycleIntervalMinutes` on `AgentStrategy`
+- [x] Store `cycleIntervalMinutes` on `AgentStrategy`
 
 ---
 

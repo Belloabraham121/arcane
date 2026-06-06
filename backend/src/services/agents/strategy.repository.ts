@@ -61,6 +61,7 @@ export async function upsertStrategy(
     depositAmount: number;
     poolAllocations: PoolAllocations;
     subAgentConfig?: SubAgentConfigItem[];
+    cycleIntervalMinutes?: number | null;
   },
 ) {
   return prisma.$transaction(async (tx) => {
@@ -72,6 +73,11 @@ export async function upsertStrategy(
         ? new Date()
         : existing?.tradingEnabledAt ?? null;
 
+    const cycleIntervalMinutes =
+      input.cycleIntervalMinutes !== undefined
+        ? input.cycleIntervalMinutes
+        : existing?.cycleIntervalMinutes ?? null;
+
     const strategy = await tx.agentStrategy.upsert({
       where: { userId },
       create: {
@@ -80,6 +86,7 @@ export async function upsertStrategy(
         status: input.status ?? "draft",
         depositAmount: input.depositAmount,
         tradingEnabledAt,
+        cycleIntervalMinutes,
         subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue | undefined,
       },
       update: {
@@ -87,6 +94,9 @@ export async function upsertStrategy(
         status: input.status ?? "draft",
         depositAmount: input.depositAmount,
         tradingEnabledAt,
+        ...(input.cycleIntervalMinutes !== undefined
+          ? { cycleIntervalMinutes: input.cycleIntervalMinutes }
+          : {}),
         ...(input.subAgentConfig !== undefined
           ? { subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue }
           : {}),

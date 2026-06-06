@@ -1,0 +1,229 @@
+import type { WalletTokenBalance } from "@/lib/api/wallet"
+import type {
+  ExecutedTransaction,
+  PoolAllocationDrift,
+  TradingActionRecord,
+  TradingCycleSummary,
+  TradingHistoryDetail,
+  TradingStatus,
+} from "@/lib/api/trading"
+import type { PoolAllocations } from "@/lib/api/strategy-types"
+import { POOL_LABELS } from "@/lib/strategy-presets"
+
+export type AgentDisplayStatus =
+  | "idle"
+  | "analyzing"
+  | "executing"
+  | "waiting_deposit"
+
+const AGENT_STATUS_LABELS: Record<AgentDisplayStatus, string> = {
+  idle: "Idle",
+  analyzing: "Analyzing",
+  executing: "Executing",
+  waiting_deposit: "Waiting for deposit",
+}
+
+const AGENT_STATUS_COLORS: Record<AgentDisplayStatus, string> = {
+  idle: "text-muted-foreground border-border",
+  analyzing: "text-[#ea580c] border-[#ea580c]/40 bg-[#ea580c]/5",
+  executing: "text-[#16a34a] border-[#16a34a]/40 bg-[#16a34a]/5",
+  waiting_deposit: "text-amber-600 border-amber-600/40 bg-amber-600/5",
+}
+
+export function agentStatusLabel(status: AgentDisplayStatus): string {
+  return AGENT_STATUS_LABELS[status]
+}
+
+export function agentStatusClassName(status: AgentDisplayStatus): string {
+  return AGENT_STATUS_COLORS[status]
+}
+
+export function walletHasBalance(balances: WalletTokenBalance[]): boolean {
+  return balances.some((row) => {
+    const n = Number(row.formatted)
+    return Number.isFinite(n) && n > 0
+  })
+}
+
+export function deriveAgentDisplayStatus(input: {
+  strategyActive: boolean
+  tradingStatus: TradingStatus | null
+  walletBalances: WalletTokenBalance[]
+}): AgentDisplayStatus {
+  if (!input.strategyActive) {
+    return "idle"
+  }
+
+  if (!walletHasBalance(input.walletBalances)) {
+    return "waiting_deposit"
+  }
+
+  const phase = input.tradingStatus?.phase ?? "idle"
+  const lastCycle = input.tradingStatus?.lastCycle
+
+  if (phase === "analyzing") {
+    const hasSwapTools = lastCycle?.toolActions?.some(
+      (action) =>
+        action.tool === "swapExactIn" ||
+        action.tool === "rebalanceToPool",
+    )
+    const hasExecuted =
+      (lastCycle?.executedTransactions?.length ?? 0) > 0
+    if (hasSwapTools || hasExecuted) {
+      return "executing"
+    }
+    return "analyzing"
+  }
+
+  return "idle"
+}
+
+export type ActivePoolRow = {
+  poolId: string
+  label: string
+  targetPercent: number
+  currentPercent: number | null
+  driftPercent: number | null
+}
+
+export function buildActivePoolRows(
+  poolAllocations: PoolAllocations,
+  poolDrift: PoolAllocationDrift[] | undefined,
+): ActivePoolRow[] {
+  const entries = Object.entries(poolAllocations).filter(([, amount]) => amount > 0)
+  const total = entries.reduce((sum, [, amount]) => sum + amount, 0)
+  const driftById = Object.fromEntries(
+    (poolDrift ?? []).map((row) => [row.poolId, row]),
+  )
+
+  return entries.map(([poolId, amount]) => {
+    const drift = driftById[poolId]
+    const targetPercent = total > 0 ? (amount / total) * 100 : 0
+    return {
+      poolId,
+      label: drift?.label ?? POOL_LABELS[poolId] ?? poolId,
+      targetPercent,
+      currentPercent: drift?.currentPercent ?? null,
+      driftPercent: drift?.driftPercent ?? null,
+    }
+  })
+}
+
+export type LastTradeInfo = {
+  kind: string
+  label: string
+  amountIn: string | null
+  amountOut: string | null
+  tokenIn: string | null
+  tokenOut: string | null
+  poolFrom: string | null
+  poolTo: string | null
+  txHash: string | null
+  status: string
+  at: string
+}
+
+function poolLabel(poolId: string | null): string | null {
+  if (!poolId) {
+    return null
+  }
+  return POOL_LABELS[poolId] ?? poolId
+}
+
+function tradeFromExecuted(tx: ExecutedTransaction, at: string): LastTradeInfo {
+  return {
+    kind: tx.kind,
+    label:
+      tx.kind === "swap"
+        ? `${tx.tokenIn ?? "?"} → ${tx.tokenOut ?? "?"}`
+        : `Approve ${tx.tokenIn ?? "token"}`,
+    amountIn: tx.amountIn ?? null,
+    amountOut: tx.amountOut ?? null,
+    tokenIn: tx.tokenIn ?? null,
+    tokenOut: tx.tokenOut ?? null,
+    poolFrom: null,
+    poolTo: null,
+    txHash: tx.hash,
+    status: tx.status,
+    at,
+  }
+}
+
+function tradeFromAction(action: TradingActionRecord): LastTradeInfo | null {
+  if (action.type !== "swap" && action.type !== "rebalance" && action.type !== "approve") {
+    return null
+  }
+
+  const from = poolLabel(action.poolFrom)
+  const to = poolLabel(action.poolTo)
+
+  let label = action.type
+  if (action.type === "rebalance" && from && to) {
+    label = `${from} → ${to}`
+  } else if (action.type === "swap" && action.tokenIn && action.tokenOut) {
+    label = `${action.tokenIn} → ${action.tokenOut}`
+  }
+
+  return {
+    kind: action.type,
+    label,
+    amountIn: action.amountIn,
+    amountOut: action.amountOut,
+    tokenIn: action.tokenIn,
+    tokenOut: action.tokenOut,
+    poolFrom: action.poolFrom,
+    poolTo: action.poolTo,
+    txHash: action.txHash,
+    status: action.status,
+    at: action.createdAt,
+  }
+}
+
+export function lastTradeFromCycle(
+  cycle: TradingCycleSummary | null,
+  finishedAt: string | null,
+): LastTradeInfo | null {
+  if (!cycle) {
+    return null
+  }
+
+  const at = finishedAt ?? cycle.finishedAt
+  const swapTx = [...cycle.executedTransactions]
+    .reverse()
+    .find((tx) => tx.kind === "swap")
+  if (swapTx) {
+    return tradeFromExecuted(swapTx, at)
+  }
+
+  const anyTx = cycle.executedTransactions.at(-1)
+  if (anyTx) {
+    return tradeFromExecuted(anyTx, at)
+  }
+
+  return null
+}
+
+export function lastTradeFromHistoryDetail(
+  detail: TradingHistoryDetail,
+): LastTradeInfo | null {
+  const actions = [...detail.actions].reverse()
+  for (const action of actions) {
+    const trade = tradeFromAction(action)
+    if (trade?.txHash) {
+      return trade
+    }
+  }
+
+  for (const action of actions) {
+    const trade = tradeFromAction(action)
+    if (trade) {
+      return trade
+    }
+  }
+
+  return null
+}
+
+export function formatReason(reason: string): string {
+  return reason.replace(/_/g, " ")
+}

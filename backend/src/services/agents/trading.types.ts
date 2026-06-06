@@ -19,11 +19,17 @@ export type ExecutedTransaction = {
   amountOut?: string;
 };
 
+export type TradingToolAction = {
+  tool: string;
+  success: boolean;
+  result: string;
+};
+
 export type TradingCycleSummary = {
   cycleId: string;
   userId: string;
   strategyId: string;
-  reason: "activation" | "manual" | "scheduled";
+  reason: "activation" | "manual" | "scheduled" | "deposit";
   startedAt: string;
   finishedAt: string;
   phase: TradingCyclePhase;
@@ -33,8 +39,10 @@ export type TradingCycleSummary = {
   poolDrift: PoolAllocationDrift[];
   /** On-chain txs signed by the agent wallet (no user approval). */
   executedTransactions: ExecutedTransaction[];
-  /** True when LLM-driven tool execution is not wired yet. */
+  /** False after Somnia inferToolsChat runs in this cycle. */
   llmPending: boolean;
+  llmResponse?: string | null;
+  toolActions?: TradingToolAction[];
 };
 
 export type TradingStatusResponse = {

@@ -19,6 +19,7 @@ export type AgentStrategy = {
   depositAmount: number;
   poolAllocations: PoolAllocations;
   subAgents: SubAgentConfigItem[];
+  cycleIntervalMinutes: number | null;
   tradingEnabledAt: string | null;
   lastCycleAt: string | null;
   createdAt: string;

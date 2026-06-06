@@ -8,12 +8,23 @@ import type { QuickSwapPool } from "../defi/quickswap/types";
 import { planRebalance } from "../defi/quickswap/route-planner";
 import { getWalletBalances } from "../wallet/token-balance.service";
 import * as repo from "./strategy.repository";
+import { persistTradingCycle } from "./trading.repository";
+import {
+  emitFromExecutedTransactions,
+  emitFromToolOutcome,
+  emitTradingCycleCompleted,
+  emitTradingCycleStarted,
+} from "../../websocket/trading-events";
+import { SomniaAgentError } from "../somnia/agent-caller";
+import { runLlmTradingCycle } from "../somnia/llm-trading.service";
+import { resolveSubAgents } from "../somnia/quickswap-llm-tools";
 import type {
   ExecutedTransaction,
   PoolAllocationDrift,
   TradingCyclePhase,
   TradingCycleSummary,
   TradingStatusResponse,
+  TradingToolAction,
 } from "./trading.types";
 import type { PoolAllocations } from "./strategy.types";
 import {
@@ -35,6 +46,24 @@ export class TradingError extends Error {
 }
 
 const runningUsers = new Set<string>();
+
+export function isUserCycleRunning(userId: string): boolean {
+  return runningUsers.has(userId);
+}
+
+export function resolveCycleIntervalMinutes(input: {
+  strategyType: "auto" | "custom";
+  cycleIntervalMinutes: number | null;
+  autoCycleIntervalMinutes: number;
+  customCycleIntervalMinutes: number;
+}): number {
+  if (input.strategyType === "custom" && input.cycleIntervalMinutes != null) {
+    return Math.max(5, Math.min(input.cycleIntervalMinutes, 24 * 60));
+  }
+  return input.strategyType === "auto"
+    ? input.autoCycleIntervalMinutes
+    : input.customCycleIntervalMinutes;
+}
 const lastCycleByUser = new Map<string, TradingCycleSummary>();
 const lastErrorByUser = new Map<string, string>();
 
@@ -178,6 +207,8 @@ async function tryAutoRebalance(input: {
 }): Promise<{
   executedTransactions: ExecutedTransaction[];
   message?: string;
+  poolFrom?: string;
+  poolTo?: string;
 }> {
   const {
     driftThresholdPercent,
@@ -251,6 +282,8 @@ async function tryAutoRebalance(input: {
   return {
     executedTransactions: toExecutedTransactions(txs),
     message: `Rebalanced ${sourceToken.symbol} from ${fromPool.label} toward ${toPool.label} (agent wallet; no user approval).`,
+    poolFrom: fromPool.id,
+    poolTo: toPool.id,
   };
 }
 
@@ -311,8 +344,8 @@ export async function getTradingStatusForUser(
 }
 
 /**
- * Runs one trading cycle: portfolio snapshot, drift vs pool targets, updates lastCycleAt.
- * LLM + swap execution wired in Phase 4/3 (llmPending=true until then).
+ * Runs one trading cycle: portfolio snapshot → Somnia inferToolsChat → tool execution.
+ * Falls back to drift rebalance if LLM is unavailable (e.g. insufficient testnet STT).
  */
 export async function runTradingCycle(
   userId: string,
@@ -331,6 +364,8 @@ export async function runTradingCycle(
 
   const cycleId = randomUUID();
   const startedAt = new Date().toISOString();
+
+  emitTradingCycleStarted(userId, { cycleId, reason, startedAt });
 
   try {
     const strategy = await repo.findStrategyByUserId(userId);
@@ -374,34 +409,92 @@ export async function runTradingCycle(
     const finishedAt = new Date().toISOString();
 
     let executedTransactions: ExecutedTransaction[] = [];
+    let toolActions: TradingToolAction[] = [];
+    let llmResponse: string | null = null;
+    let llmPending = true;
     let executionMessage: string | undefined;
+
+    const subAgents = resolveSubAgents(
+      strategy.strategyType,
+      strategy.subAgentConfig,
+    );
 
     if (hasBalance) {
       try {
-        const rebalance = await tryAutoRebalance({
+        const llm = await runLlmTradingCycle({
           userId,
           walletAddress: user.walletAddress as Address,
+          strategyType: strategy.strategyType,
+          depositAmount: strategy.depositAmount,
+          lastCycleAt: strategy.lastCycleAt,
+          poolAllocations,
           poolDrift,
           pools,
           balances,
+          subAgents,
           activePoolIds: [...activePoolIds],
+          onToolExecuted: (outcome) => {
+            emitFromToolOutcome(userId, cycleId, outcome);
+          },
         });
-        executedTransactions = rebalance.executedTransactions;
-        executionMessage = rebalance.message;
+
+        executedTransactions = llm.executedTransactions;
+        toolActions = llm.toolActions.map((action) => ({
+          tool: action.tool,
+          success: action.success,
+          result: action.result,
+        }));
+        llmResponse = llm.llmResponse;
+        llmPending = false;
+        executionMessage = llm.message;
       } catch (err) {
         const detail =
-          err instanceof WalletExecutorError
+          err instanceof SomniaAgentError
             ? err.message
             : err instanceof Error
               ? err.message
-              : "Auto-rebalance failed";
-        log.warn("Auto-rebalance skipped", { userId, cycleId, detail });
-        executionMessage = detail;
+              : "LLM trading cycle failed";
+
+        log.warn("LLM cycle failed — trying drift rebalance fallback", {
+          userId,
+          cycleId,
+          detail,
+        });
+
+        try {
+          const rebalance = await tryAutoRebalance({
+            userId,
+            walletAddress: user.walletAddress as Address,
+            poolDrift,
+            pools,
+            balances,
+            activePoolIds: [...activePoolIds],
+          });
+          executedTransactions = rebalance.executedTransactions;
+          if (rebalance.executedTransactions.length > 0) {
+            emitFromExecutedTransactions(userId, cycleId, rebalance.executedTransactions, {
+              poolFrom: rebalance.poolFrom ?? null,
+              poolTo: rebalance.poolTo ?? null,
+            });
+          }
+          executionMessage =
+            rebalance.executedTransactions.length > 0
+              ? `${detail} — drift rebalance fallback executed.`
+              : `${detail} — no fallback swap met threshold.`;
+        } catch (fallbackErr) {
+          const fallbackDetail =
+            fallbackErr instanceof WalletExecutorError
+              ? fallbackErr.message
+              : fallbackErr instanceof Error
+                ? fallbackErr.message
+                : "Fallback rebalance failed";
+          executionMessage = `${detail} — ${fallbackDetail}`;
+        }
       }
     }
 
     const defaultMessage = hasBalance
-      ? "Portfolio analyzed. Drift rebalance runs automatically when threshold is exceeded."
+      ? "Portfolio analyzed. LLM agent uses the user's wallet on Somnia testnet (STT required)."
       : "No on-chain balance detected yet — deposit to the agent wallet, then run another cycle.";
 
     const summary: TradingCycleSummary = {
@@ -416,16 +509,40 @@ export async function runTradingCycle(
       depositAmount: strategy.depositAmount,
       poolDrift,
       executedTransactions,
-      llmPending: true,
+      llmPending,
+      llmResponse,
+      toolActions: toolActions.length > 0 ? toolActions : undefined,
       message:
         executedTransactions.length > 0
-          ? (executionMessage ?? "Rebalance swap executed by agent wallet.")
+          ? (executionMessage ?? "Trading actions executed by agent wallet.")
           : (executionMessage ?? defaultMessage),
     };
 
     await repo.touchLastCycleAt(strategy.id, new Date(finishedAt));
 
+    try {
+      await persistTradingCycle(summary, toolActions);
+    } catch (persistErr) {
+      const persistMessage =
+        persistErr instanceof Error ? persistErr.message : String(persistErr);
+      log.warn("Failed to persist trading cycle", {
+        userId,
+        cycleId,
+        message: persistMessage,
+      });
+    }
+
     lastCycleByUser.set(userId, summary);
+
+    emitTradingCycleCompleted(userId, {
+      cycleId,
+      reason,
+      status: "completed",
+      message: summary.message,
+      llmResponse: summary.llmResponse ?? null,
+      executedCount: summary.executedTransactions.length,
+      finishedAt: summary.finishedAt,
+    });
 
     log.info("Trading cycle completed", {
       userId,
@@ -439,6 +556,53 @@ export async function runTradingCycle(
   } catch (err) {
     const message = err instanceof Error ? err.message : "Trading cycle failed";
     lastErrorByUser.set(userId, message);
+
+    const failedSummary: TradingCycleSummary = {
+      cycleId,
+      userId,
+      strategyId: "",
+      reason,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      phase: "failed",
+      message,
+      walletAddress: "",
+      depositAmount: 0,
+      poolDrift: [],
+      executedTransactions: [],
+      llmPending: true,
+    };
+
+    try {
+      const strategy = await repo.findStrategyByUserId(userId);
+      if (strategy) {
+        failedSummary.strategyId = strategy.id;
+        failedSummary.depositAmount = strategy.depositAmount;
+        const user = await findUserById(userId);
+        if (user) {
+          failedSummary.walletAddress = user.walletAddress;
+        }
+        await persistTradingCycle(failedSummary);
+      }
+    } catch (persistErr) {
+      const persistMessage =
+        persistErr instanceof Error ? persistErr.message : String(persistErr);
+      log.warn("Failed to persist failed trading cycle", {
+        userId,
+        cycleId,
+        message: persistMessage,
+      });
+    }
+
+    emitTradingCycleCompleted(userId, {
+      cycleId,
+      reason,
+      status: "failed",
+      message,
+      executedCount: 0,
+      finishedAt: new Date().toISOString(),
+    });
+
     log.error("Trading cycle failed", { userId, cycleId, reason, message });
     throw err;
   } finally {

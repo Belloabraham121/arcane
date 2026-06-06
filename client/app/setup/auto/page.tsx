@@ -1,10 +1,11 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { getMe } from "@/lib/api/auth"
 import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy"
+import type { PoolSortField } from "@/lib/api/quickswap-types"
 import {
   DEFAULT_DEPOSIT_AMOUNT,
   type PoolAllocations,
@@ -37,8 +38,10 @@ function AutoSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isEditing = searchParams.get("edit") === "1"
+  const [poolSort, setPoolSort] = useState<PoolSortField>("liquidity")
   const { pools, meta, loading: poolsLoading, error: poolsError } = useQuickSwapPools({
-    context: "auto",
+    context: isEditing ? "custom" : "auto",
+    sort: isEditing ? poolSort : undefined,
   })
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [depositInput, setDepositInput] = useState(String(DEFAULT_DEPOSIT_AMOUNT))
@@ -47,6 +50,7 @@ function AutoSetupContent() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const poolsHydratedRef = useRef(false)
 
   const activePoolIds = useMemo(() => allocatedPoolIds(poolAmounts), [poolAmounts])
   const supportedTokens = useMemo(
@@ -85,7 +89,7 @@ function AutoSetupContent() {
         if (strategy.depositAmount > 0) {
           setDepositInput(String(strategy.depositAmount))
         }
-        if (pools.length > 0) {
+        if (pools.length > 0 && !poolsHydratedRef.current) {
           setPoolAmounts(
             mergeStrategyPoolAllocations(
               strategy.poolAllocations,
@@ -93,7 +97,13 @@ function AutoSetupContent() {
               meta?.suggestedAllocations,
             ),
           )
+          poolsHydratedRef.current = true
         }
+      } else if (pools.length > 0 && !poolsHydratedRef.current) {
+        setPoolAmounts(
+          mergeStrategyPoolAllocations(undefined, pools, meta?.suggestedAllocations),
+        )
+        poolsHydratedRef.current = true
       }
 
       setLoading(false)
@@ -103,14 +113,6 @@ function AutoSetupContent() {
       load()
     }
   }, [router, isEditing, pools, poolsLoading, meta])
-
-  useEffect(() => {
-    if (pools.length > 0 && Object.keys(poolAmounts).length === 0) {
-      setPoolAmounts(
-        mergeStrategyPoolAllocations(undefined, pools, meta?.suggestedAllocations),
-      )
-    }
-  }, [pools, poolAmounts, meta])
 
   async function saveSetup() {
     const amount = Number(depositInput)
@@ -215,12 +217,17 @@ function AutoSetupContent() {
             values={poolAmounts}
             onChange={setPoolAmounts}
             mode="auto"
+            editMode={isEditing}
             error={poolsError}
-            title="Top QuickSwap pools"
+            sort={poolSort}
+            onSortChange={isEditing ? setPoolSort : undefined}
+            title={isEditing ? "QuickSwap pools" : "Top QuickSwap pools"}
             subtitle={
-              meta?.selectionCount
-                ? `Arcane selected ${meta.selectionCount} high-liquidity, high-APR pools. Allocations are auto-balanced — adjust if needed.`
-                : "Top pools by liquidity and implied APR."
+              isEditing
+                ? "Adjust your active pools or add others from the full catalog below."
+                : meta?.selectionCount
+                  ? `Arcane selected ${meta.selectionCount} high-liquidity, high-APR pools. Allocations are auto-balanced — adjust if needed.`
+                  : "Top pools by liquidity and implied APR."
             }
           />
         </div>

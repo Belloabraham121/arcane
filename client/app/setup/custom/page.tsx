@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { getMe } from "@/lib/api/auth"
@@ -50,6 +50,7 @@ function CustomSetupContent() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const poolsHydratedRef = useRef(false)
 
   const activePoolIds = useMemo(() => allocatedPoolIds(poolAmounts), [poolAmounts])
   const supportedTokens = useMemo(
@@ -88,9 +89,13 @@ function CustomSetupContent() {
         if (strategy.depositAmount > 0) {
           setDepositInput(String(strategy.depositAmount))
         }
-        if (pools.length > 0) {
+        if (pools.length > 0 && !poolsHydratedRef.current) {
           setPoolAmounts(mergeStrategyPoolAllocations(strategy.poolAllocations, pools))
+          poolsHydratedRef.current = true
         }
+      } else if (pools.length > 0 && !poolsHydratedRef.current) {
+        setPoolAmounts(mergeStrategyPoolAllocations(undefined, pools))
+        poolsHydratedRef.current = true
       }
 
       setLoading(false)
@@ -100,12 +105,6 @@ function CustomSetupContent() {
       load()
     }
   }, [router, isEditing, pools, poolsLoading])
-
-  useEffect(() => {
-    if (pools.length > 0 && Object.keys(poolAmounts).length === 0) {
-      setPoolAmounts(mergeStrategyPoolAllocations(undefined, pools))
-    }
-  }, [pools, poolAmounts])
 
   async function saveSetup() {
     const amount = Number(depositInput)
@@ -200,13 +199,17 @@ function CustomSetupContent() {
             values={poolAmounts}
             onChange={setPoolAmounts}
             mode="custom"
+            editMode={isEditing}
             error={poolsError}
             sort={poolSort}
             onSortChange={setPoolSort}
+            title={isEditing ? "QuickSwap pools" : "QuickSwap pool allocation"}
             subtitle={
-              meta?.total
-                ? `${meta.total} pools available — sorted by ${poolSort}. Enable pools and set allocations.`
-                : undefined
+              isEditing
+                ? "Manage your active pools or add more from the catalog below."
+                : meta?.total
+                  ? `${meta.total} pools available — sorted by ${poolSort}. Enable pools and set allocations.`
+                  : undefined
             }
           />
         </div>

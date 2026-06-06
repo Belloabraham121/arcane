@@ -186,12 +186,12 @@ sequenceDiagram
 > **Method:** `inferToolsChat` — LLM returns tool calls; backend executes them.
 
 ### 4.1 Somnia agent service (production, not smoke script)
-- [ ] Extract platform ABI + caller from `scripts/smoke-llm-inference.ts` into:
+- [x] Extract platform ABI + caller from `scripts/smoke-llm-inference.ts` into:
   - `backend/src/services/somnia/platform.abi.ts`
   - `backend/src/services/somnia/agent-caller.ts`
-- [ ] `createRequest(agentId, payload)` + poll `RequestFinalized` + decode result
-- [ ] Env: `SOMNIA_AGENT_PLATFORM`, `SOMNIA_LLM_AGENT_ID`, `SOMNIA_LLM_PER_AGENT_COST_WEI`
-- [ ] Scripts remain **dev-only** smoke tests; production uses `agent-caller.ts`
+- [x] `createRequest(agentId, payload)` + poll `RequestFinalized` + decode result
+- [x] Env: `SOMNIA_AGENT_PLATFORM`, `SOMNIA_LLM_AGENT_ID`, `SOMNIA_LLM_PER_AGENT_COST_WEI`
+- [x] Scripts remain **dev-only** smoke tests; production uses `agent-caller.ts`
 
 ### 4.2 LLM tool definitions (onchain tools for inferToolsChat)
 - [ ] `backend/src/services/somnia/quickswap-llm-tools.ts` — register tools the LLM can call:

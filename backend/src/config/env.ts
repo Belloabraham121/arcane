@@ -86,6 +86,9 @@ export function getSomniaAgentEnv() {
       optional("SOMNIA_LLM_PER_AGENT_COST_WEI", "70000000000000000"),
     ),
     subcommitteeSize: 3n,
+    requestTimeoutMs: Number(
+      optional("SOMNIA_REQUEST_TIMEOUT_MS", "900000"),
+    ),
   };
 }
 

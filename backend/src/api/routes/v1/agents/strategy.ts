@@ -24,6 +24,14 @@ const upsertSchema = z.object({
       model: z.string().min(1),
       systemPrompt: z.string().min(1),
       enabled: z.boolean(),
+      limits: z
+        .object({
+          maxSwapPortfolioPercent: z.number().positive().max(100).optional(),
+          maxSlippageBps: z.number().int().positive().max(10_000).optional(),
+          driftThresholdPercent: z.number().positive().max(100).optional(),
+          cycleCooldownMinutes: z.number().int().min(1).max(1440).optional(),
+        })
+        .optional(),
     }),
   ).optional(),
   cycleIntervalMinutes: z.number().int().min(5).max(1440).nullable().optional(),
@@ -41,6 +49,14 @@ const patchSubAgentsSchema = z.object({
       model: z.string().min(1),
       systemPrompt: z.string().min(1),
       enabled: z.boolean(),
+      limits: z
+        .object({
+          maxSwapPortfolioPercent: z.number().positive().max(100).optional(),
+          maxSlippageBps: z.number().int().positive().max(10_000).optional(),
+          driftThresholdPercent: z.number().positive().max(100).optional(),
+          cycleCooldownMinutes: z.number().int().min(1).max(1440).optional(),
+        })
+        .optional(),
     }),
   ),
 });

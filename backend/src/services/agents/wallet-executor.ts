@@ -1,10 +1,26 @@
 import type { Address, Hash, Hex } from "viem";
 import { createWalletClient, http, isAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { getQuickSwapEnv } from "../../config/env";
 import {
-  getQuickSwapEnv,
-  getTradingExecutionEnv,
-} from "../../config/env";
+  resolveSlippageBps,
+  RiskControlError,
+  type EffectiveRiskLimits,
+} from "./risk-controls.service";
+
+function resolveSwapSlippageBps(
+  requestedBps: number | undefined,
+  riskLimits: EffectiveRiskLimits,
+): number {
+  try {
+    return resolveSlippageBps(requestedBps, riskLimits);
+  } catch (err) {
+    if (err instanceof RiskControlError) {
+      throw new WalletExecutorError(err.message, err.code);
+    }
+    throw err;
+  }
+}
 import { somniaMainnetChain } from "../../config/somnia-chain";
 import { createLogger } from "../../shared/logger";
 import { emailWalletService } from "../auth/email-wallet.service";
@@ -236,6 +252,7 @@ export type ExecuteRebalanceInput = {
   plan: RebalanceSwapPlan;
   allowedPoolIds: readonly string[];
   slippageBps?: number;
+  riskLimits: EffectiveRiskLimits;
 };
 
 /**
@@ -245,15 +262,7 @@ export async function executeRebalancePlan(
   input: ExecuteRebalanceInput,
 ): Promise<SubmittedTransaction[]> {
   const { userId, plan, allowedPoolIds } = input;
-  const { defaultSlippageBps, maxSlippageBps } = getQuickSwapEnv();
-  const slippageBps = input.slippageBps ?? defaultSlippageBps;
-
-  if (slippageBps > maxSlippageBps) {
-    throw new WalletExecutorError(
-      `Slippage ${slippageBps} bps exceeds cap ${maxSlippageBps}`,
-      "SLIPPAGE_CAP_EXCEEDED",
-    );
-  }
+  const slippageBps = resolveSwapSlippageBps(input.slippageBps, input.riskLimits);
 
   const { walletAddress } = await getUserAgentAccount(userId);
   await assertTokenAllowed(userId, plan.tokenIn, allowedPoolIds);
@@ -299,6 +308,7 @@ export type ExecuteSwapExactInInput = {
   amountIn: bigint;
   allowedPoolIds: readonly string[];
   slippageBps?: number;
+  riskLimits: EffectiveRiskLimits;
 };
 
 /** Auto-approve (if needed) + single-hop swap from the user's agent wallet. */
@@ -306,15 +316,7 @@ export async function executeSwapExactIn(
   input: ExecuteSwapExactInInput,
 ): Promise<SubmittedTransaction[]> {
   const { userId, tokenIn, tokenOut, amountIn, allowedPoolIds } = input;
-  const { defaultSlippageBps, maxSlippageBps } = getQuickSwapEnv();
-  const slippageBps = input.slippageBps ?? defaultSlippageBps;
-
-  if (slippageBps > maxSlippageBps) {
-    throw new WalletExecutorError(
-      `Slippage ${slippageBps} bps exceeds cap ${maxSlippageBps}`,
-      "SLIPPAGE_CAP_EXCEEDED",
-    );
-  }
+  const slippageBps = resolveSwapSlippageBps(input.slippageBps, input.riskLimits);
 
   const { walletAddress } = await getUserAgentAccount(userId);
   await assertTokenAllowed(userId, tokenIn, allowedPoolIds);

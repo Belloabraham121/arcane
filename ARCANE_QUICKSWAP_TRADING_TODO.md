@@ -283,12 +283,12 @@ runCycle(userId):
 ## Phase 7 — Safety, limits & strategy rules
 
 ### 7.1 Risk controls (backend enforced, not LLM-only)
-- [ ] Max % of portfolio per single swap (e.g. 20%)
-- [ ] Max slippage bps (default 50 = 0.5%)
-- [ ] Cooldown between cycles (prevent over-trading)
-- [ ] Only trade tokens/pools user selected at onboarding
-- [ ] Pause trading if agent wallet balance < minimum
-- [ ] Risk Manager sub-agent rules map to hard backend limits
+- [x] Max % of portfolio per single swap (e.g. 20%)
+- [x] Max slippage bps (default 50 = 0.5%)
+- [x] Cooldown between cycles (prevent over-trading)
+- [x] Only trade tokens/pools user selected at onboarding
+- [x] Pause trading if agent wallet balance < minimum
+- [x] Risk Manager sub-agent rules map to hard backend limits
 
 ### 7.2 Auto vs Custom behaviour
 | | Auto Agent | Custom Agent |

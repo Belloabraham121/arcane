@@ -1,6 +1,11 @@
 import type { Address, Hex } from "viem";
 import { decodeFunctionData, parseAbi } from "viem";
-import { getTradingExecutionEnv } from "../../config/env";
+import {
+  assertPoolInAllocations,
+  capSwapAmountByPolicy,
+  type EffectiveRiskLimits,
+  resolveSlippageBps,
+} from "../agents/risk-controls.service";
 import { listPoolsWithMetrics } from "../defi/quickswap/pool-metrics.service";
 import { planRebalance } from "../defi/quickswap/route-planner";
 import { quoteExactIn } from "../defi/quickswap/quote.service";
@@ -65,6 +70,9 @@ export type TradingPortfolioContext = {
   lastCycleAt: string | null;
   driftThresholdPercent: number;
   maxSwapPortfolioBps: number;
+  maxSlippageBps: number;
+  cycleCooldownMinutes: number;
+  riskManagerActive: boolean;
   poolAllocations: PoolAllocations;
   poolDrift: PoolAllocationDrift[];
   balances: WalletBalancesResult["balances"];
@@ -88,6 +96,7 @@ export type TradingToolContext = {
   pools: QuickSwapPool[];
   balances: WalletBalancesResult;
   portfolio: TradingPortfolioContext;
+  riskLimits: EffectiveRiskLimits;
 };
 
 export class TradingToolError extends Error {
@@ -152,8 +161,9 @@ export function buildPortfolioContext(input: {
   pools: QuickSwapPool[];
   balances: WalletBalancesResult;
   subAgents: SubAgentConfigItem[];
+  riskLimits: EffectiveRiskLimits;
 }): TradingPortfolioContext {
-  const { driftThresholdPercent, maxSwapPortfolioBps } = getTradingExecutionEnv();
+  const { driftThresholdPercent, maxSwapPortfolioBps } = input.riskLimits;
   const activeIds = new Set(
     (Object.entries(input.poolAllocations) as Array<[string, number]>)
       .filter(([, amount]) => amount > 0)
@@ -167,6 +177,11 @@ export function buildPortfolioContext(input: {
     lastCycleAt: input.lastCycleAt?.toISOString() ?? null,
     driftThresholdPercent,
     maxSwapPortfolioBps,
+    maxSlippageBps: input.riskLimits.maxSlippageBps,
+    cycleCooldownMinutes: Math.round(
+      input.riskLimits.cycleCooldownMs / 60_000,
+    ),
+    riskManagerActive: input.riskLimits.riskManagerActive,
     poolAllocations: input.poolAllocations,
     poolDrift: input.poolDrift,
     balances: input.balances.balances,
@@ -195,12 +210,6 @@ function pickOverweightPoolId(drift: PoolAllocationDrift[]): string | null {
     .filter((entry) => entry.driftPercent > 0)
     .sort((a, b) => b.driftPercent - a.driftPercent)[0];
   return overweight?.poolId ?? null;
-}
-
-function capSwapAmount(amountIn: bigint, balanceRaw: bigint): bigint {
-  const { maxSwapPortfolioBps } = getTradingExecutionEnv();
-  const maxByPolicy = (balanceRaw * BigInt(maxSwapPortfolioBps)) / 10_000n;
-  return amountIn > maxByPolicy ? maxByPolicy : amountIn;
 }
 
 export function decodeToolCalldata(
@@ -269,17 +278,24 @@ export async function executeTradingTool(
           (row) => row.address?.toLowerCase() === tokenIn.toLowerCase(),
         );
         const balanceRaw = balance ? BigInt(balance.balance) : 0n;
-        const capped = capSwapAmount(amountIn, balanceRaw);
+        const capped = capSwapAmountByPolicy(
+          amountIn,
+          balanceRaw,
+          ctx.riskLimits,
+        );
         if (capped <= 0n) {
           throw new TradingToolError("Swap amount is zero after risk caps");
         }
 
+        const slippageBps = resolveSlippageBps(undefined, ctx.riskLimits);
         const txs = await executeSwapExactIn({
           userId: ctx.userId,
           tokenIn,
           tokenOut,
           amountIn: capped,
           allowedPoolIds: ctx.activePoolIds,
+          slippageBps,
+          riskLimits: ctx.riskLimits,
         });
 
         return {
@@ -298,9 +314,7 @@ export async function executeTradingTool(
 
       case "rebalanceToPool": {
         const [targetPoolId, amount] = args as [string, bigint];
-        if (!ctx.activePoolIds.includes(targetPoolId)) {
-          throw new TradingToolError(`Pool ${targetPoolId} is not in user allocations`);
-        }
+        assertPoolInAllocations(targetPoolId, ctx.activePoolIds);
 
         const fromPoolId = pickOverweightPoolId(ctx.poolDrift);
         if (!fromPoolId) {
@@ -328,9 +342,10 @@ export async function executeTradingTool(
         const sourceBalance = ctx.balances.balances.find(
           (row) => row.address?.toLowerCase() === plan.tokenIn.toLowerCase(),
         );
-        const cappedAmount = capSwapAmount(
+        const cappedAmount = capSwapAmountByPolicy(
           plan.amountIn,
           BigInt(sourceBalance?.balance ?? 0n),
+          ctx.riskLimits,
         );
         if (cappedAmount <= 0n) {
           throw new TradingToolError("Rebalance amount is zero after risk caps");
@@ -341,10 +356,13 @@ export async function executeTradingTool(
             ? { ...plan, amountIn: cappedAmount }
             : plan;
 
+        const slippageBps = resolveSlippageBps(undefined, ctx.riskLimits);
         const txs = await executeRebalancePlan({
           userId: ctx.userId,
           plan: cappedPlan,
           allowedPoolIds: ctx.activePoolIds,
+          slippageBps,
+          riskLimits: ctx.riskLimits,
         });
 
         return {

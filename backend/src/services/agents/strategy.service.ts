@@ -116,12 +116,77 @@ export function parseSubAgents(input: unknown): SubAgentConfigItem[] | undefined
       throw new StrategyError("VALIDATION_ERROR", `subAgents[${index}].enabled must be a boolean`);
     }
 
+    let limits: SubAgentConfigItem["limits"];
+    if (record.limits != null) {
+      if (typeof record.limits !== "object") {
+        throw new StrategyError(
+          "VALIDATION_ERROR",
+          `subAgents[${index}].limits must be an object`,
+        );
+      }
+      const raw = record.limits as Record<string, unknown>;
+      limits = {};
+      if (raw.maxSwapPortfolioPercent != null) {
+        if (
+          typeof raw.maxSwapPortfolioPercent !== "number" ||
+          raw.maxSwapPortfolioPercent <= 0 ||
+          raw.maxSwapPortfolioPercent > 100
+        ) {
+          throw new StrategyError(
+            "VALIDATION_ERROR",
+            `subAgents[${index}].limits.maxSwapPortfolioPercent must be 0–100`,
+          );
+        }
+        limits.maxSwapPortfolioPercent = raw.maxSwapPortfolioPercent;
+      }
+      if (raw.maxSlippageBps != null) {
+        if (
+          typeof raw.maxSlippageBps !== "number" ||
+          raw.maxSlippageBps <= 0 ||
+          raw.maxSlippageBps > 10_000
+        ) {
+          throw new StrategyError(
+            "VALIDATION_ERROR",
+            `subAgents[${index}].limits.maxSlippageBps must be 1–10000`,
+          );
+        }
+        limits.maxSlippageBps = raw.maxSlippageBps;
+      }
+      if (raw.driftThresholdPercent != null) {
+        if (
+          typeof raw.driftThresholdPercent !== "number" ||
+          raw.driftThresholdPercent <= 0 ||
+          raw.driftThresholdPercent > 100
+        ) {
+          throw new StrategyError(
+            "VALIDATION_ERROR",
+            `subAgents[${index}].limits.driftThresholdPercent must be 0–100`,
+          );
+        }
+        limits.driftThresholdPercent = raw.driftThresholdPercent;
+      }
+      if (raw.cycleCooldownMinutes != null) {
+        if (
+          typeof raw.cycleCooldownMinutes !== "number" ||
+          raw.cycleCooldownMinutes < 1 ||
+          raw.cycleCooldownMinutes > 24 * 60
+        ) {
+          throw new StrategyError(
+            "VALIDATION_ERROR",
+            `subAgents[${index}].limits.cycleCooldownMinutes must be 1–1440`,
+          );
+        }
+        limits.cycleCooldownMinutes = raw.cycleCooldownMinutes;
+      }
+    }
+
     return {
       id: id.trim(),
       name: name.trim(),
       model: model.trim(),
       systemPrompt: systemPrompt.trim(),
       enabled,
+      ...(limits ? { limits } : {}),
     };
   });
 }

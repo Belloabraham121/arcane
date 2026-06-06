@@ -1,6 +1,7 @@
 import type { Address, Hex } from "viem";
 import type { PrivateKeyAccount } from "viem/accounts";
 import { getTradingExecutionEnv } from "../../config/env";
+import type { EffectiveRiskLimits } from "../agents/risk-controls.service";
 import { createLogger } from "../../shared/logger";
 import { getUserAgentAccount } from "../agents/wallet-executor";
 import type { ExecutedTransaction } from "../agents/trading.types";
@@ -86,9 +87,11 @@ export async function runLlmTradingCycle(input: {
   balances: WalletBalancesResult;
   subAgents: SubAgentConfigItem[];
   activePoolIds: readonly string[];
+  riskLimits: EffectiveRiskLimits;
   onToolExecuted?: (outcome: ToolExecutionOutcome) => void;
 }): Promise<LlmTradingCycleResult> {
-  const { driftThresholdPercent, maxLlmToolRounds } = getTradingExecutionEnv();
+  const { maxLlmToolRounds } = getTradingExecutionEnv();
+  const { driftThresholdPercent } = input.riskLimits;
   const { account } = await getUserAgentAccount(input.userId);
 
   const portfolio = buildPortfolioContext({
@@ -101,6 +104,7 @@ export async function runLlmTradingCycle(input: {
     pools: input.pools,
     balances: input.balances,
     subAgents: input.subAgents,
+    riskLimits: input.riskLimits,
   });
 
   const toolCtx: TradingToolContext = {
@@ -111,6 +115,7 @@ export async function runLlmTradingCycle(input: {
     pools: input.pools,
     balances: input.balances,
     portfolio,
+    riskLimits: input.riskLimits,
   };
 
   const systemPrompt = buildTradingSystemPrompt(

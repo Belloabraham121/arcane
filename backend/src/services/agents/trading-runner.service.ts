@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { Address } from "viem";
-import { getTradingExecutionEnv } from "../../config/env";
 import { createLogger } from "../../shared/logger";
 import { findUserById } from "../auth/user.repository";
 import { listPoolsWithMetrics } from "../defi/quickswap/pool-metrics.service";
@@ -27,6 +26,13 @@ import type {
   TradingToolAction,
 } from "./trading.types";
 import type { PoolAllocations } from "./strategy.types";
+import {
+  assertCycleCooldown,
+  assertPortfolioFunded,
+  resolveRiskLimits,
+  RiskControlError,
+  type EffectiveRiskLimits,
+} from "./risk-controls.service";
 import {
   executeRebalancePlan,
   WalletExecutorError,
@@ -204,6 +210,7 @@ async function tryAutoRebalance(input: {
   pools: QuickSwapPool[];
   balances: Awaited<ReturnType<typeof getWalletBalances>>;
   activePoolIds: string[];
+  riskLimits: EffectiveRiskLimits;
 }): Promise<{
   executedTransactions: ExecutedTransaction[];
   message?: string;
@@ -214,7 +221,7 @@ async function tryAutoRebalance(input: {
     driftThresholdPercent,
     maxSwapPortfolioBps,
     minSwapAmountRaw,
-  } = getTradingExecutionEnv();
+  } = input.riskLimits;
 
   const pair = pickRebalancePools(input.poolDrift, driftThresholdPercent);
   if (!pair) {
@@ -277,6 +284,7 @@ async function tryAutoRebalance(input: {
     userId: input.userId,
     plan,
     allowedPoolIds: input.activePoolIds,
+    riskLimits: input.riskLimits,
   });
 
   return {
@@ -418,6 +426,12 @@ export async function runTradingCycle(
       strategy.strategyType,
       strategy.subAgentConfig,
     );
+    const riskLimits = resolveRiskLimits(subAgents);
+
+    assertCycleCooldown(strategy.lastCycleAt, riskLimits, reason);
+    if (hasBalance) {
+      assertPortfolioFunded(balances, riskLimits);
+    }
 
     if (hasBalance) {
       try {
@@ -433,6 +447,7 @@ export async function runTradingCycle(
           balances,
           subAgents,
           activePoolIds: [...activePoolIds],
+          riskLimits,
           onToolExecuted: (outcome) => {
             emitFromToolOutcome(userId, cycleId, outcome);
           },
@@ -469,6 +484,7 @@ export async function runTradingCycle(
             pools,
             balances,
             activePoolIds: [...activePoolIds],
+            riskLimits,
           });
           executedTransactions = rebalance.executedTransactions;
           if (rebalance.executedTransactions.length > 0) {
@@ -554,6 +570,10 @@ export async function runTradingCycle(
 
     return summary;
   } catch (err) {
+    if (err instanceof RiskControlError) {
+      throw new TradingError(err.code, err.message, err.status);
+    }
+
     const message = err instanceof Error ? err.message : "Trading cycle failed";
     lastErrorByUser.set(userId, message);
 

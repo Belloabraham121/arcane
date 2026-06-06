@@ -14,12 +14,22 @@ export const DEFAULT_POOL_ALLOCATIONS: PoolAllocations = {
 
 export const DEFAULT_DEPOSIT_AMOUNT = 500_000;
 
+/** Optional hard limits on a sub-agent (typically risk-manager). */
+export type SubAgentRiskLimits = {
+  maxSwapPortfolioPercent?: number;
+  maxSlippageBps?: number;
+  driftThresholdPercent?: number;
+  cycleCooldownMinutes?: number;
+};
+
 export type SubAgentConfigItem = {
   id: string;
   name: string;
   model: string;
   systemPrompt: string;
   enabled: boolean;
+  /** Optional hard limits (typically on risk-manager). */
+  limits?: SubAgentRiskLimits;
 };
 
 export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
@@ -53,6 +63,12 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
     systemPrompt:
       "Caps exposure per QuickSwap pool and pauses risky routes when drawdown limits are breached.",
     enabled: true,
+    limits: {
+      maxSwapPortfolioPercent: 15,
+      maxSlippageBps: 50,
+      driftThresholdPercent: 6,
+      cycleCooldownMinutes: 5,
+    },
   },
 ];
 
@@ -77,6 +93,12 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: SubAgentConfigItem[] = [
     model: "gpt-4o-mini",
     systemPrompt: "Limit exposure and halt risky agent actions.",
     enabled: true,
+    limits: {
+      maxSwapPortfolioPercent: 15,
+      maxSlippageBps: 50,
+      driftThresholdPercent: 6,
+      cycleCooldownMinutes: 5,
+    },
   },
   {
     id: "bridge-scout",

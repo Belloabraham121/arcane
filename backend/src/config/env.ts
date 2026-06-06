@@ -156,10 +156,18 @@ export function getTradingExecutionEnv() {
     ),
     /** Max share of a token balance to swap in one cycle (basis points). */
     maxSwapPortfolioBps: Number(
-      optional("TRADING_MAX_SWAP_PORTFOLIO_BPS", "2500"),
+      optional("TRADING_MAX_SWAP_PORTFOLIO_BPS", "2000"),
     ),
     /** Minimum token balance (raw units) before attempting a swap. */
     minSwapAmountRaw: BigInt(optional("TRADING_MIN_SWAP_AMOUNT_RAW", "1000")),
+    /** Sum of pool-token balances (raw) required before a cycle may trade. */
+    minPortfolioBalanceRaw: BigInt(
+      optional("TRADING_MIN_PORTFOLIO_BALANCE_RAW", "1000"),
+    ),
+    /** Minimum minutes between trading cycles (scheduled/manual). */
+    cycleCooldownMinutes: Number(
+      optional("TRADING_CYCLE_COOLDOWN_MINUTES", "5"),
+    ),
     maxLlmToolRounds: Number(optional("TRADING_MAX_LLM_TOOL_ROUNDS", "5")),
     llmMaxIterations: BigInt(optional("SOMNIA_LLM_MAX_ITERATIONS", "3")),
     workerEnabled: optional("TRADING_WORKER_ENABLED", "true") === "true",

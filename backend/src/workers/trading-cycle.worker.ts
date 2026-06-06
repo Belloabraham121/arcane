@@ -1,11 +1,17 @@
 import type { Address } from "viem";
 import { getTradingExecutionEnv } from "../config/env";
 import { createLogger } from "../shared/logger";
+import { resolveSubAgents } from "../services/somnia/quickswap-llm-tools";
+import {
+  isCycleCooldownActive,
+  resolveRiskLimits,
+} from "../services/agents/risk-controls.service";
 import {
   isUserCycleRunning,
   resolveCycleIntervalMinutes,
   scheduleTradingCycle,
 } from "../services/agents/trading-runner.service";
+import { findStrategyByUserId } from "../services/agents/strategy.repository";
 import {
   listActiveStrategiesForWorker,
   updateBalanceFingerprint,
@@ -116,6 +122,20 @@ export async function runTradingWorkerTick(): Promise<void> {
           intervalMinutes,
         })
       ) {
+        const fullStrategy = await findStrategyByUserId(strategy.userId);
+        const subAgents = resolveSubAgents(
+          strategy.strategyType as "auto" | "custom",
+          fullStrategy?.subAgentConfig,
+        );
+        const riskLimits = resolveRiskLimits(subAgents);
+
+        if (isCycleCooldownActive(strategy.lastCycleAt, riskLimits)) {
+          log.debug("Scheduled cycle skipped — cooldown active", {
+            userId: strategy.userId,
+          });
+          continue;
+        }
+
         log.info("Scheduled trading cycle due", {
           userId: strategy.userId,
           intervalMinutes,

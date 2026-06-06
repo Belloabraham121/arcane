@@ -4,12 +4,20 @@ export type StrategyType = "auto" | "custom";
 
 export type PoolAllocations = Partial<Record<PoolId, number>> & Record<string, number>;
 
+export type SubAgentRiskLimits = {
+  maxSwapPortfolioPercent?: number;
+  maxSlippageBps?: number;
+  driftThresholdPercent?: number;
+  cycleCooldownMinutes?: number;
+};
+
 export type SubAgentConfigItem = {
   id: string;
   name: string;
   model: string;
   systemPrompt: string;
   enabled: boolean;
+  limits?: SubAgentRiskLimits;
 };
 
 export type AgentStrategy = {

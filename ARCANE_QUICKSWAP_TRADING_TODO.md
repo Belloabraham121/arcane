@@ -160,11 +160,11 @@ sequenceDiagram
 - [x] Use case: move USDCe from USDCe/WSOMI exposure → USDCe/WETH exposure via swap route
 
 ### 3.3 Liquidity provision (optional MVP+)
-- [ ] `backend/src/services/defi/quickswap/liquidity.service.ts`:
+- [x] `backend/src/services/defi/quickswap/liquidity.service.ts`:
   - `buildMintPosition(token0, token1, amounts, tickRange)` — NPM `mint`
   - `buildRemoveLiquidity(tokenId, percent)` — NPM `decreaseLiquidity`
   - `buildCollectFees(tokenId)` — NPM `collect`
-- [ ] MVP decision: **swaps only first**; LP add/remove in Phase 3.3 if time allows
+- [x] MVP decision: **swaps only first**; LP add/remove in Phase 3.3 if time allows
 
 ### 3.4 Agent wallet execution
 - [x] `backend/src/services/agents/wallet-executor.ts`:

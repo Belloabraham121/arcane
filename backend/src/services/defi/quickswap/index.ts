@@ -8,4 +8,5 @@ export * from "./quote.service";
 export * from "./pool-metrics.service";
 export * from "./swap.service";
 export * from "./route-planner";
+export * from "./liquidity.service";
 export * from "./quickswap.adapter";

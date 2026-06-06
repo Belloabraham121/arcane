@@ -100,6 +100,64 @@ export type RebalanceSwapPlan = {
 
 export type RebalancePlan = RebalanceNoSwapPlan | RebalanceSwapPlan;
 
+export type TickRange = {
+  tickLower: number;
+  tickUpper: number;
+};
+
+export type LiquidityAmounts = {
+  amount0: bigint;
+  amount1: bigint;
+};
+
+export type MintPositionBuildResult = {
+  kind: "mint";
+  call: EncodedTxCall;
+  positionManager: Address;
+  token0: Address;
+  token1: Address;
+  amount0Desired: bigint;
+  amount1Desired: bigint;
+  amount0Min: bigint;
+  amount1Min: bigint;
+  tickLower: number;
+  tickUpper: number;
+  deadline: bigint;
+  approvals: EncodedTxCall[];
+};
+
+export type RemoveLiquidityBuildResult = {
+  kind: "decrease_liquidity";
+  call: EncodedTxCall;
+  positionManager: Address;
+  tokenId: bigint;
+  liquidity: bigint;
+  percent: number;
+  amount0Min: bigint;
+  amount1Min: bigint;
+  deadline: bigint;
+};
+
+export type CollectFeesBuildResult = {
+  kind: "collect";
+  call: EncodedTxCall;
+  positionManager: Address;
+  tokenId: bigint;
+  recipient: Address;
+};
+
+export type NpmPositionState = {
+  tokenId: bigint;
+  token0: Address;
+  token1: Address;
+  deployer: Address;
+  tickLower: number;
+  tickUpper: number;
+  liquidity: bigint;
+  tokensOwed0: bigint;
+  tokensOwed1: bigint;
+};
+
 /** User pool allocation target (replaces protocol allocation in Phase 2). */
 export type PoolAllocation = {
   poolId: string;

@@ -92,15 +92,15 @@ sequenceDiagram
   - Implied APR / volume (on-chain first; Ormi subgraph later)
 
 ### 1.3 REST API — pools (public / authenticated)
-- [ ] `GET /api/v1/quickswap/pools` — list all available pools with token info + metrics
-- [ ] `GET /api/v1/quickswap/pools/:poolId` — single pool detail + live quote samples
-- [ ] `GET /api/v1/quickswap/pools/:poolId/quote?tokenIn=&amountIn=` — quote swap through pool
-- [ ] Standard response envelope (`success`, `data`, `meta`, `error`)
-- [ ] Register routes in `main.ts`
+- [x] `GET /api/v1/quickswap/pools` — list all available pools with token info + metrics
+- [x] `GET /api/v1/quickswap/pools/:poolId` — single pool detail + live quote samples
+- [x] `GET /api/v1/quickswap/pools/:poolId/quote?tokenIn=&amountIn=` — quote swap through pool
+- [x] Standard response envelope (`success`, `data`, `meta`, `error`)
+- [x] Register routes in `main.ts`
 
 ### 1.4 Client API client
-- [ ] `client/lib/api/quickswap.ts` — `fetchPools()`, `fetchPoolQuote()`
-- [ ] `client/lib/api/quickswap-types.ts` — mirror backend pool types
+- [x] `client/lib/api/quickswap.ts` — `fetchPools()`, `fetchPool()`, `fetchPoolQuote()`
+- [x] `client/lib/api/quickswap-types.ts` — mirror backend pool types
 
 ---
 

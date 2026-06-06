@@ -7,6 +7,7 @@ import { requestLoggerMiddleware } from "./api/middleware/request-logger";
 import { healthRouter } from "./api/routes/health";
 import { authRouter } from "./api/routes/v1/auth";
 import { agentStrategyRouter } from "./api/routes/v1/agents/strategy";
+import { quickswapPoolsRouter } from "./api/routes/v1/quickswap/pools";
 import { getAuthEnv, getServerEnv } from "./config/env";
 import { createCorsOptions } from "./config/cors";
 import { prisma } from "./infrastructure/postgres/client";
@@ -22,6 +23,7 @@ app.use(requestLoggerMiddleware);
 app.use(healthRouter);
 app.use(authRouter);
 app.use(agentStrategyRouter);
+app.use(quickswapPoolsRouter);
 
 app.use(errorHandlerMiddleware);
 
@@ -65,6 +67,9 @@ async function start() {
         "PUT /api/v1/agents/strategy",
         "PATCH /api/v1/agents/strategy/protocol-allocations",
         "PATCH /api/v1/agents/strategy/sub-agents",
+        "GET /api/v1/quickswap/pools",
+        "GET /api/v1/quickswap/pools/:poolId",
+        "GET /api/v1/quickswap/pools/:poolId/quote",
       ],
     });
   });

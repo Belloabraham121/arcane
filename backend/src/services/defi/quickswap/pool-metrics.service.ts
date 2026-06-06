@@ -2,7 +2,7 @@ import type { Address } from "viem";
 import { getQuickSwapTokenByAddress } from "../../../config/quickswap";
 import { getQuickSwapEnv } from "../../../config/env";
 import { SAMPLE_QUOTE_AMOUNT } from "./constants";
-import { getPoolState, getKnownPoolById } from "./pool-registry";
+import { getPoolState, getKnownPoolById, listKnownPools } from "./pool-registry";
 import { quoteExactIn } from "./quote.service";
 import type {
   PoolMetrics,
@@ -170,6 +170,18 @@ function toSampleQuote(direction: string, quote: SwapQuote): SamplePoolQuote {
     amountOut: quote.amountOut,
     fee: quote.fee,
   };
+}
+
+/** All known pools with live price metrics (no sample quotes — use getEnrichedPool for those). */
+export async function listPoolsWithMetrics(): Promise<QuickSwapPool[]> {
+  const pools = await listKnownPools();
+
+  return Promise.all(
+    pools.map(async (pool) => {
+      const metrics = await getPoolMetrics(pool.address);
+      return { ...pool, metrics };
+    }),
+  );
 }
 
 /** Pool with enriched price metrics and optional sample swap quotes. */

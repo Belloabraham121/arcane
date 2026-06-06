@@ -8,7 +8,7 @@ import { AppNavBar } from "@/components/auth/app-nav-bar"
 import { PixelatedCycle } from "@/components/pixelated-cycle"
 import { getMe } from "@/lib/api/auth"
 import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy"
-import { DEFAULT_PROTOCOL_ALLOCATIONS } from "@/lib/api/strategy-types"
+import { DEFAULT_POOL_ALLOCATIONS } from "@/lib/api/strategy-types"
 import { APP_ROUTES, setupRouteFor } from "@/lib/routing/app-routes"
 
 const ease = [0.22, 1, 0.36, 1] as const
@@ -61,8 +61,7 @@ export default function StrategyOnboardingPage() {
       strategyType: type,
       status: "draft",
       depositAmount: 0,
-      protocolAllocations:
-        type === "custom" ? DEFAULT_PROTOCOL_ALLOCATIONS : undefined,
+      poolAllocations: type === "custom" ? DEFAULT_POOL_ALLOCATIONS : undefined,
     })
 
     if (!result.success) {
@@ -153,7 +152,7 @@ export default function StrategyOnboardingPage() {
                   <p className="text-xs font-mono text-muted-foreground leading-relaxed max-w-xs">
                     {type === "auto"
                       ? "Arcane assigns a precise preset strategy and sub-agents. You review and deposit."
-                      : "Configure protocols and sub-agents yourself, then deposit and launch."}
+                      : "Choose QuickSwap pools and sub-agents yourself, then deposit and launch."}
                   </p>
                 </div>
 

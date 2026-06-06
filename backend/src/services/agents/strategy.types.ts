@@ -1,16 +1,27 @@
 export const PROTOCOL_IDS = ["uniswap", "aave", "compound", "lido"] as const;
 export type ProtocolId = (typeof PROTOCOL_IDS)[number];
 
+/** QuickSwap seed pool ids (Somnia mainnet). */
+export const POOL_IDS = ["usdce-wsomi", "usdce-weth", "wsomi-weth"] as const;
+export type PoolId = (typeof POOL_IDS)[number];
+
 export type StrategyType = "auto" | "custom";
 export type StrategyStatus = "draft" | "active";
 
 export type ProtocolAllocations = Record<ProtocolId, number>;
+export type PoolAllocations = Record<PoolId, number>;
 
 export const DEFAULT_PROTOCOL_ALLOCATIONS: ProtocolAllocations = {
   uniswap: 50_000_000,
   aave: 30_000_000,
   compound: 25_000_000,
   lido: 35_000_000,
+};
+
+export const DEFAULT_POOL_ALLOCATIONS: PoolAllocations = {
+  "usdce-wsomi": 50_000_000,
+  "usdce-weth": 30_000_000,
+  "wsomi-weth": 25_000_000,
 };
 
 export const DEFAULT_DEPOSIT_AMOUNT = 500_000;
@@ -29,14 +40,15 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
     name: "Root Orchestrator",
     model: "claude-sonnet-4-6",
     systemPrompt:
-      "Portfolio-level strategy and capital routing across protocols. Maximize risk-adjusted yield.",
+      "Portfolio-level strategy and capital routing across QuickSwap pools. Maximize risk-adjusted yield.",
     enabled: true,
   },
   {
     id: "yield-executor",
     name: "Yield Executor",
     model: "gpt-4o-mini",
-    systemPrompt: "Executes rebalances on Aave, Compound, and Lido pools when APR spreads exceed threshold.",
+    systemPrompt:
+      "Executes rebalances across QuickSwap liquidity pools when price and fee spreads exceed threshold.",
     enabled: true,
   },
   {
@@ -50,7 +62,7 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
     id: "risk-manager",
     name: "Risk Manager",
     model: "gpt-4o-mini",
-    systemPrompt: "Caps exposure per protocol and pauses risky routes when drawdown limits are breached.",
+    systemPrompt: "Caps exposure per QuickSwap pool and pauses risky routes when drawdown limits are breached.",
     enabled: true,
   },
 ];
@@ -60,7 +72,7 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: SubAgentConfigItem[] = [
     id: "yield-executor",
     name: "Yield Executor",
     model: "gpt-4o-mini",
-    systemPrompt: "Execute yield moves across selected protocols.",
+    systemPrompt: "Execute capital moves across selected QuickSwap pools.",
     enabled: true,
   },
   {
@@ -91,7 +103,9 @@ export type AgentStrategyResponse = {
   strategyType: StrategyType;
   status: StrategyStatus;
   depositAmount: number;
+  /** @deprecated Use poolAllocations — kept for legacy rows. */
   protocolAllocations: ProtocolAllocations;
+  poolAllocations: PoolAllocations;
   subAgents: SubAgentConfigItem[];
   createdAt: string;
   updatedAt: string;

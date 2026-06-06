@@ -19,6 +19,8 @@ export type PoolMetrics = {
   token1PerToken0: string | null;
   /** Human-readable: how many token0 per 1 token1. */
   token0PerToken1: string | null;
+  /** Best-effort display line, e.g. "1 USDCe ≈ 0.000264 WETH" (quote fallback when sqrt price is stale). */
+  priceLabel: string | null;
   /** Swap fee tier as percent (e.g. 0.05 for lastFee 500). */
   feeTierPercent: number | null;
   /** True APR requires volume — subgraph later. */

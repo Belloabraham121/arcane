@@ -66,6 +66,7 @@ async function start() {
         "GET /api/v1/agents/strategy",
         "PUT /api/v1/agents/strategy",
         "PATCH /api/v1/agents/strategy/protocol-allocations",
+        "PATCH /api/v1/agents/strategy/pool-allocations",
         "PATCH /api/v1/agents/strategy/sub-agents",
         "GET /api/v1/quickswap/pools",
         "GET /api/v1/quickswap/pools/:poolId",

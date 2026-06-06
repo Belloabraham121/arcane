@@ -4,8 +4,10 @@ import { requireAuth } from "../../../middleware/auth";
 import {
   StrategyError,
   getUserStrategy,
+  parsePoolAllocations,
   parseProtocolAllocations,
   parseSubAgents,
+  patchPoolAllocations,
   patchProtocolAllocations,
   patchSubAgents,
   upsertUserStrategy,
@@ -17,6 +19,7 @@ const upsertSchema = z.object({
   status: z.enum(["draft", "active"]).optional(),
   depositAmount: z.number().nonnegative().optional(),
   protocolAllocations: z.record(z.number().nonnegative()).optional(),
+  poolAllocations: z.record(z.number().nonnegative()).optional(),
   subAgents: z.array(
     z.object({
       id: z.string().min(1),
@@ -30,6 +33,10 @@ const upsertSchema = z.object({
 
 const patchAllocationsSchema = z.object({
   protocolAllocations: z.record(z.number().nonnegative()),
+});
+
+const patchPoolAllocationsSchema = z.object({
+  poolAllocations: z.record(z.number().nonnegative()),
 });
 
 const patchSubAgentsSchema = z.object({
@@ -78,6 +85,9 @@ agentStrategyRouter.put("/api/v1/agents/strategy", requireAuth, async (req, res)
     const allocations = parsed.data.protocolAllocations
       ? parseProtocolAllocations(parsed.data.protocolAllocations)
       : undefined;
+    const poolAllocations = parsed.data.poolAllocations
+      ? parsePoolAllocations(parsed.data.poolAllocations)
+      : undefined;
     const subAgents = parsed.data.subAgents
       ? parseSubAgents(parsed.data.subAgents)
       : undefined;
@@ -87,6 +97,7 @@ agentStrategyRouter.put("/api/v1/agents/strategy", requireAuth, async (req, res)
       status: parsed.data.status,
       depositAmount: parsed.data.depositAmount,
       protocolAllocations: allocations,
+      poolAllocations,
       subAgents,
     });
 
@@ -122,6 +133,39 @@ agentStrategyRouter.patch(
       }
 
       const strategy = await patchProtocolAllocations(req.user.id, allocations);
+      return ok(req, res, { strategy });
+    } catch (err) {
+      if (err instanceof StrategyError) {
+        return fail(req, res, err.status, { code: err.code, message: err.message });
+      }
+      throw err;
+    }
+  },
+);
+
+agentStrategyRouter.patch(
+  "/api/v1/agents/strategy/pool-allocations",
+  requireAuth,
+  async (req, res) => {
+    const parsed = patchPoolAllocationsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(req, res, 400, {
+        code: "VALIDATION_ERROR",
+        message: "Invalid pool allocation payload",
+        details: parsed.error.flatten().fieldErrors,
+      });
+    }
+
+    try {
+      const poolAllocations = parsePoolAllocations(parsed.data.poolAllocations);
+      if (!poolAllocations) {
+        return fail(req, res, 400, {
+          code: "VALIDATION_ERROR",
+          message: "poolAllocations required",
+        });
+      }
+
+      const strategy = await patchPoolAllocations(req.user.id, poolAllocations);
       return ok(req, res, { strategy });
     } catch (err) {
       if (err instanceof StrategyError) {

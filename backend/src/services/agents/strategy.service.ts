@@ -4,9 +4,13 @@ import {
   DEFAULT_AUTO_SUB_AGENTS,
   DEFAULT_CUSTOM_SUB_AGENTS,
   DEFAULT_DEPOSIT_AMOUNT,
+  DEFAULT_POOL_ALLOCATIONS,
   DEFAULT_PROTOCOL_ALLOCATIONS,
+  POOL_IDS,
   PROTOCOL_IDS,
   type AgentStrategyResponse,
+  type PoolAllocations,
+  type PoolId,
   type ProtocolAllocations,
   type ProtocolId,
   type StrategyType,
@@ -28,6 +32,54 @@ export class StrategyError extends Error {
 
 function isProtocolId(value: string): value is ProtocolId {
   return (PROTOCOL_IDS as readonly string[]).includes(value);
+}
+
+function isPoolId(value: string): value is PoolId {
+  return (POOL_IDS as readonly string[]).includes(value);
+}
+
+export function parsePoolAllocations(input: unknown): PoolAllocations | undefined {
+  if (input == null) {
+    return undefined;
+  }
+  if (typeof input !== "object") {
+    throw new StrategyError("VALIDATION_ERROR", "poolAllocations must be an object");
+  }
+
+  const record = input as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length === 0) {
+    throw new StrategyError("VALIDATION_ERROR", "At least one pool allocation is required");
+  }
+
+  const result = {} as PoolAllocations;
+  let positiveCount = 0;
+
+  for (const key of keys) {
+    if (!isPoolId(key)) {
+      throw new StrategyError("VALIDATION_ERROR", `Unknown pool: ${key}`);
+    }
+    const value = record[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        `Invalid allocation for ${key}: must be a non-negative number`,
+      );
+    }
+    if (value > 0) {
+      positiveCount += 1;
+    }
+    result[key] = value;
+  }
+
+  if (positiveCount === 0) {
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "At least one pool must have a positive allocation",
+    );
+  }
+
+  return result;
 }
 
 export function parseProtocolAllocations(
@@ -144,9 +196,21 @@ function allocationsFromDb(
   return map;
 }
 
+function poolAllocationsFromDb(raw: unknown): PoolAllocations {
+  if (raw == null) {
+    return { ...DEFAULT_POOL_ALLOCATIONS };
+  }
+  try {
+    return parsePoolAllocations(raw) ?? { ...DEFAULT_POOL_ALLOCATIONS };
+  } catch {
+    return { ...DEFAULT_POOL_ALLOCATIONS };
+  }
+}
+
 function toResponse(
   strategy: Awaited<ReturnType<typeof repo.findStrategyByUserId>> & {
     protocolAllocations: { protocol: string; amount: number }[];
+    poolAllocations?: unknown;
     subAgentConfig?: unknown;
   },
 ): AgentStrategyResponse {
@@ -157,6 +221,7 @@ function toResponse(
     status: strategy!.status as AgentStrategyResponse["status"],
     depositAmount: strategy!.depositAmount,
     protocolAllocations: allocationsFromDb(strategy!.protocolAllocations),
+    poolAllocations: poolAllocationsFromDb(strategy!.poolAllocations),
     subAgents: subAgentsFromDb(strategyType, strategy!.subAgentConfig),
     createdAt: strategy!.createdAt.toISOString(),
     updatedAt: strategy!.updatedAt.toISOString(),
@@ -178,6 +243,7 @@ export async function upsertUserStrategy(
     status?: AgentStrategyResponse["status"];
     depositAmount?: number;
     protocolAllocations?: ProtocolAllocations;
+    poolAllocations?: PoolAllocations;
     subAgents?: SubAgentConfigItem[];
   },
 ): Promise<AgentStrategyResponse> {
@@ -196,18 +262,20 @@ export async function upsertUserStrategy(
     );
   }
 
-  let protocolAllocations: ProtocolAllocations;
-  if (input.strategyType === "auto") {
-    protocolAllocations = input.protocolAllocations ?? { ...DEFAULT_PROTOCOL_ALLOCATIONS };
-  } else {
-    if (!input.protocolAllocations) {
-      throw new StrategyError(
-        "VALIDATION_ERROR",
-        "protocolAllocations required for custom strategy",
-      );
-    }
-    protocolAllocations = input.protocolAllocations;
+  const poolAllocations =
+    input.poolAllocations ??
+    (input.strategyType === "auto"
+      ? { ...DEFAULT_POOL_ALLOCATIONS }
+      : undefined);
+
+  if (!poolAllocations) {
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "poolAllocations required for custom strategy",
+    );
   }
+
+  const protocolAllocations = input.protocolAllocations ?? { ...DEFAULT_PROTOCOL_ALLOCATIONS };
 
   const subAgentConfig =
     input.subAgents ??
@@ -219,6 +287,7 @@ export async function upsertUserStrategy(
     strategyType: input.strategyType,
     depositAmount,
     protocolAllocations,
+    poolAllocations,
     status,
     subAgentConfig,
   });
@@ -242,6 +311,20 @@ export async function patchProtocolAllocations(
   }
 
   log.info("Protocol allocations updated", { userId });
+
+  return toResponse(strategy);
+}
+
+export async function patchPoolAllocations(
+  userId: string,
+  poolAllocations: PoolAllocations,
+): Promise<AgentStrategyResponse> {
+  const strategy = await repo.updatePoolAllocations(userId, poolAllocations);
+  if (!strategy) {
+    throw new StrategyError("STRATEGY_NOT_FOUND", "No agent strategy found for user", 404);
+  }
+
+  log.info("Pool allocations updated", { userId });
 
   return toResponse(strategy);
 }

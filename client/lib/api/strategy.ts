@@ -1,6 +1,7 @@
 import { apiRequest } from "./client";
 import type {
   AgentStrategy,
+  PoolAllocations,
   ProtocolAllocations,
   StrategyType,
   SubAgentConfigItem,
@@ -15,6 +16,7 @@ export async function upsertAgentStrategy(input: {
   status?: AgentStrategy["status"];
   depositAmount?: number;
   protocolAllocations?: ProtocolAllocations;
+  poolAllocations?: PoolAllocations;
   subAgents?: SubAgentConfigItem[];
 }) {
   return apiRequest<{ strategy: AgentStrategy }>("/api/v1/agents/strategy", {
@@ -29,6 +31,16 @@ export async function patchProtocolAllocations(protocolAllocations: ProtocolAllo
     {
       method: "PATCH",
       body: JSON.stringify({ protocolAllocations }),
+    },
+  );
+}
+
+export async function patchPoolAllocations(poolAllocations: PoolAllocations) {
+  return apiRequest<{ strategy: AgentStrategy }>(
+    "/api/v1/agents/strategy/pool-allocations",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ poolAllocations }),
     },
   );
 }

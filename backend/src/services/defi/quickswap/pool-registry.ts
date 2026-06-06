@@ -151,6 +151,7 @@ function stateToMetrics(state: PoolOnChainState): PoolMetrics {
     lastFee: state.globalState.lastFee,
     token1PerToken0: null,
     token0PerToken1: null,
+    priceLabel: null,
     feeTierPercent: null,
     feeApr: null,
     lastUpdated: new Date().toISOString(),

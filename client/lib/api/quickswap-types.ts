@@ -17,6 +17,7 @@ export type PoolMetrics = {
   lastFee: number;
   token1PerToken0: string | null;
   token0PerToken1: string | null;
+  priceLabel: string | null;
   feeTierPercent: number | null;
   feeApr: number | null;
   lastUpdated: string;

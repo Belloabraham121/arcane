@@ -1,5 +1,11 @@
 import type { Prisma } from "@prisma/client";
-import type { ProtocolId, StrategyStatus, StrategyType, SubAgentConfigItem } from "./strategy.types";
+import type {
+  PoolAllocations,
+  ProtocolId,
+  StrategyStatus,
+  StrategyType,
+  SubAgentConfigItem,
+} from "./strategy.types";
 import { prisma } from "../../infrastructure/postgres/client";
 
 type AllocationInput = Record<ProtocolId, number>;
@@ -18,10 +24,12 @@ export async function upsertStrategy(
     status?: StrategyStatus;
     depositAmount: number;
     protocolAllocations: AllocationInput;
+    poolAllocations: PoolAllocations;
     subAgentConfig?: SubAgentConfigItem[];
   },
 ) {
   return prisma.$transaction(async (tx) => {
+    const poolJson = input.poolAllocations as Prisma.InputJsonValue;
     const strategy = await tx.agentStrategy.upsert({
       where: { userId },
       create: {
@@ -29,12 +37,14 @@ export async function upsertStrategy(
         strategyType: input.strategyType,
         status: input.status ?? "draft",
         depositAmount: input.depositAmount,
+        poolAllocations: poolJson,
         subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue | undefined,
       },
       update: {
         strategyType: input.strategyType,
         status: input.status ?? "draft",
         depositAmount: input.depositAmount,
+        poolAllocations: poolJson,
         ...(input.subAgentConfig !== undefined
           ? { subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue }
           : {}),
@@ -105,6 +115,19 @@ export async function updateProtocolAllocations(
       where: { id: existing.id },
       include: { protocolAllocations: true },
     });
+  });
+}
+
+export async function updatePoolAllocations(userId: string, poolAllocations: PoolAllocations) {
+  const existing = await findStrategyByUserId(userId);
+  if (!existing) {
+    return null;
+  }
+
+  return prisma.agentStrategy.update({
+    where: { id: existing.id },
+    data: { poolAllocations: poolAllocations as Prisma.InputJsonValue },
+    include: { protocolAllocations: true },
   });
 }
 

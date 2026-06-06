@@ -109,32 +109,31 @@ sequenceDiagram
 > **User-facing goal:** During Auto/Custom setup, user sees **QuickSwap pools** (e.g. USDCe/WSOMI) instead of generic protocols (Uniswap, Aave).
 
 ### 2.1 Database schema migration
-- [ ] Replace `ProtocolId` enum (`uniswap`, `aave`, …) with pool-based allocation:
-  - Option A: `PoolAllocation` table — `poolAddress`, `token0`, `token1`, `amount`
-  - Option B: JSON column `poolAllocations` on `AgentStrategy` (faster MVP)
-- [ ] Migration: `protocol_allocation` → `pool_allocation` (or new JSON field)
+- [x] Replace `ProtocolId` enum (`uniswap`, `aave`, …) with pool-based allocation:
+  - Option B: JSON column `poolAllocations` on `AgentStrategy` (MVP — done)
+- [ ] Migration: `protocol_allocation` → `pool_allocation` (legacy table still present)
 - [ ] Deprecate `ProtocolId` enum in Prisma
 - [ ] Add `tradingEnabledAt`, `lastCycleAt` on `AgentStrategy`
 
 ### 2.2 Backend strategy types & service
-- [ ] Update `strategy.types.ts`: `PoolAllocations = Record<poolId, number>`
-- [ ] Update `strategy.service.ts` validation for pool IDs (must exist in registry)
-- [ ] Update `strategy.repository.ts` read/write for pool allocations
-- [ ] `PATCH /api/v1/agents/strategy/pool-allocations` (replaces `protocol-allocations`)
+- [x] Update `strategy.types.ts`: `PoolAllocations = Record<poolId, number>`
+- [x] Update `strategy.service.ts` validation for pool IDs (seed pair ids)
+- [x] Update `strategy.repository.ts` read/write for pool allocations
+- [x] `PATCH /api/v1/agents/strategy/pool-allocations` (alongside legacy `protocol-allocations`)
 
 ### 2.3 Frontend — pool selection UI
-- [ ] Rename `ProtocolAllocationEditor` → `PoolAllocationEditor`
-- [ ] Fetch pools from `GET /api/v1/quickswap/pools` on setup pages
-- [ ] Show pool cards: pair name (USDCe/WSOMI), token icons, live price, optional APR
-- [ ] Auto agent: pre-fill allocations across top pools by TVL/liquidity
-- [ ] Custom agent: user picks which pools + allocation amounts (same UI, more control)
-- [ ] Update `strategy-presets.ts`: remove Aave/Compound/Lido labels; use pool labels
-- [ ] Update sub-agent prompts: "Executes rebalances across **QuickSwap pools**" (not Aave/Lido)
+- [x] Rename `ProtocolAllocationEditor` → `PoolAllocationEditor`
+- [x] Fetch pools from `GET /api/v1/quickswap/pools` on setup pages
+- [x] Show pool cards: pair name (USDCe/WSOMI), token icons, live price, optional APR
+- [x] Auto agent: pre-fill allocations across top pools by TVL/liquidity
+- [x] Custom agent: user picks which pools + allocation amounts (same UI, more control)
+- [x] Update `strategy-presets.ts`: remove Aave/Compound/Lido labels; use pool labels
+- [x] Update sub-agent prompts: "Executes rebalances across **QuickSwap pools**" (not Aave/Lido)
 
 ### 2.4 Setup flow pages
-- [ ] `client/app/setup/auto/page.tsx` — use `PoolAllocationEditor` + live pools
-- [ ] `client/app/setup/custom/page.tsx` — same pool picker, user toggles sub-agents
-- [ ] `client/app/onboarding/strategy/page.tsx` — copy update: "pools" not "protocols"
+- [x] `client/app/setup/auto/page.tsx` — use `PoolAllocationEditor` + live pools
+- [x] `client/app/setup/custom/page.tsx` — same pool picker, user toggles sub-agents
+- [x] `client/app/onboarding/strategy/page.tsx` — copy update: "pools" not "protocols"
 - [ ] Deposit step unchanged: user sends funds to agent wallet address
 - [ ] On activate: `status: "active"` triggers first trading cycle (see Phase 4)
 

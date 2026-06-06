@@ -1,4 +1,4 @@
-import { DEFAULT_PROTOCOL_ALLOCATIONS } from "@/lib/api/strategy-types"
+import { DEFAULT_POOL_ALLOCATIONS } from "@/lib/api/strategy-types"
 
 export type PresetSubAgent = {
   id: string
@@ -14,20 +14,20 @@ export type CustomSubAgent = {
   enabled: boolean
 }
 
-export const AUTO_PRESET_PROTOCOLS = DEFAULT_PROTOCOL_ALLOCATIONS
+export const AUTO_PRESET_POOLS = DEFAULT_POOL_ALLOCATIONS
 
 export const AUTO_PRESET_SUB_AGENTS: PresetSubAgent[] = [
   {
     id: "root-orchestrator",
     name: "Root Orchestrator",
     model: "Claude Sonnet",
-    role: "Portfolio-level strategy and capital routing across protocols",
+    role: "Portfolio-level strategy and capital routing across QuickSwap pools",
   },
   {
     id: "yield-executor",
     name: "Yield Executor",
     model: "GPT-4o-mini",
-    role: "Executes rebalances on Aave, Compound, and Lido pools",
+    role: "Executes rebalances across QuickSwap liquidity pools",
   },
   {
     id: "signal-scout",
@@ -39,7 +39,7 @@ export const AUTO_PRESET_SUB_AGENTS: PresetSubAgent[] = [
     id: "risk-manager",
     name: "Risk Manager",
     model: "GPT-4o-mini",
-    role: "Caps exposure per protocol and pauses risky routes",
+    role: "Caps exposure per QuickSwap pool and pauses risky routes",
   },
 ]
 
@@ -47,7 +47,7 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: CustomSubAgent[] = [
   {
     id: "yield-executor",
     name: "Yield Executor",
-    role: "Execute yield moves across selected protocols",
+    role: "Execute capital moves across selected QuickSwap pools",
     enabled: true,
   },
   {
@@ -70,9 +70,11 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: CustomSubAgent[] = [
   },
 ]
 
-export const PROTOCOL_LABELS: Record<string, string> = {
-  uniswap: "Uniswap",
-  aave: "Aave",
-  compound: "Compound",
-  lido: "Lido",
+export const POOL_LABELS: Record<string, string> = {
+  "usdce-wsomi": "USDCe/WSOMI",
+  "usdce-weth": "USDCe/WETH",
+  "wsomi-weth": "WSOMI/WETH",
 }
+
+/** @deprecated Use POOL_LABELS */
+export const PROTOCOL_LABELS = POOL_LABELS

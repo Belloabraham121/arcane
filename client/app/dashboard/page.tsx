@@ -1,31 +1,27 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { AppNavBar } from "@/components/auth/app-nav-bar"
 import { getMe } from "@/lib/api/auth"
+import { fetchPools } from "@/lib/api/quickswap"
+import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import type { AgentStrategy } from "@/lib/api/strategy-types"
 import { APP_ROUTES, setupRouteFor } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
-import {
-  PROTOCOL_LABELS,
-} from "@/lib/strategy-presets"
+import { buildPoolMarketRows } from "@/lib/pool-allocations"
+import { POOL_LABELS } from "@/lib/strategy-presets"
 
 const ease = [0.22, 1, 0.36, 1] as const
-
-const MARKETS_DATA = [
-  { name: "Morpho Gauntlet USDC Prime", color: "bg-purple-500", allocated: 66.7, value: 333450.026, apr: 9.55 },
-  { name: "AAVE USDC", color: "bg-blue-500", allocated: 11.7, value: 55575.02, apr: 8.73 },
-  { name: "Fluid USDC", color: "bg-orange-500", allocated: 8.1, value: 40418.19, apr: 8.11 },
-  { name: "Compound USDC", color: "bg-green-500", allocated: 13.5, value: 67555.84, apr: 7.92 },
-]
 
 export default function DashboardPage() {
   const router = useRouter()
   const [strategy, setStrategy] = useState<AgentStrategy | null>(null)
+  const [pools, setPools] = useState<QuickSwapPool[]>([])
+  const [poolsError, setPoolsError] = useState<string | null>(null)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"overview" | "markets" | "agents">("overview")
   const [loading, setLoading] = useState(true)
@@ -38,18 +34,37 @@ export default function DashboardPage() {
         return
       }
 
-      const [meResult, strategyResult] = await Promise.all([getMe(), getAgentStrategy()])
+      const [meResult, strategyResult, poolsResult] = await Promise.all([
+        getMe(),
+        getAgentStrategy(),
+        fetchPools(),
+      ])
+
       if (meResult.success && meResult.data?.user.walletAddress) {
         setWalletAddress(meResult.data.user.walletAddress)
       }
       if (strategyResult.success && strategyResult.data?.strategy) {
         setStrategy(strategyResult.data.strategy)
       }
+      if (poolsResult.success && poolsResult.data) {
+        setPools(poolsResult.data.pools)
+      } else {
+        setPoolsError(poolsResult.error?.message ?? "Failed to load QuickSwap pools")
+      }
+
       setLoading(false)
     }
 
     load()
   }, [router])
+
+  const marketRows = useMemo(
+    () =>
+      strategy
+        ? buildPoolMarketRows(strategy.poolAllocations, pools, strategy.depositAmount)
+        : [],
+    [strategy, pools],
+  )
 
   if (loading || !strategy) {
     return (
@@ -65,6 +80,10 @@ export default function DashboardPage() {
   const netEarned = depositedAmount * 0.0006
   const totalAPR = 16.43
   const enabledSubAgents = strategy.subAgents.filter((agent) => agent.enabled)
+  const allocationTotal = Object.values(strategy.poolAllocations ?? {}).reduce(
+    (sum, value) => sum + value,
+    0,
+  )
 
   return (
     <div className="min-h-screen bg-background dot-grid-bg">
@@ -157,23 +176,21 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="border border-border p-6">
                 <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  Protocol allocation
+                  QuickSwap pool allocation
                 </p>
                 <div className="space-y-3">
-                  {Object.entries(strategy.protocolAllocations).map(([key, amount]) => {
-                    const total = Object.values(strategy.protocolAllocations).reduce(
-                      (sum, value) => sum + value,
-                      0,
-                    )
-                    return (
+                  {Object.entries(strategy.poolAllocations ?? {})
+                    .filter(([, amount]) => amount > 0)
+                    .map(([key, amount]) => (
                       <div key={key} className="flex items-center justify-between">
-                        <span className="font-mono text-sm">{PROTOCOL_LABELS[key] ?? key}</span>
+                        <span className="font-mono text-sm">{POOL_LABELS[key] ?? key}</span>
                         <span className="font-mono text-sm text-muted-foreground">
-                          {total > 0 ? `${((amount / total) * 100).toFixed(1)}%` : "0%"}
+                          {allocationTotal > 0
+                            ? `${((amount / allocationTotal) * 100).toFixed(1)}%`
+                            : "0%"}
                         </span>
                       </div>
-                    )
-                  })}
+                    ))}
                 </div>
               </div>
               <div className="border border-border p-6">
@@ -199,26 +216,71 @@ export default function DashboardPage() {
 
           {activeTab === "markets" && (
             <div className="space-y-6">
-              <div className="flex h-2 gap-1 overflow-hidden rounded bg-border">
-                {MARKETS_DATA.map((market, i) => (
-                  <div key={i} className={market.color} style={{ flex: market.allocated }} />
-                ))}
-              </div>
-              <div className="border border-border">
-                {MARKETS_DATA.map((market, i) => (
-                  <div
-                    key={i}
-                    className="grid grid-cols-4 gap-4 border-b border-border p-4 last:border-b-0"
-                  >
-                    <div className="col-span-2 flex items-center gap-2 font-mono text-sm">
-                      <div className={`h-3 w-3 rounded-full ${market.color}`} />
-                      {market.name}
-                    </div>
-                    <div className="font-mono text-sm">{market.allocated.toFixed(1)}%</div>
-                    <div className="font-mono text-sm">%{market.apr.toFixed(2)} APR</div>
+              <p className="font-mono text-xs text-muted-foreground">
+                Live QuickSwap pools on Somnia mainnet — allocation from your agent strategy.
+              </p>
+
+              {poolsError && (
+                <p className="font-mono text-xs text-[#ea580c]">{poolsError}</p>
+              )}
+
+              {marketRows.length === 0 ? (
+                <p className="font-mono text-xs text-muted-foreground">
+                  No pool allocations configured. Edit setup to assign capital to QuickSwap pools.
+                </p>
+              ) : (
+                <>
+                  <div className="flex h-2 gap-1 overflow-hidden rounded bg-border">
+                    {marketRows.map((market) => (
+                      <div
+                        key={market.id}
+                        className={market.color}
+                        style={{ flex: market.allocated }}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                  <div className="border border-border">
+                    {marketRows.map((market) => (
+                      <div
+                        key={market.id}
+                        className="grid grid-cols-2 gap-4 border-b border-border p-4 last:border-b-0 lg:grid-cols-5"
+                      >
+                        <div className="col-span-2 flex items-center gap-2 font-mono text-sm">
+                          <div className={`h-3 w-3 shrink-0 rounded-full ${market.color}`} />
+                          <div>
+                            <p>{market.name}</p>
+                            {market.priceHint && (
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                {market.priceHint}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="font-mono text-sm">
+                          <span className="text-muted-foreground lg:hidden">Allocated </span>
+                          {market.allocated.toFixed(1)}%
+                        </div>
+                        <div className="font-mono text-sm">
+                          <span className="text-muted-foreground lg:hidden">Value </span>$
+                          {market.value.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
+                        <div className="font-mono text-sm">
+                          <span className="text-muted-foreground lg:hidden">Fee </span>
+                          {market.feePercent != null
+                            ? `${market.feePercent}% swap`
+                            : "—"}
+                          <span className="block text-[10px] text-muted-foreground">
+                            Liq {market.liquidity}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -236,13 +298,13 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <ul className="space-y-2 font-mono text-sm text-foreground">
-                <li>• Rebalance across yield markets</li>
-                <li>• Swap via Uniswap pools</li>
-                <li>• Supply to Aave / Compound / Lido</li>
-                <li>• Monitor APR and migrate capital</li>
+                <li>• Rebalance across QuickSwap liquidity pools</li>
+                <li>• Swap via Algebra V4 on Somnia mainnet</li>
+                <li>• Monitor pool prices and migrate capital</li>
+                <li>• Execute moves with Somnia LLM inference agent</li>
               </ul>
               <p className="font-mono text-xs text-muted-foreground">
-                Open the live canvas to watch root and sub-agents move between protocol
+                Open the live canvas to watch root and sub-agents move between pool
                 nodes in real time.
               </p>
             </div>

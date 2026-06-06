@@ -12,9 +12,10 @@ import { useTradeEvents } from "@/hooks/use-trade-events"
 import { getMe } from "@/lib/api/auth"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import {
-  DEFAULT_PROTOCOL_ALLOCATIONS,
-  type ProtocolAllocations,
+  DEFAULT_POOL_ALLOCATIONS,
+  type PoolAllocations,
 } from "@/lib/api/strategy-types"
+import { POOL_LABELS } from "@/lib/strategy-presets"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
 import {
@@ -29,9 +30,7 @@ export default function AgentsPage() {
   const [viewMode, setViewMode] = useState<"activity" | "reputation" | "tvl">(
     "activity",
   )
-  const [protocolAmounts, setProtocolAmounts] = useState<ProtocolAllocations>(
-    DEFAULT_PROTOCOL_ALLOCATIONS,
-  )
+  const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>(DEFAULT_POOL_ALLOCATIONS)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const { events, pushEvent } = useTradeEvents()
@@ -57,7 +56,7 @@ export default function AgentsPage() {
       }
 
       if (strategyResult.success && strategyResult.data?.strategy) {
-        setProtocolAmounts(strategyResult.data.strategy.protocolAllocations)
+        setPoolAmounts(strategyResult.data.strategy.poolAllocations)
       }
 
       setLoading(false)
@@ -132,7 +131,7 @@ export default function AgentsPage() {
       >
         <AgentNetworkCanvas
           viewMode={viewMode}
-          protocolAmounts={protocolAmounts}
+          protocolAmounts={poolAmounts}
           onTradeEvent={pushEvent}
         />
 
@@ -227,7 +226,7 @@ export default function AgentsPage() {
 
         <DraggableGridPanel
           id="protocol-allocation"
-          title="Protocol Allocation"
+          title="Pool Allocation"
           x={layouts["protocol-allocation"].x}
           y={layouts["protocol-allocation"].y}
           collapsed={layouts["protocol-allocation"].collapsed}
@@ -237,10 +236,12 @@ export default function AgentsPage() {
           width={300}
         >
           <div className="space-y-3">
-            {Object.entries(protocolAmounts).map(([key, amount]) => (
+            {Object.entries(poolAmounts)
+              .filter(([, amount]) => amount > 0)
+              .map(([key, amount]) => (
               <div key={key} className="flex items-center justify-between gap-3">
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {key.charAt(0).toUpperCase() + key.slice(1)}
+                  {POOL_LABELS[key] ?? key}
                 </span>
                 <span className="font-mono text-xs text-foreground">
                   {(amount / 1_000_000).toFixed(0)}M

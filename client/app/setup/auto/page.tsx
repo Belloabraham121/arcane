@@ -7,15 +7,16 @@ import { getMe } from "@/lib/api/auth"
 import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy"
 import {
   DEFAULT_DEPOSIT_AMOUNT,
-  DEFAULT_PROTOCOL_ALLOCATIONS,
-  type ProtocolAllocations,
+  type PoolAllocations,
   type SubAgentConfigItem,
 } from "@/lib/api/strategy-types"
 import { DepositAddressCard } from "@/components/setup/deposit-address-card"
-import { ProtocolAllocationEditor } from "@/components/setup/protocol-allocation-editor"
+import { PoolAllocationEditor } from "@/components/setup/pool-allocation-editor"
 import { SetupNav } from "@/components/setup/setup-nav"
 import { SubAgentEditor } from "@/components/setup/sub-agent-editor"
+import { useQuickSwapPools } from "@/hooks/use-quickswap-pools"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
+import { activePoolAllocations, mergeStrategyPoolAllocations } from "@/lib/pool-allocations"
 import { AUTO_PRESET_SUB_AGENTS } from "@/lib/strategy-presets"
 
 const ease = [0.22, 1, 0.36, 1] as const
@@ -34,11 +35,10 @@ function AutoSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isEditing = searchParams.get("edit") === "1"
+  const { pools, loading: poolsLoading, error: poolsError } = useQuickSwapPools()
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [depositInput, setDepositInput] = useState(String(DEFAULT_DEPOSIT_AMOUNT))
-  const [protocolAmounts, setProtocolAmounts] = useState<ProtocolAllocations>(
-    DEFAULT_PROTOCOL_ALLOCATIONS,
-  )
+  const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>({})
   const [subAgents, setSubAgents] = useState<SubAgentConfigItem[]>(toSubAgentsFromPresets())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -65,23 +65,39 @@ function AutoSetupContent() {
           router.replace(APP_ROUTES.setupCustom)
           return
         }
-        setProtocolAmounts(strategy.protocolAllocations)
         setSubAgents(strategy.subAgents)
         if (strategy.depositAmount > 0) {
           setDepositInput(String(strategy.depositAmount))
+        }
+        if (pools.length > 0) {
+          setPoolAmounts(mergeStrategyPoolAllocations(strategy.poolAllocations, pools))
         }
       }
 
       setLoading(false)
     }
 
-    load()
-  }, [router, isEditing])
+    if (!poolsLoading) {
+      load()
+    }
+  }, [router, isEditing, pools, poolsLoading])
+
+  useEffect(() => {
+    if (pools.length > 0 && Object.keys(poolAmounts).length === 0) {
+      setPoolAmounts(mergeStrategyPoolAllocations(undefined, pools))
+    }
+  }, [pools, poolAmounts])
 
   async function saveSetup() {
     const amount = Number(depositInput)
     if (!Number.isFinite(amount) || amount <= 0) {
       setError("Enter the amount you deposited.")
+      return
+    }
+
+    const allocations = activePoolAllocations(poolAmounts)
+    if (Object.keys(allocations).length === 0) {
+      setError("Allocate capital to at least one QuickSwap pool.")
       return
     }
 
@@ -105,7 +121,7 @@ function AutoSetupContent() {
       strategyType: "auto",
       status: "active",
       depositAmount: amount,
-      protocolAllocations: protocolAmounts,
+      poolAllocations: allocations,
       subAgents,
     })
 
@@ -119,7 +135,7 @@ function AutoSetupContent() {
     router.push(APP_ROUTES.dashboard)
   }
 
-  if (loading || !walletAddress) {
+  if (loading || poolsLoading || !walletAddress) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background dot-grid-bg">
         <p className="font-mono text-xs text-muted-foreground">Loading…</p>
@@ -132,7 +148,7 @@ function AutoSetupContent() {
       <SetupNav
         title={
           isEditing
-            ? "Edit auto agent — protocols, sub-agents, and prompts"
+            ? "Edit auto agent — pools, sub-agents, and prompts"
             : "Auto setup — configure preset strategy and deposit"
         }
         walletAddress={walletAddress}
@@ -152,7 +168,7 @@ function AutoSetupContent() {
           </p>
           <h1 className="text-3xl font-pixel uppercase tracking-tight">Auto Agent Setup</h1>
           <p className="max-w-2xl text-xs font-mono leading-relaxed text-muted-foreground">
-            Arcane starts you with a preset strategy. Adjust protocol allocation, sub-agent
+            Arcane starts you with a preset strategy. Adjust QuickSwap pool allocation, sub-agent
             models, and system prompts, then deposit to your generated address.
           </p>
         </motion.div>
@@ -165,10 +181,13 @@ function AutoSetupContent() {
             depositAmount={depositInput}
             onDepositAmountChange={setDepositInput}
           />
-          <ProtocolAllocationEditor
-            values={protocolAmounts}
-            onChange={setProtocolAmounts}
-            title="Protocol allocation"
+          <PoolAllocationEditor
+            pools={pools}
+            values={poolAmounts}
+            onChange={setPoolAmounts}
+            mode="auto"
+            error={poolsError}
+            title="QuickSwap pool allocation"
           />
         </div>
 

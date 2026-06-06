@@ -14,10 +14,12 @@ import type {
 
 const Q96 = 2n ** 96n;
 const PRICE_PRECISION = 12n;
+const MAX_SANE_PRICE = 1_000_000;
+const MIN_SANE_PRICE = 1e-12;
 
 export type PoolPriceInfo = {
-  token1PerToken0: string;
-  token0PerToken1: string;
+  token1PerToken0: string | null;
+  token0PerToken1: string | null;
 };
 
 export type EnrichedPoolView = QuickSwapPool & {
@@ -34,6 +36,37 @@ export type SamplePoolQuote = {
 /** Algebra lastFee 500 → 0.05% (fee / 1_000_000 × 100). */
 export function feeTierToPercent(lastFee: number): number {
   return (lastFee / 1_000_000) * 100;
+}
+
+export function isSanePriceString(value: string | null | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) && n > MIN_SANE_PRICE && n < MAX_SANE_PRICE;
+}
+
+/** Format a human token amount for UI (handles tiny swap rates like USDCe→WETH). */
+export function formatHumanTokenAmount(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0";
+  }
+  if (value >= 1_000_000) {
+    return value.toExponential(4);
+  }
+  if (value >= 1) {
+    return value.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  }
+  if (value >= 0.0001) {
+    const fixed = value.toFixed(8);
+    return fixed.replace(/\.?0+$/, "");
+  }
+  return value.toPrecision(4);
+}
+
+function humanAmountFromBaseUnits(amount: bigint, decimals: number): number {
+  const scale = 10 ** decimals;
+  return Number(amount) / scale;
 }
 
 /**
@@ -58,9 +91,12 @@ export function priceFromSqrtPriceX96(
       ? (10n ** (PRICE_PRECISION * 2n)) / token1PerToken0Scaled
       : 0n;
 
+  const token1PerToken0 = formatScaledRatio(token1PerToken0Scaled);
+  const token0PerToken1 = formatScaledRatio(token0PerToken1Scaled);
+
   return {
-    token1PerToken0: formatScaledRatio(token1PerToken0Scaled),
-    token0PerToken1: formatScaledRatio(token0PerToken1Scaled),
+    token1PerToken0: isSanePriceString(token1PerToken0) ? token1PerToken0 : null,
+    token0PerToken1: isSanePriceString(token0PerToken1) ? token0PerToken1 : null,
   };
 }
 
@@ -70,6 +106,9 @@ function formatScaledRatio(value: bigint): string {
   }
   const scale = 10n ** PRICE_PRECISION;
   const whole = value / scale;
+  if (whole > 10n ** 12n) {
+    return "0";
+  }
   const frac = value % scale;
   if (frac === 0n) {
     return whole.toString();
@@ -77,6 +116,71 @@ function formatScaledRatio(value: bigint): string {
   const fracStr = frac.toString().padStart(Number(PRICE_PRECISION), "0");
   const trimmed = fracStr.replace(/0+$/, "");
   return `${whole}.${trimmed}`;
+}
+
+export function pickPriceLabel(
+  token0: QuickSwapPoolToken,
+  token1: QuickSwapPoolToken,
+  prices: PoolPriceInfo,
+): string | null {
+  if (prices.token1PerToken0) {
+    return `1 ${token0.symbol} ≈ ${formatHumanTokenAmount(Number(prices.token1PerToken0))} ${token1.symbol}`;
+  }
+  if (prices.token0PerToken1) {
+    return `1 ${token1.symbol} ≈ ${formatHumanTokenAmount(Number(prices.token0PerToken1))} ${token0.symbol}`;
+  }
+  return null;
+}
+
+async function spotPriceLabelFromQuote(
+  token0: QuickSwapPoolToken,
+  token1: QuickSwapPoolToken,
+): Promise<string | null> {
+  const candidates: Array<{
+    tokenIn: QuickSwapPoolToken;
+    tokenOut: QuickSwapPoolToken;
+    amountIn: bigint;
+  }> = [];
+
+  const amount0 = SAMPLE_QUOTE_AMOUNT[token0.symbol];
+  if (amount0) {
+    candidates.push({ tokenIn: token0, tokenOut: token1, amountIn: amount0 });
+  }
+  const amount1 = SAMPLE_QUOTE_AMOUNT[token1.symbol];
+  if (amount1) {
+    candidates.push({ tokenIn: token1, tokenOut: token0, amountIn: amount1 });
+  }
+
+  for (const { tokenIn, tokenOut, amountIn } of candidates) {
+    try {
+      const quote = await quoteExactIn(tokenIn.address, tokenOut.address, amountIn);
+      const inHuman = humanAmountFromBaseUnits(BigInt(quote.amountIn), tokenIn.decimals);
+      const outHuman = humanAmountFromBaseUnits(BigInt(quote.amountOut), tokenOut.decimals);
+      if (inHuman <= 0 || outHuman <= 0) {
+        continue;
+      }
+      const perOne = outHuman / inHuman;
+      if (perOne > MIN_SANE_PRICE && perOne < MAX_SANE_PRICE) {
+        return `1 ${tokenIn.symbol} ≈ ${formatHumanTokenAmount(perOne)} ${tokenOut.symbol}`;
+      }
+    } catch {
+      // try next direction
+    }
+  }
+
+  return null;
+}
+
+async function resolvePriceLabel(
+  token0: QuickSwapPoolToken,
+  token1: QuickSwapPoolToken,
+  prices: PoolPriceInfo,
+): Promise<string | null> {
+  const fromSqrt = pickPriceLabel(token0, token1, prices);
+  if (fromSqrt) {
+    return fromSqrt;
+  }
+  return spotPriceLabelFromQuote(token0, token1);
 }
 
 export function enrichMetricsFromState(
@@ -99,6 +203,7 @@ export function enrichMetricsFromState(
     lastFee: state.globalState.lastFee,
     token1PerToken0: prices.token1PerToken0,
     token0PerToken1: prices.token0PerToken1,
+    priceLabel: pickPriceLabel(token0, token1, prices),
     feeTierPercent: feeTierToPercent(state.globalState.lastFee),
     feeApr: null,
     lastUpdated: new Date().toISOString(),
@@ -112,7 +217,17 @@ export async function getPoolMetrics(poolAddress: Address): Promise<PoolMetrics>
   const token0: QuickSwapPoolToken = resolveToken(chainId, state.token0);
   const token1: QuickSwapPoolToken = resolveToken(chainId, state.token1);
 
-  return enrichMetricsFromState(state, token0, token1);
+  const metrics = enrichMetricsFromState(state, token0, token1);
+
+  if (!metrics.priceLabel) {
+    const priceLabel = await resolvePriceLabel(token0, token1, {
+      token1PerToken0: metrics.token1PerToken0,
+      token0PerToken1: metrics.token0PerToken1,
+    });
+    return { ...metrics, priceLabel };
+  }
+
+  return metrics;
 }
 
 function resolveToken(chainId: number, address: Address): QuickSwapPoolToken {

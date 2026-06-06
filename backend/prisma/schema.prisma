@@ -48,6 +48,8 @@ model AgentStrategy {
   status              StrategyStatus       @default(draft)
   depositAmount       Float                @default(0) @map("deposit_amount")
   subAgentConfig      Json?                @map("sub_agent_config")
+  /** QuickSwap pool id → allocation amount (e.g. usdce-wsomi). */
+  poolAllocations     Json?                @map("pool_allocations")
   protocolAllocations ProtocolAllocation[]
   createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz

@@ -1,12 +1,22 @@
 import { apiRequest } from "./client";
 import type {
+  FetchPoolsOptions,
   QuickSwapPoolDetailResponse,
   QuickSwapPoolQuoteResponse,
   QuickSwapPoolsResponse,
 } from "./quickswap-types";
 
-export async function fetchPools() {
-  return apiRequest<QuickSwapPoolsResponse>("/api/v1/quickswap/pools");
+export async function fetchPools(options?: FetchPoolsOptions) {
+  const params = new URLSearchParams();
+  if (options?.context) {
+    params.set("context", options.context);
+  }
+  if (options?.sort) {
+    params.set("sort", options.sort);
+  }
+  const query = params.toString();
+  const path = query ? `/api/v1/quickswap/pools?${query}` : "/api/v1/quickswap/pools";
+  return apiRequest<QuickSwapPoolsResponse>(path);
 }
 
 export async function fetchPool(poolId: string) {

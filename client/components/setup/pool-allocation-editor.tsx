@@ -1,6 +1,13 @@
-import type { QuickSwapPool } from "@/lib/api/quickswap-types"
+import type { PoolSortField, QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
 import { formatLiquidity } from "@/lib/pool-allocations"
+
+const SORT_OPTIONS: Array<{ value: PoolSortField; label: string }> = [
+  { value: "liquidity", label: "Liquidity" },
+  { value: "apy", label: "APY" },
+  { value: "tvl", label: "TVL" },
+  { value: "volume", label: "Volume" },
+]
 
 type PoolAllocationEditorProps = {
   pools: QuickSwapPool[]
@@ -10,10 +17,21 @@ type PoolAllocationEditorProps = {
   loading?: boolean
   error?: string | null
   title?: string
+  subtitle?: string | null
+  sort?: PoolSortField
+  onSortChange?: (sort: PoolSortField) => void
 }
 
 function priceHint(pool: QuickSwapPool): string {
   return pool.metrics.priceLabel ?? "Price unavailable"
+}
+
+function formatApy(pool: QuickSwapPool): string | null {
+  const apy = pool.metrics.feeApr
+  if (apy == null || !Number.isFinite(apy) || apy <= 0) {
+    return null
+  }
+  return `${apy.toFixed(2)}% APR`
 }
 
 export function PoolAllocationEditor({
@@ -24,6 +42,9 @@ export function PoolAllocationEditor({
   loading = false,
   error = null,
   title = "QuickSwap pool allocation",
+  subtitle = null,
+  sort = "liquidity",
+  onSortChange,
 }: PoolAllocationEditorProps) {
   const total = Object.values(values).reduce((sum, value) => sum + value, 0)
 
@@ -75,14 +96,40 @@ export function PoolAllocationEditor({
 
   return (
     <div className="border border-border p-6">
-      <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-        {title}
-      </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
+            {title}
+          </p>
+          {subtitle && (
+            <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
+              {subtitle}
+            </p>
+          )}
+        </div>
+        {mode === "custom" && onSortChange && (
+          <label className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+            Sort
+            <select
+              value={sort}
+              onChange={(e) => onSortChange(e.target.value as PoolSortField)}
+              className="rounded border border-border bg-background px-2 py-1 text-[10px] text-foreground"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
       <div className="space-y-5">
         {pools.map((pool) => {
           const amount = values[pool.id] ?? 0
           const enabled = amount > 0
           const showEditor = mode === "auto" || enabled
+          const apyLabel = formatApy(pool)
 
           return (
             <div key={pool.id} className="space-y-2 border-b border-border pb-4 last:border-b-0">
@@ -105,8 +152,13 @@ export function PoolAllocationEditor({
                     {pool.token0.symbol}/{pool.token1.symbol} ·{" "}
                     {pool.metrics.feeTierPercent != null
                       ? `${pool.metrics.feeTierPercent}% fee`
-                      : "fee —"}
+                      : apyLabel ?? "fee —"}
                   </p>
+                  {apyLabel && pool.metrics.feeTierPercent != null && (
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      {apyLabel}
+                    </p>
+                  )}
                   <p className="mt-1 font-mono text-[10px] text-muted-foreground">
                     {priceHint(pool)}
                   </p>

@@ -2,10 +2,9 @@ import { Router } from "express";
 import { isAddress } from "viem";
 import { z } from "zod";
 import { getQuickSwapEnv } from "../../../../config/env";
-import {
-  getEnrichedPool,
-  listPoolsWithMetrics,
-} from "../../../../services/defi/quickswap/pool-metrics.service";
+import { getEnrichedPool } from "../../../../services/defi/quickswap/pool-metrics.service";
+import { listPoolsForContext } from "../../../../services/defi/quickswap/pool-list.service";
+import type { PoolSortField } from "../../../../services/defi/quickswap/pool-ranking.service";
 import {
   QuickSwapNotDeployedError,
   getKnownPoolById,
@@ -18,6 +17,11 @@ import { fail, ok } from "../../../../utils/http-response";
 
 const poolIdParamSchema = z.object({
   poolId: z.string().min(1),
+});
+
+const poolsQuerySchema = z.object({
+  context: z.enum(["auto", "custom", "all"]).optional(),
+  sort: z.enum(["liquidity", "apy", "tvl", "volume", "score"]).optional(),
 });
 
 const quoteQuerySchema = z.object({
@@ -58,11 +62,24 @@ function handleQuickSwapError(
 export const quickswapPoolsRouter = Router();
 
 quickswapPoolsRouter.get("/api/v1/quickswap/pools", async (req, res) => {
+  const parsed = poolsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return fail(req, res, 400, {
+      code: "VALIDATION_ERROR",
+      message: "Invalid pools query parameters",
+      details: parsed.error.flatten().fieldErrors,
+    });
+  }
+
   try {
-    const pools = await listPoolsWithMetrics();
+    const result = await listPoolsForContext({
+      context: parsed.data.context,
+      sort: parsed.data.sort as PoolSortField | undefined,
+    });
     return ok(req, res, {
       ...quickSwapChainMeta(),
-      pools,
+      pools: result.pools,
+      meta: result.meta,
     });
   } catch (err) {
     const handled = handleQuickSwapError(req, res, err);

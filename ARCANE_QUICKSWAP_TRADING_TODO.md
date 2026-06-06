@@ -299,7 +299,10 @@ runCycle(userId):
 | Sub-agents | Full preset (orchestrator, yield, signal, risk) | User toggles + custom prompts |
 | LLM prompt | Aggressive yield optimisation | Respect user constraints |
 
-- [ ] Implement strategy-type-specific prompts in `trading-runner.service.ts`
+- [x] Auto: `GET /quickswap/pools?context=auto` picks 3–4 top pools (liquidity + APR score, unique pairs)
+- [x] Custom: `GET /quickswap/pools?context=custom&sort=` — all pools, sortable (liquidity, apy, tvl, volume)
+- [x] Implied fee APR on pool metrics; auto suggested allocations by TVL/liquidity
+- [x] Strategy-type-specific LLM prompts in `quickswap-llm-tools.ts`
 - [x] Store `cycleIntervalMinutes` on `AgentStrategy`
 
 ---

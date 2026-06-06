@@ -8,6 +8,7 @@ import {
   getPoolState,
   listKnownPools,
 } from "./pool-registry";
+import { computeFeeAprPercent } from "./pool-ranking.service";
 import { quoteExactIn } from "./quote.service";
 import type {
   PoolMetrics,
@@ -295,10 +296,15 @@ function toSampleQuote(direction: string, quote: SwapQuote): SamplePoolQuote {
 }
 
 function mergeSubgraphVolume(metrics: PoolMetrics, pool: QuickSwapPool): PoolMetrics {
-  return {
+  const merged: PoolMetrics = {
     ...metrics,
     totalValueLockedUsd: pool.metrics.totalValueLockedUsd,
     volumeUsd: pool.metrics.volumeUsd,
+  };
+  const apy = computeFeeAprPercent({ ...pool, metrics: merged });
+  return {
+    ...merged,
+    feeApr: apy > 0 ? apy : merged.feeApr,
   };
 }
 

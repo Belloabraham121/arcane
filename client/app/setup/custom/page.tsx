@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { getMe } from "@/lib/api/auth"
 import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy"
+import type { PoolSortField } from "@/lib/api/quickswap-types"
 import {
   DEFAULT_DEPOSIT_AMOUNT,
   type PoolAllocations,
@@ -37,7 +38,11 @@ function CustomSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isEditing = searchParams.get("edit") === "1"
-  const { pools, loading: poolsLoading, error: poolsError } = useQuickSwapPools()
+  const [poolSort, setPoolSort] = useState<PoolSortField>("liquidity")
+  const { pools, meta, loading: poolsLoading, error: poolsError } = useQuickSwapPools({
+    context: "custom",
+    sort: poolSort,
+  })
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [depositInput, setDepositInput] = useState(String(DEFAULT_DEPOSIT_AMOUNT))
   const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>({})
@@ -196,6 +201,13 @@ function CustomSetupContent() {
             onChange={setPoolAmounts}
             mode="custom"
             error={poolsError}
+            sort={poolSort}
+            onSortChange={setPoolSort}
+            subtitle={
+              meta?.total
+                ? `${meta.total} pools available — sorted by ${poolSort}. Enable pools and set allocations.`
+                : undefined
+            }
           />
         </div>
 

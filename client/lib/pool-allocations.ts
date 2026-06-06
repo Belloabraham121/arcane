@@ -96,15 +96,31 @@ export function defaultAllocationsFromPools(pools: QuickSwapPool[]): PoolAllocat
 export function mergeStrategyPoolAllocations(
   saved: PoolAllocations | undefined,
   pools: QuickSwapPool[],
+  suggested?: PoolAllocations,
 ): PoolAllocations {
   if (!saved || Object.keys(saved).length === 0) {
+    if (suggested && Object.keys(suggested).length > 0) {
+      const result: PoolAllocations = {}
+      for (const pool of pools) {
+        result[pool.id] = suggested[pool.id] ?? 0
+      }
+      const hasPositive = Object.values(result).some((amount) => amount > 0)
+      if (hasPositive) {
+        return result
+      }
+    }
     return defaultAllocationsFromPools(pools)
   }
 
   const result: PoolAllocations = {}
   for (const pool of pools) {
-    const id = pool.id as PoolId
-    result[id] = saved[id] ?? 0
+    result[pool.id] = saved[pool.id] ?? 0
+  }
+
+  for (const [id, amount] of Object.entries(saved)) {
+    if (amount > 0 && result[id] == null) {
+      result[id] = amount
+    }
   }
 
   const hasPositive = Object.values(result).some((amount) => amount > 0)

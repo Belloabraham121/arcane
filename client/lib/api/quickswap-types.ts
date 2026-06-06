@@ -1,6 +1,18 @@
 /** Pool id from backend — subgraph pool address (lowercase) or legacy seed slug. */
 export type QuickSwapPoolId = string;
 
+export type PoolSortField = "liquidity" | "apy" | "tvl" | "volume" | "score";
+
+export type PoolListContext = "auto" | "custom" | "all";
+
+export type PoolsListMeta = {
+  context: PoolListContext;
+  sort: PoolSortField;
+  total: number;
+  selectionCount?: number;
+  suggestedAllocations?: Record<string, number>;
+};
+
 export type QuickSwapPoolToken = {
   address: `0x${string}`;
   symbol: string;
@@ -20,6 +32,7 @@ export type PoolMetrics = {
   priceLabel: string | null;
   feeTierPercent: number | null;
   feeApr: number | null;
+  /** Implied fee APR percent (volume/TVL proxy from subgraph). */
   totalValueLockedUsd: string | null;
   volumeUsd: string | null;
   lastUpdated: string;
@@ -63,6 +76,12 @@ export type QuickSwapChainMeta = {
 
 export type QuickSwapPoolsResponse = QuickSwapChainMeta & {
   pools: QuickSwapPool[];
+  meta?: PoolsListMeta;
+};
+
+export type FetchPoolsOptions = {
+  context?: PoolListContext;
+  sort?: PoolSortField;
 };
 
 export type QuickSwapPoolDetailResponse = QuickSwapChainMeta & {

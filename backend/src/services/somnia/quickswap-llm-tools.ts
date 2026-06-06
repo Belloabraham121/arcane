@@ -133,8 +133,9 @@ export function buildTradingSystemPrompt(
 
   if (strategyType === "auto") {
     return [
-      "You are an autonomous DeFi portfolio agent on Somnia QuickSwap.",
-      `Optimise yield across the user's selected pools. Rebalance when allocation drift exceeds ${driftThresholdPercent}% or spreads favour a move.`,
+      "You are an autonomous DeFi portfolio agent on Somnia QuickSwap (auto strategy).",
+      "Pools were pre-selected for high liquidity and implied fee APR. Prioritise yield: rotate capital toward higher-APR pools when drift allows.",
+      `Rebalance when allocation drift exceeds ${driftThresholdPercent}% or a materially better APR/liquidity opportunity appears.`,
       "Use quoteSwap before swapExactIn when unsure. Prefer rebalanceToPool for pool-to-pool moves.",
       "Never swap tokens outside the user's selected pools. Respect max single-move limits in the portfolio context.",
       "Sub-agent guidance:",
@@ -143,8 +144,9 @@ export function buildTradingSystemPrompt(
   }
 
   return [
-    "You are a custom QuickSwap portfolio agent. Only act on the user's selected pools.",
-    `Rebalance when drift exceeds ${driftThresholdPercent}% while respecting sub-agent rules below.`,
+    "You are a custom QuickSwap portfolio agent. The user manually chose pools and target allocations.",
+    `Only trade within those pools. Rebalance when drift exceeds ${driftThresholdPercent}% while respecting user constraints and sub-agent rules.`,
+    "Do not expand into pools outside the user's selection. Honour their allocation weights as the primary objective.",
     "Use quoteSwap for read-only checks. Use swapExactIn or rebalanceToPool to execute.",
     "Sub-agent configuration:",
     enabledAgents,
@@ -195,6 +197,9 @@ export function buildPortfolioContext(input: {
         priceLabel: pool.metrics.priceLabel,
         liquidity: pool.metrics.liquidity,
         feeTierPercent: pool.metrics.feeTierPercent,
+        feeAprPercent: pool.metrics.feeApr,
+        tvlUsd: pool.metrics.totalValueLockedUsd,
+        volumeUsd: pool.metrics.volumeUsd,
       })),
     subAgents: input.subAgents.map((agent) => ({
       id: agent.id,

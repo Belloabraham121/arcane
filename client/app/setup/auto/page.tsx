@@ -37,7 +37,9 @@ function AutoSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isEditing = searchParams.get("edit") === "1"
-  const { pools, loading: poolsLoading, error: poolsError } = useQuickSwapPools()
+  const { pools, meta, loading: poolsLoading, error: poolsError } = useQuickSwapPools({
+    context: "auto",
+  })
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [depositInput, setDepositInput] = useState(String(DEFAULT_DEPOSIT_AMOUNT))
   const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>({})
@@ -84,7 +86,13 @@ function AutoSetupContent() {
           setDepositInput(String(strategy.depositAmount))
         }
         if (pools.length > 0) {
-          setPoolAmounts(mergeStrategyPoolAllocations(strategy.poolAllocations, pools))
+          setPoolAmounts(
+            mergeStrategyPoolAllocations(
+              strategy.poolAllocations,
+              pools,
+              meta?.suggestedAllocations,
+            ),
+          )
         }
       }
 
@@ -94,13 +102,15 @@ function AutoSetupContent() {
     if (!poolsLoading) {
       load()
     }
-  }, [router, isEditing, pools, poolsLoading])
+  }, [router, isEditing, pools, poolsLoading, meta])
 
   useEffect(() => {
     if (pools.length > 0 && Object.keys(poolAmounts).length === 0) {
-      setPoolAmounts(mergeStrategyPoolAllocations(undefined, pools))
+      setPoolAmounts(
+        mergeStrategyPoolAllocations(undefined, pools, meta?.suggestedAllocations),
+      )
     }
-  }, [pools, poolAmounts])
+  }, [pools, poolAmounts, meta])
 
   async function saveSetup() {
     const amount = Number(depositInput)
@@ -206,7 +216,12 @@ function AutoSetupContent() {
             onChange={setPoolAmounts}
             mode="auto"
             error={poolsError}
-            title="QuickSwap pool allocation"
+            title="Top QuickSwap pools"
+            subtitle={
+              meta?.selectionCount
+                ? `Arcane selected ${meta.selectionCount} high-liquidity, high-APR pools. Allocations are auto-balanced — adjust if needed.`
+                : "Top pools by liquidity and implied APR."
+            }
           />
         </div>
 

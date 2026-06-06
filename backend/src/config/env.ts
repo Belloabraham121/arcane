@@ -105,6 +105,9 @@ export type QuickSwapEnv = {
   /** Minimum TVL (USD) for subgraph pool discovery. Use 0 to include all indexed pools. */
   minPoolTvlUsd: number;
   poolDiscoveryCacheTtlMs: number;
+  autoPoolMinCount: number;
+  autoPoolMaxCount: number;
+  autoPoolMinTvlUsd: number;
   defaultSlippageBps: number;
   maxSlippageBps: number;
   txReceiptTimeoutMs: number;
@@ -150,6 +153,9 @@ export function getQuickSwapEnv(): QuickSwapEnv {
     poolDiscoveryCacheTtlMs: Number(
       optional("QUICKSWAP_POOL_CACHE_TTL_MS", "60000"),
     ),
+    autoPoolMinCount: Number(optional("QUICKSWAP_AUTO_POOL_MIN", "3")),
+    autoPoolMaxCount: Number(optional("QUICKSWAP_AUTO_POOL_MAX", "4")),
+    autoPoolMinTvlUsd: Number(optional("QUICKSWAP_AUTO_MIN_TVL_USD", "0.01")),
     defaultSlippageBps: Number(
       optional("QUICKSWAP_DEFAULT_SLIPPAGE_BPS", "50"),
     ),

@@ -10,6 +10,8 @@ From this directory:
 
 ```bash
 cp .env.example .env
+npm install
+npm run dev          # API on http://localhost:8080
 docker compose up -d
 docker compose ps
 docker compose logs -f
@@ -46,6 +48,17 @@ npm run smoke:llm:tools    # inferToolsChat (no MCP URLs by default)
 | `SOMNIA_RPC_HTTP` | `https://api.infra.testnet.somnia.network` |
 
 Fund STT: [testnet faucet](https://testnet.somnia.network). Gas model: [Gas Fees](https://docs.somnia.network/agents/invoking-agents/gas-fees).
+
+## Email → wallet (deterministic)
+
+On sign-up/sign-in, derive a Somnia address from the user’s normalized email using a server-held `MASTER_SEED` (BIP-44). Same email always maps to the same address; private keys are encrypted at rest with `ENCRYPTION_SECRET_KEY`.
+
+```bash
+# Set MASTER_SEED + ENCRYPTION_SECRET_KEY in .env first
+npm run demo:wallet -- agent@arcane.dev
+```
+
+Flow: `normalizeEmail` → `keccak256(email)` → index → `m/44'/60'/0'/0/<index>` → address. Wire `createWalletRecord(email)` into your auth handler after email verification; persist via Prisma when the DB layer lands.
 
 ## Folder structure
 

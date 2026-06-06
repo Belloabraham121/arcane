@@ -3,15 +3,22 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
     "smoke:llm": "tsx scripts/smoke-llm-inference.ts",
     "smoke:llm:check": "tsx scripts/smoke-llm-inference.ts --check-only",
-    "smoke:llm:tools": "tsx scripts/smoke-llm-inference.ts --method=inferToolsChat"
+    "smoke:llm:tools": "tsx scripts/smoke-llm-inference.ts --method=inferToolsChat",
+    "demo:wallet": "tsx scripts/demo-email-wallet.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "express": "^4.21.2",
     "viem": "^2.23.2"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.10",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   }

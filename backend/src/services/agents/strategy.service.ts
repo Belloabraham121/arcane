@@ -4,15 +4,14 @@ import {
   shouldTriggerCycleOnActivate,
 } from "./trading-runner.service";
 import * as repo from "./strategy.repository";
+import { isKnownPoolId } from "../defi/quickswap/pool-registry";
 import {
   DEFAULT_AUTO_SUB_AGENTS,
   DEFAULT_CUSTOM_SUB_AGENTS,
   DEFAULT_DEPOSIT_AMOUNT,
   DEFAULT_POOL_ALLOCATIONS,
-  POOL_IDS,
   type AgentStrategyResponse,
   type PoolAllocations,
-  type PoolId,
   type StrategyType,
   type SubAgentConfigItem,
 } from "./strategy.types";
@@ -30,11 +29,9 @@ export class StrategyError extends Error {
   }
 }
 
-function isPoolId(value: string): value is PoolId {
-  return (POOL_IDS as readonly string[]).includes(value);
-}
-
-export function parsePoolAllocations(input: unknown): PoolAllocations | undefined {
+export async function parsePoolAllocations(
+  input: unknown,
+): Promise<PoolAllocations | undefined> {
   if (input == null) {
     return undefined;
   }
@@ -52,7 +49,7 @@ export function parsePoolAllocations(input: unknown): PoolAllocations | undefine
   let positiveCount = 0;
 
   for (const key of keys) {
-    if (!isPoolId(key)) {
+    if (!(await isKnownPoolId(key))) {
       throw new StrategyError("VALIDATION_ERROR", `Unknown pool: ${key}`);
     }
     const value = record[key];
@@ -218,9 +215,9 @@ function poolAllocationsFromRows(
     return { ...DEFAULT_POOL_ALLOCATIONS };
   }
 
-  const map = {} as PoolAllocations;
+  const map: PoolAllocations = {};
   for (const row of rows) {
-    if (isPoolId(row.poolId)) {
+    if (row.poolId) {
       map[row.poolId] = row.amount;
     }
   }

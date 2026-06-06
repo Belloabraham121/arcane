@@ -1,5 +1,5 @@
-/** Canonical QuickSwap pool ids from backend seed pairs (Somnia mainnet). */
-export type QuickSwapPoolId = "usdce-wsomi" | "usdce-weth" | "wsomi-weth";
+/** Pool id from backend — subgraph pool address (lowercase) or legacy seed slug. */
+export type QuickSwapPoolId = string;
 
 export type QuickSwapPoolToken = {
   address: `0x${string}`;
@@ -20,6 +20,8 @@ export type PoolMetrics = {
   priceLabel: string | null;
   feeTierPercent: number | null;
   feeApr: number | null;
+  totalValueLockedUsd: string | null;
+  volumeUsd: string | null;
   lastUpdated: string;
 };
 

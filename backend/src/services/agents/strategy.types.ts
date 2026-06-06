@@ -1,10 +1,15 @@
-export const POOL_IDS = ["usdce-wsomi", "usdce-weth", "wsomi-weth"] as const;
-export type PoolId = (typeof POOL_IDS)[number];
+/** Legacy seed slugs kept for default allocations and existing saved strategies. */
+export const LEGACY_POOL_IDS = ["usdce-wsomi", "usdce-weth", "wsomi-weth"] as const;
+
+/** @deprecated Use dynamic pool ids from GET /api/v1/quickswap/pools (subgraph addresses). */
+export const POOL_IDS = LEGACY_POOL_IDS;
+
+export type PoolId = string;
 
 export type StrategyType = "auto" | "custom";
 export type StrategyStatus = "draft" | "active";
 
-export type PoolAllocations = Record<PoolId, number>;
+export type PoolAllocations = Record<string, number>;
 
 export const DEFAULT_POOL_ALLOCATIONS: PoolAllocations = {
   "usdce-wsomi": 50_000_000,

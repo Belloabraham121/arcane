@@ -93,7 +93,7 @@ agentStrategyRouter.put("/api/v1/agents/strategy", requireAuth, async (req, res)
 
   try {
     const poolAllocations = parsed.data.poolAllocations
-      ? parsePoolAllocations(parsed.data.poolAllocations)
+      ? await parsePoolAllocations(parsed.data.poolAllocations)
       : undefined;
     const subAgents = parsed.data.subAgents
       ? parseSubAgents(parsed.data.subAgents)
@@ -131,7 +131,7 @@ agentStrategyRouter.patch(
     }
 
     try {
-      const poolAllocations = parsePoolAllocations(parsed.data.poolAllocations);
+      const poolAllocations = await parsePoolAllocations(parsed.data.poolAllocations);
       if (!poolAllocations) {
         return fail(req, res, 400, {
           code: "VALIDATION_ERROR",

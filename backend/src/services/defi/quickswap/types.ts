@@ -25,6 +25,10 @@ export type PoolMetrics = {
   feeTierPercent: number | null;
   /** True APR requires volume — subgraph later. */
   feeApr: number | null;
+  /** Subgraph TVL in USD when on-chain reserves are unavailable. */
+  totalValueLockedUsd: string | null;
+  /** Subgraph cumulative volume in USD. */
+  volumeUsd: string | null;
   lastUpdated: string;
 };
 

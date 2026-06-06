@@ -111,7 +111,9 @@ export function PoolAllocationEditor({
                     {priceHint(pool)}
                   </p>
                   <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                    Liquidity {formatLiquidity(pool.metrics.liquidity)}
+                    {pool.metrics.totalValueLockedUsd != null
+                      ? `TVL $${Number(pool.metrics.totalValueLockedUsd).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+                      : `Liquidity ${formatLiquidity(pool.metrics.liquidity)}`}
                   </p>
                 </div>
                 {showEditor && (

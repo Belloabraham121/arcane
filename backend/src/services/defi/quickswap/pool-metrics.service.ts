@@ -2,7 +2,12 @@ import type { Address } from "viem";
 import { getQuickSwapTokenByAddress } from "../../../config/quickswap";
 import { getQuickSwapEnv } from "../../../config/env";
 import { SAMPLE_QUOTE_AMOUNT } from "./constants";
-import { getPoolState, getKnownPoolById, listKnownPools } from "./pool-registry";
+import {
+  getKnownPoolById,
+  getPoolByPair,
+  getPoolState,
+  listKnownPools,
+} from "./pool-registry";
 import { quoteExactIn } from "./quote.service";
 import type {
   PoolMetrics,
@@ -206,6 +211,8 @@ export function enrichMetricsFromState(
     priceLabel: pickPriceLabel(token0, token1, prices),
     feeTierPercent: feeTierToPercent(state.globalState.lastFee),
     feeApr: null,
+    totalValueLockedUsd: null,
+    volumeUsd: null,
     lastUpdated: new Date().toISOString(),
   };
 }
@@ -287,16 +294,59 @@ function toSampleQuote(direction: string, quote: SwapQuote): SamplePoolQuote {
   };
 }
 
+function mergeSubgraphVolume(metrics: PoolMetrics, pool: QuickSwapPool): PoolMetrics {
+  return {
+    ...metrics,
+    totalValueLockedUsd: pool.metrics.totalValueLockedUsd,
+    volumeUsd: pool.metrics.volumeUsd,
+  };
+}
+
+async function metricsForPoolAddress(
+  poolAddress: Address,
+  pool: QuickSwapPool,
+): Promise<PoolMetrics | null> {
+  try {
+    return mergeSubgraphVolume(await getPoolMetrics(poolAddress), pool);
+  } catch {
+    return null;
+  }
+}
+
+async function enrichPoolMetrics(pool: QuickSwapPool): Promise<QuickSwapPool> {
+  const direct = await metricsForPoolAddress(pool.address, pool);
+  if (direct) {
+    return { ...pool, metrics: direct };
+  }
+
+  const canonical = await getPoolByPair(pool.token0.address, pool.token1.address);
+  if (canonical) {
+    const canonicalMetrics = await metricsForPoolAddress(canonical, pool);
+    if (canonicalMetrics) {
+      return { ...pool, metrics: canonicalMetrics };
+    }
+  }
+
+  const token0 = pool.token0;
+  const token1 = pool.token1;
+  const prices = priceFromSqrtPriceX96(
+    pool.metrics.sqrtPriceX96,
+    token0.decimals,
+    token1.decimals,
+  );
+  const metrics: PoolMetrics = {
+    ...pool.metrics,
+    token1PerToken0: prices.token1PerToken0,
+    token0PerToken1: prices.token0PerToken1,
+    priceLabel: pickPriceLabel(token0, token1, prices),
+  };
+  return { ...pool, metrics };
+}
+
 /** All known pools with live price metrics (no sample quotes — use getEnrichedPool for those). */
 export async function listPoolsWithMetrics(): Promise<QuickSwapPool[]> {
   const pools = await listKnownPools();
-
-  return Promise.all(
-    pools.map(async (pool) => {
-      const metrics = await getPoolMetrics(pool.address);
-      return { ...pool, metrics };
-    }),
-  );
+  return Promise.all(pools.map(enrichPoolMetrics));
 }
 
 /** Pool with enriched price metrics and optional sample swap quotes. */
@@ -306,15 +356,11 @@ export async function getEnrichedPool(poolId: string): Promise<EnrichedPoolView 
     return null;
   }
 
-  const metrics = await getPoolMetrics(pool.address);
-  const sampleQuotes = await sampleQuotesForPool({
-    ...pool,
-    metrics,
-  });
+  const enriched = await enrichPoolMetrics(pool);
+  const sampleQuotes = await sampleQuotesForPool(enriched);
 
   return {
-    ...pool,
-    metrics,
+    ...enriched,
     sampleQuotes,
   };
 }

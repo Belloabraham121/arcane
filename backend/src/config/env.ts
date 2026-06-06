@@ -92,12 +92,19 @@ export function getSomniaAgentEnv() {
   };
 }
 
+const DEFAULT_QUICKSWAP_SUBGRAPH_URL =
+  "https://api.subgraph.somnia.network/api/public/962dcbf6-75ff-4e54-b778-6b5816c05e7d/subgraphs/somnia-swap/v1.0.0/gn";
+
 export type QuickSwapEnv = {
   chainId: number;
   rpcHttp: string;
   rpcWs: string;
   contractsDeployed: boolean;
   contracts: QuickSwapContracts;
+  subgraphUrl: string;
+  /** Minimum TVL (USD) for subgraph pool discovery. Use 0 to include all indexed pools. */
+  minPoolTvlUsd: number;
+  poolDiscoveryCacheTtlMs: number;
   defaultSlippageBps: number;
   maxSlippageBps: number;
   txReceiptTimeoutMs: number;
@@ -138,6 +145,11 @@ export function getQuickSwapEnv(): QuickSwapEnv {
     rpcWs: optional("QUICKSWAP_RPC_WS", bundle.rpcWsDefault ?? ""),
     contractsDeployed: bundle.contractsDeployed,
     contracts,
+    subgraphUrl: optional("QUICKSWAP_SUBGRAPH_URL", DEFAULT_QUICKSWAP_SUBGRAPH_URL),
+    minPoolTvlUsd: Number(optional("QUICKSWAP_MIN_POOL_TVL_USD", "0")),
+    poolDiscoveryCacheTtlMs: Number(
+      optional("QUICKSWAP_POOL_CACHE_TTL_MS", "60000"),
+    ),
     defaultSlippageBps: Number(
       optional("QUICKSWAP_DEFAULT_SLIPPAGE_BPS", "50"),
     ),

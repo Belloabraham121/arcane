@@ -1,4 +1,4 @@
-export type PoolId = "usdce-wsomi" | "usdce-weth" | "wsomi-weth";
+export type PoolId = string;
 
 export type StrategyType = "auto" | "custom";
 

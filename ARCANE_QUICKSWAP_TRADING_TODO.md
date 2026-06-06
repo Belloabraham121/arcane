@@ -152,12 +152,12 @@ sequenceDiagram
 - [x] `backend/src/services/defi/quickswap/quickswap.adapter.ts` — facade over quote + swap + pool
 
 ### 3.2 Route planner (pool-to-pool capital movement)
-- [ ] `backend/src/services/defi/quickswap/route-planner.ts`:
+- [x] `backend/src/services/defi/quickswap/route-planner.ts`:
   - Graph: tokens as nodes, pools as edges
   - Find paths between source pool token and target pool token (max 3 hops)
   - Quote all candidate paths; pick best `amountOut`
   - `planRebalance(fromPool, toPool, amount)` — returns executable route
-- [ ] Use case: move USDCe from USDCe/WSOMI exposure → USDCe/WETH exposure via swap route
+- [x] Use case: move USDCe from USDCe/WSOMI exposure → USDCe/WETH exposure via swap route
 
 ### 3.3 Liquidity provision (optional MVP+)
 - [ ] `backend/src/services/defi/quickswap/liquidity.service.ts`:

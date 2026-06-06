@@ -7,6 +7,12 @@ import {
 } from "./pool-metrics.service";
 import { quoteExactIn, quoteExactInputPath } from "./quote.service";
 import {
+  findBestRoute,
+  planRebalance,
+  type FindBestRouteOptions,
+  type PlanRebalanceOptions,
+} from "./route-planner";
+import {
   buildApprove,
   buildSwapExactIn,
   buildSwapRoute,
@@ -15,6 +21,8 @@ import {
 import type {
   EncodedTxCall,
   QuickSwapPool,
+  QuotedSwapPath,
+  RebalancePlan,
   SwapBuildResult,
   SwapQuote,
 } from "./types";
@@ -128,6 +136,25 @@ export class QuickSwapAdapter {
 
   getPool(poolId: string): Promise<EnrichedPoolView | null> {
     return getEnrichedPool(poolId);
+  }
+
+  findBestRoute(
+    tokenIn: Address,
+    tokenOut: Address,
+    amountIn: bigint,
+    options?: FindBestRouteOptions,
+  ): Promise<QuotedSwapPath> {
+    return findBestRoute(tokenIn, tokenOut, amountIn, options);
+  }
+
+  planRebalance(
+    fromPoolId: string,
+    toPoolId: string,
+    amount: bigint,
+    recipient: Address,
+    options?: PlanRebalanceOptions,
+  ): Promise<RebalancePlan> {
+    return planRebalance(fromPoolId, toPoolId, amount, recipient, options);
   }
 }
 

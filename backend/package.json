@@ -11,6 +11,7 @@
     "smoke:quickswap:pools": "tsx scripts/smoke-quickswap-pools.ts",
     "smoke:quickswap:quote": "tsx scripts/smoke-quickswap-quote.ts",
     "smoke:quickswap:swap-build": "tsx scripts/smoke-quickswap-swap-build.ts",
+    "smoke:quickswap:route-planner": "tsx scripts/smoke-quickswap-route-planner.ts",
     "demo:wallet": "tsx scripts/demo-email-wallet.ts",
     "db:generate": "prisma generate",
     "db:migrate-pools": "tsx scripts/migrate-pool-allocations.ts",

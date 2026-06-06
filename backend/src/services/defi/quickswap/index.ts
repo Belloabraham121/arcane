@@ -7,4 +7,5 @@ export * from "./path-encoding";
 export * from "./quote.service";
 export * from "./pool-metrics.service";
 export * from "./swap.service";
+export * from "./route-planner";
 export * from "./quickswap.adapter";

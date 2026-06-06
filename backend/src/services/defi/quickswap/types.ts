@@ -67,6 +67,39 @@ export type QuickSwapPool = {
   metrics: PoolMetrics;
 };
 
+export type QuotedSwapPath = {
+  tokens: readonly Address[];
+  hops: number;
+  poolIds: string[];
+  quote: SwapQuote;
+};
+
+export type RebalanceNoSwapPlan = {
+  kind: "no_swap";
+  fromPoolId: string;
+  toPoolId: string;
+  token: Address;
+  amount: bigint;
+  reason: string;
+};
+
+export type RebalanceSwapPlan = {
+  kind: "swap";
+  fromPoolId: string;
+  toPoolId: string;
+  tokenIn: Address;
+  tokenOut: Address;
+  amountIn: bigint;
+  path: readonly Address[];
+  hops: number;
+  poolIds: string[];
+  quote: SwapQuote;
+  swap: SwapBuildResult;
+  approve: EncodedTxCall;
+};
+
+export type RebalancePlan = RebalanceNoSwapPlan | RebalanceSwapPlan;
+
 /** User pool allocation target (replaces protocol allocation in Phase 2). */
 export type PoolAllocation = {
   poolId: string;

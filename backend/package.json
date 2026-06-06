@@ -8,6 +8,7 @@
     "smoke:llm": "tsx scripts/smoke-llm-inference.ts",
     "smoke:llm:check": "tsx scripts/smoke-llm-inference.ts --check-only",
     "smoke:llm:tools": "tsx scripts/smoke-llm-inference.ts --method=inferToolsChat",
+    "smoke:quickswap:pools": "tsx scripts/smoke-quickswap-pools.ts",
     "demo:wallet": "tsx scripts/demo-email-wallet.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push"

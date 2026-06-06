@@ -71,13 +71,13 @@ sequenceDiagram
 > **User-facing goal:** On onboarding, show real QuickSwap pools the user can allocate capital to.
 
 ### 1.1 Pool discovery service
-- [ ] `backend/src/services/defi/quickswap/abis.ts` — SwapRouter, QuoterV2, Factory, Pool, NPM ABIs
-- [ ] `backend/src/services/defi/quickswap/constants.ts` — `ZERO_DEPLOYER`, default slippage, seed pairs
-- [ ] `backend/src/services/defi/quickswap/types.ts`:
+- [x] `backend/src/services/defi/quickswap/abis.ts` — SwapRouter, QuoterV2, Factory, Pool, NPM ABIs
+- [x] `backend/src/services/defi/quickswap/constants.ts` — `ZERO_DEPLOYER`, default slippage, seed pairs
+- [x] `backend/src/services/defi/quickswap/types.ts`:
   - `QuickSwapPool` — id, address, token0, token1, symbols, decimals
   - `PoolMetrics` — sqrtPrice, liquidity, feeApr (if available), lastUpdated
   - `PoolAllocation` — poolId, amount (replaces protocol allocation)
-- [ ] `backend/src/services/defi/quickswap/pool-registry.ts`:
+- [x] `backend/src/services/defi/quickswap/pool-registry.ts`:
   - `getPoolByPair(tokenA, tokenB)` via `AlgebraFactory.poolByPair`
   - `listKnownPools()` — seed pairs: USDCe/WSOMI, USDCe/WETH, WSOMI/WETH
   - `getPoolState(poolAddress)` — read slot0, liquidity, token balances

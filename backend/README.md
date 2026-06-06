@@ -24,6 +24,29 @@ docker compose down
 
 Images are built from `docker/postgres`, `docker/redis`, and `docker/rabbitmq`.
 
+## Somnia LLM smoke test
+
+TypeScript script to invoke [LLM Inference](https://docs.somnia.network/agents/base-agents/llm-inference) on testnet via the platform contract (no Solidity in this repo). It sends `createRequest` with a zero callback address, watches `RequestFinalized`, then reads `getRequest` and decodes the result — same pattern as the agents web app TypeScript snippet.
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Edit .env: set PRIVATE_KEY (wallet with testnet STT — ~0.24 STT per call)
+
+npm run smoke:llm:check    # RPC + deposit quote + payload encode only
+npm run smoke:llm          # live inferString call
+npm run smoke:llm:tools    # inferToolsChat (no MCP URLs by default)
+```
+
+| Variable | Default |
+| -------- | ------- |
+| `SOMNIA_AGENT_PLATFORM` | Testnet `0x037Bb9…6776` |
+| `SOMNIA_LLM_AGENT_ID` | `12847293847561029384` |
+| `SOMNIA_RPC_HTTP` | `https://api.infra.testnet.somnia.network` |
+
+Fund STT: [testnet faucet](https://testnet.somnia.network). Gas model: [Gas Fees](https://docs.somnia.network/agents/invoking-agents/gas-fees).
+
 ## Folder structure
 
 ```

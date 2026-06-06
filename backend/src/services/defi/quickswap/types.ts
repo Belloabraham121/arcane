@@ -39,6 +39,25 @@ export type SwapQuote = {
   fee: number;
 };
 
+/** Unsigned transaction call data (wallet executor submits in Phase 3.4). */
+export type EncodedTxCall = {
+  to: Address;
+  data: `0x${string}`;
+  value?: bigint;
+};
+
+export type SwapBuildResult = {
+  call: EncodedTxCall;
+  router: Address;
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+  quotedAmountOut?: bigint;
+  deadline: bigint;
+  /** Present for multihop `exactInput` routes. */
+  path?: `0x${string}`;
+  tokens?: readonly Address[];
+};
+
 export type QuickSwapPool = {
   id: string;
   label: string;

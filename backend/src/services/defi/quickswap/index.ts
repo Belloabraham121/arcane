@@ -3,5 +3,8 @@ export * from "./constants";
 export * from "./types";
 export * from "./client";
 export * from "./pool-registry";
+export * from "./path-encoding";
 export * from "./quote.service";
 export * from "./pool-metrics.service";
+export * from "./swap.service";
+export * from "./quickswap.adapter";

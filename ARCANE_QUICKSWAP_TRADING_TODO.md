@@ -144,12 +144,12 @@ sequenceDiagram
 > **Goal:** Backend can swap and move liquidity between pools on behalf of the user's agent wallet.
 
 ### 3.1 Swap service
-- [ ] `backend/src/services/defi/quickswap/swap.service.ts`:
+- [x] `backend/src/services/defi/quickswap/swap.service.ts`:
   - `buildApprove(token, spender, amount)` — ERC20 approve calldata
   - `buildSwapExactIn(tokenIn, tokenOut, amountIn, slippageBps, recipient)` — `exactInputSingle`
   - `buildSwapRoute(path, amountIn, slippageBps, recipient)` — `exactInput` multihop
   - Path encoding: `token + deployer(0x0) + token + deployer(0x0) + token`
-- [ ] `backend/src/services/defi/quickswap/quickswap.adapter.ts` — facade over quote + swap + pool
+- [x] `backend/src/services/defi/quickswap/quickswap.adapter.ts` — facade over quote + swap + pool
 
 ### 3.2 Route planner (pool-to-pool capital movement)
 - [ ] `backend/src/services/defi/quickswap/route-planner.ts`:

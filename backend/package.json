@@ -10,6 +10,7 @@
     "smoke:llm:tools": "tsx scripts/smoke-llm-inference.ts --method=inferToolsChat",
     "smoke:quickswap:pools": "tsx scripts/smoke-quickswap-pools.ts",
     "smoke:quickswap:quote": "tsx scripts/smoke-quickswap-quote.ts",
+    "smoke:quickswap:swap-build": "tsx scripts/smoke-quickswap-swap-build.ts",
     "demo:wallet": "tsx scripts/demo-email-wallet.ts",
     "db:generate": "prisma generate",
     "db:migrate-pools": "tsx scripts/migrate-pool-allocations.ts",

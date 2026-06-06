@@ -4,6 +4,10 @@ import { ZERO_DEPLOYER } from "../../../config/quickswap";
 import { getQuickSwapEnv } from "../../../config/env";
 import { quoterV2Abi, quoterV2QuoteAbi } from "./abis";
 import { getQuickSwapPublicClient } from "./client";
+import {
+  emptyPluginDataForHops,
+  encodeAlgebraSwapPath,
+} from "./path-encoding";
 import { QuickSwapNotDeployedError } from "./pool-registry";
 import type { SwapQuote } from "./types";
 
@@ -124,6 +128,121 @@ function decodeQuoteReturnData(data: `0x${string}`): QuoteTupleResult {
   const fee = words[5] ? Number(hexToBigInt(`0x${words[5]}`)) : 0;
 
   return [amountOut, amountIn, sqrtAfter, ticksCrossed, gasEstimate, fee];
+}
+
+type MultihopQuoteResult = readonly [
+  readonly bigint[],
+  readonly bigint[],
+  readonly bigint[],
+  readonly number[],
+  bigint,
+  readonly number[],
+];
+
+function mapMultihopQuoteResult(
+  tokenIn: Address,
+  tokenOut: Address,
+  amountIn: bigint,
+  result: MultihopQuoteResult,
+): SwapQuote {
+  const [
+    amountOutList,
+    ,
+    sqrtAfterList,
+    ticksList,
+    gasEstimate,
+    feeList,
+  ] = result;
+
+  const amountOut = amountOutList[amountOutList.length - 1] ?? 0n;
+  const sqrtPriceX96After = sqrtAfterList[sqrtAfterList.length - 1] ?? 0n;
+  const initializedTicksCrossed = ticksList.reduce((sum, n) => sum + n, 0);
+  const fee = feeList[feeList.length - 1] ?? 0;
+
+  return {
+    tokenIn,
+    tokenOut,
+    amountIn: amountIn.toString(),
+    amountOut: amountOut.toString(),
+    sqrtPriceX96After: sqrtPriceX96After.toString(),
+    initializedTicksCrossed,
+    gasEstimate: gasEstimate.toString(),
+    fee,
+  };
+}
+
+/**
+ * Quote a multihop exact-input swap via QuoterV2.quoteExactInput.
+ */
+export async function quoteExactInputPath(
+  tokens: readonly Address[],
+  amountIn: bigint,
+): Promise<SwapQuote> {
+  assertQuickSwapDeployed();
+
+  if (tokens.length < 2) {
+    throw new QuoteNotAvailableError("path must contain at least two tokens");
+  }
+
+  const { contracts } = getQuickSwapEnv();
+  const client = getQuickSwapPublicClient();
+  const tokenIn = tokens[0]!;
+  const tokenOut = tokens[tokens.length - 1]!;
+  const path = encodeAlgebraSwapPath(tokens);
+  const pluginsData = [...emptyPluginDataForHops(tokens.length - 1)];
+
+  try {
+    const { result } = await client.simulateContract({
+      address: contracts.quoterV2,
+      abi: quoterV2Abi,
+      functionName: "quoteExactInput",
+      args: [path, pluginsData, amountIn],
+    });
+
+    return mapMultihopQuoteResult(
+      tokenIn,
+      tokenOut,
+      amountIn,
+      result as MultihopQuoteResult,
+    );
+  } catch {
+    // Somnia QuoterV2 multihop often reverts; chain single-hop quotes instead.
+    return quoteExactInputPathChained(tokens, amountIn);
+  }
+}
+
+async function quoteExactInputPathChained(
+  tokens: readonly Address[],
+  amountIn: bigint,
+): Promise<SwapQuote> {
+  const tokenIn = tokens[0]!;
+  const tokenOut = tokens[tokens.length - 1]!;
+  let currentIn = amountIn;
+  let lastQuote: SwapQuote | null = null;
+  let totalTicks = 0;
+  let totalGas = 0n;
+
+  for (let i = 0; i < tokens.length - 1; i++) {
+    lastQuote = await quoteExactIn(tokens[i]!, tokens[i + 1]!, currentIn);
+    currentIn = BigInt(lastQuote.amountOut);
+    totalTicks += lastQuote.initializedTicksCrossed;
+    totalGas += BigInt(lastQuote.gasEstimate);
+  }
+
+  if (!lastQuote) {
+    throw new QuoteNotAvailableError("Unable to quote swap path");
+  }
+
+  return {
+    tokenIn,
+    tokenOut,
+    amountIn: amountIn.toString(),
+    amountOut: lastQuote.amountOut,
+    sqrtPriceX96After: lastQuote.sqrtPriceX96After,
+    initializedTicksCrossed: totalTicks,
+    gasEstimate: totalGas.toString(),
+    fee: lastQuote.fee,
+  };
 }
 
 /**

@@ -10,6 +10,16 @@ export type PoolAllocationDrift = {
   driftPercent: number
 }
 
+export type ExecutedTransaction = {
+  kind: "approve" | "swap"
+  hash: string
+  status: "success" | "reverted"
+  tokenIn?: string
+  tokenOut?: string
+  amountIn?: string
+  amountOut?: string
+}
+
 export type TradingCycleSummary = {
   cycleId: string
   reason: "activation" | "manual" | "scheduled"
@@ -19,6 +29,7 @@ export type TradingCycleSummary = {
   message: string
   depositAmount: number
   poolDrift: PoolAllocationDrift[]
+  executedTransactions: ExecutedTransaction[]
   llmPending: boolean
 }
 

@@ -1,16 +1,25 @@
 import { randomUUID } from "node:crypto";
+import type { Address } from "viem";
+import { getTradingExecutionEnv } from "../../config/env";
 import { createLogger } from "../../shared/logger";
 import { findUserById } from "../auth/user.repository";
 import { listPoolsWithMetrics } from "../defi/quickswap/pool-metrics.service";
+import type { QuickSwapPool } from "../defi/quickswap/types";
+import { planRebalance } from "../defi/quickswap/route-planner";
 import { getWalletBalances } from "../wallet/token-balance.service";
 import * as repo from "./strategy.repository";
 import type {
+  ExecutedTransaction,
   PoolAllocationDrift,
   TradingCyclePhase,
   TradingCycleSummary,
   TradingStatusResponse,
 } from "./trading.types";
 import type { PoolAllocations } from "./strategy.types";
+import {
+  executeRebalancePlan,
+  WalletExecutorError,
+} from "./wallet-executor";
 
 const log = createLogger("trading-runner");
 
@@ -75,6 +84,174 @@ function buildPoolDrift(
       driftPercent: currentPercent - targetPercent,
     };
   });
+}
+
+function normalizeAddress(address: Address): string {
+  return address.toLowerCase();
+}
+
+function exclusivePoolToken(
+  fromPool: QuickSwapPool,
+  toPool: QuickSwapPool,
+): QuickSwapPool["token0"] | null {
+  const toAddresses = new Set(
+    [toPool.token0.address, toPool.token1.address].map(normalizeAddress),
+  );
+  const candidates = [fromPool.token0, fromPool.token1];
+  return (
+    candidates.find((token) => !toAddresses.has(normalizeAddress(token.address))) ??
+    null
+  );
+}
+
+function pickRebalancePools(
+  drift: PoolAllocationDrift[],
+  thresholdPercent: number,
+): { fromPoolId: string; toPoolId: string } | null {
+  const overweight = drift
+    .filter((entry) => entry.driftPercent > thresholdPercent)
+    .sort((a, b) => b.driftPercent - a.driftPercent)[0];
+  const underweight = drift
+    .filter((entry) => entry.driftPercent < -thresholdPercent)
+    .sort((a, b) => a.driftPercent - b.driftPercent)[0];
+
+  if (!overweight || !underweight) {
+    return null;
+  }
+
+  return {
+    fromPoolId: overweight.poolId,
+    toPoolId: underweight.poolId,
+  };
+}
+
+function computeSwapAmount(
+  tokenBalanceRaw: string,
+  overweightDriftPercent: number,
+  maxSwapPortfolioBps: number,
+  minSwapAmountRaw: bigint,
+): bigint | null {
+  const balance = BigInt(tokenBalanceRaw);
+  if (balance <= 0n) {
+    return null;
+  }
+
+  const driftBps = BigInt(
+    Math.min(
+      Math.max(Math.round(overweightDriftPercent * 100), 0),
+      maxSwapPortfolioBps,
+    ),
+  );
+  if (driftBps === 0n) {
+    return null;
+  }
+
+  const amount = (balance * driftBps) / 10_000n;
+  if (amount < minSwapAmountRaw) {
+    return null;
+  }
+
+  return amount;
+}
+
+function toExecutedTransactions(
+  txs: Awaited<ReturnType<typeof executeRebalancePlan>>,
+): ExecutedTransaction[] {
+  return txs.map((tx) => ({
+    kind: tx.kind,
+    hash: tx.hash,
+    status: tx.status,
+    tokenIn: tx.tokenIn,
+    tokenOut: tx.tokenOut,
+    amountIn: tx.amountIn?.toString(),
+    amountOut: tx.amountOut?.toString(),
+  }));
+}
+
+async function tryAutoRebalance(input: {
+  userId: string;
+  walletAddress: Address;
+  poolDrift: PoolAllocationDrift[];
+  pools: QuickSwapPool[];
+  balances: Awaited<ReturnType<typeof getWalletBalances>>;
+  activePoolIds: string[];
+}): Promise<{
+  executedTransactions: ExecutedTransaction[];
+  message?: string;
+}> {
+  const {
+    driftThresholdPercent,
+    maxSwapPortfolioBps,
+    minSwapAmountRaw,
+  } = getTradingExecutionEnv();
+
+  const pair = pickRebalancePools(input.poolDrift, driftThresholdPercent);
+  if (!pair) {
+    return { executedTransactions: [] };
+  }
+
+  const fromPool = input.pools.find((pool) => pool.id === pair.fromPoolId);
+  const toPool = input.pools.find((pool) => pool.id === pair.toPoolId);
+  if (!fromPool || !toPool) {
+    return { executedTransactions: [] };
+  }
+
+  const sourceToken = exclusivePoolToken(fromPool, toPool);
+  if (!sourceToken) {
+    return {
+      executedTransactions: [],
+      message: "Pools share the same tokens — no on-chain swap required.",
+    };
+  }
+
+  const overweight = input.poolDrift.find(
+    (entry) => entry.poolId === pair.fromPoolId,
+  );
+  if (!overweight) {
+    return { executedTransactions: [] };
+  }
+
+  const balanceRow = input.balances.balances.find(
+    (entry) => entry.symbol === sourceToken.symbol,
+  );
+  if (!balanceRow) {
+    return { executedTransactions: [] };
+  }
+
+  const amount = computeSwapAmount(
+    balanceRow.balance,
+    overweight.driftPercent,
+    maxSwapPortfolioBps,
+    minSwapAmountRaw,
+  );
+  if (!amount) {
+    return { executedTransactions: [] };
+  }
+
+  const plan = await planRebalance(
+    pair.fromPoolId,
+    pair.toPoolId,
+    amount,
+    input.walletAddress,
+  );
+
+  if (plan.kind === "no_swap") {
+    return {
+      executedTransactions: [],
+      message: plan.reason,
+    };
+  }
+
+  const txs = await executeRebalancePlan({
+    userId: input.userId,
+    plan,
+    allowedPoolIds: input.activePoolIds,
+  });
+
+  return {
+    executedTransactions: toExecutedTransactions(txs),
+    message: `Rebalanced ${sourceToken.symbol} from ${fromPool.label} toward ${toPool.label} (agent wallet; no user approval).`,
+  };
 }
 
 function balanceWeightsForPools(
@@ -196,6 +373,37 @@ export async function runTradingCycle(
     const hasBalance = balances.balances.some((b) => parseBalanceAmount(b.formatted) > 0);
     const finishedAt = new Date().toISOString();
 
+    let executedTransactions: ExecutedTransaction[] = [];
+    let executionMessage: string | undefined;
+
+    if (hasBalance) {
+      try {
+        const rebalance = await tryAutoRebalance({
+          userId,
+          walletAddress: user.walletAddress as Address,
+          poolDrift,
+          pools,
+          balances,
+          activePoolIds: [...activePoolIds],
+        });
+        executedTransactions = rebalance.executedTransactions;
+        executionMessage = rebalance.message;
+      } catch (err) {
+        const detail =
+          err instanceof WalletExecutorError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Auto-rebalance failed";
+        log.warn("Auto-rebalance skipped", { userId, cycleId, detail });
+        executionMessage = detail;
+      }
+    }
+
+    const defaultMessage = hasBalance
+      ? "Portfolio analyzed. Drift rebalance runs automatically when threshold is exceeded."
+      : "No on-chain balance detected yet — deposit to the agent wallet, then run another cycle.";
+
     const summary: TradingCycleSummary = {
       cycleId,
       userId,
@@ -207,10 +415,12 @@ export async function runTradingCycle(
       walletAddress: user.walletAddress,
       depositAmount: strategy.depositAmount,
       poolDrift,
+      executedTransactions,
       llmPending: true,
-      message: hasBalance
-        ? "Portfolio analyzed. LLM rebalance execution arrives in Phase 4."
-        : "No on-chain balance detected yet — deposit to the agent wallet, then run another cycle.",
+      message:
+        executedTransactions.length > 0
+          ? (executionMessage ?? "Rebalance swap executed by agent wallet.")
+          : (executionMessage ?? defaultMessage),
     };
 
     await repo.touchLastCycleAt(strategy.id, new Date(finishedAt));

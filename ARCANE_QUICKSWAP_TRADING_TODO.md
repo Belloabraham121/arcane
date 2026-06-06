@@ -167,15 +167,16 @@ sequenceDiagram
 - [ ] MVP decision: **swaps only first**; LP add/remove in Phase 3.3 if time allows
 
 ### 3.4 Agent wallet execution
-- [ ] `backend/src/services/agents/wallet-executor.ts`:
+- [x] `backend/src/services/agents/wallet-executor.ts`:
   - Load user agent wallet from encrypted key (existing `email-wallet.service`)
   - Sign + submit swap txs via viem `walletClient`
   - Nonce management, gas estimation, receipt polling
-- [ ] Safety guards:
+- [x] Safety guards:
   - Max swap size per cycle (% of portfolio)
   - Slippage cap (`QUICKSWAP_DEFAULT_SLIPPAGE_BPS`)
   - Allowed tokens whitelist (pools user selected only)
   - Refuse tx if agent wallet balance insufficient
+- [x] Auto-approve ERC-20 + swap in trading cycle (no user wallet popup)
 
 ---
 

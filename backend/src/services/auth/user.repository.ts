@@ -1,4 +1,6 @@
+import type { Address } from "viem";
 import { prisma } from "../../infrastructure/postgres/client";
+import type { EncryptedPrivateKey } from "../../utils/wallet-crypto";
 import type { UserWalletRecord } from "./types";
 
 export type CreateUserInput = {
@@ -34,6 +36,32 @@ export async function findUserByEmail(email: string) {
 
 export async function findUserById(id: string) {
   return prisma.user.findUnique({ where: { id } });
+}
+
+export type UserWalletCredentials = {
+  userId: string;
+  walletAddress: Address;
+  encryptedPrivateKey: EncryptedPrivateKey;
+};
+
+/** Encrypted agent wallet material for server-side signing only. */
+export async function findUserWalletCredentials(
+  userId: string,
+): Promise<UserWalletCredentials | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    return null;
+  }
+
+  return {
+    userId: user.id,
+    walletAddress: user.walletAddress as Address,
+    encryptedPrivateKey: {
+      encryptedData: user.encryptedPrivateKey,
+      iv: user.encryptionIv,
+      authTag: user.encryptionAuthTag,
+    },
+  };
 }
 
 export async function createUser(input: CreateUserInput): Promise<PublicUser> {

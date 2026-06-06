@@ -282,6 +282,25 @@ export default function DashboardPage() {
                     {tradingStatus.lastCycle.message}
                   </p>
                 )}
+                {(tradingStatus?.lastCycle?.executedTransactions?.length ?? 0) >
+                  0 && (
+                  <div className="mt-2 space-y-1 border-t border-border pt-2">
+                    <p className="text-muted-foreground">
+                      Auto-executed (no approval required):
+                    </p>
+                    {tradingStatus!.lastCycle!.executedTransactions.map((tx) => (
+                      <p key={tx.hash} className="text-foreground">
+                        {tx.kind}{" "}
+                        {tx.amountIn && tx.tokenIn
+                          ? `${tx.amountIn} → ${tx.amountOut ?? "?"} `
+                          : ""}
+                        <span className="text-muted-foreground">
+                          {tx.hash.slice(0, 10)}…
+                        </span>
+                      </p>
+                    ))}
+                  </div>
+                )}
                 {tradingStatus?.lastError && (
                   <p className="text-[#ea580c]">{tradingStatus.lastError}</p>
                 )}
@@ -293,8 +312,8 @@ export default function DashboardPage() {
                 Agent wallet balances
               </p>
               <p className="mb-4 font-mono text-[10px] text-muted-foreground">
-                Live balances on Somnia mainnet for tokens in your selected pools. Deposit any
-                supported token — the agent swaps to hit your pool targets.
+                Live balances on Somnia mainnet for tokens in your selected pools. The agent
+                signs and submits swaps automatically — you never approve transactions in a wallet.
               </p>
               <WalletBalancesList
                 balances={balances}

@@ -96,6 +96,8 @@ export type QuickSwapEnv = {
   contractsDeployed: boolean;
   contracts: QuickSwapContracts;
   defaultSlippageBps: number;
+  maxSlippageBps: number;
+  txReceiptTimeoutMs: number;
 };
 
 /**
@@ -136,5 +138,24 @@ export function getQuickSwapEnv(): QuickSwapEnv {
     defaultSlippageBps: Number(
       optional("QUICKSWAP_DEFAULT_SLIPPAGE_BPS", "50"),
     ),
+    maxSlippageBps: Number(optional("QUICKSWAP_MAX_SLIPPAGE_BPS", "300")),
+    txReceiptTimeoutMs: Number(
+      optional("QUICKSWAP_TX_RECEIPT_TIMEOUT_MS", "120000"),
+    ),
+  };
+}
+
+/** Drift rebalance + auto-execution guards (Phase 3.4). */
+export function getTradingExecutionEnv() {
+  return {
+    driftThresholdPercent: Number(
+      optional("TRADING_DRIFT_THRESHOLD_PERCENT", "5"),
+    ),
+    /** Max share of a token balance to swap in one cycle (basis points). */
+    maxSwapPortfolioBps: Number(
+      optional("TRADING_MAX_SWAP_PORTFOLIO_BPS", "2500"),
+    ),
+    /** Minimum token balance (raw units) before attempting a swap. */
+    minSwapAmountRaw: BigInt(optional("TRADING_MIN_SWAP_AMOUNT_RAW", "1000")),
   };
 }

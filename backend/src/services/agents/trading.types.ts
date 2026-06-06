@@ -9,6 +9,16 @@ export type PoolAllocationDrift = {
   driftPercent: number;
 };
 
+export type ExecutedTransaction = {
+  kind: "approve" | "swap";
+  hash: string;
+  status: "success" | "reverted";
+  tokenIn?: string;
+  tokenOut?: string;
+  amountIn?: string;
+  amountOut?: string;
+};
+
 export type TradingCycleSummary = {
   cycleId: string;
   userId: string;
@@ -21,7 +31,9 @@ export type TradingCycleSummary = {
   walletAddress: string;
   depositAmount: number;
   poolDrift: PoolAllocationDrift[];
-  /** Reserved for Phase 4 LLM tool execution. */
+  /** On-chain txs signed by the agent wallet (no user approval). */
+  executedTransactions: ExecutedTransaction[];
+  /** True when LLM-driven tool execution is not wired yet. */
   llmPending: boolean;
 };
 

@@ -58,8 +58,9 @@ export function DepositAddressCard({
         <p className="text-xs font-mono text-muted-foreground leading-relaxed">
           Send any supported token to this address —{" "}
           <span className="text-foreground">{tokenSymbols}</span>
-          {showNativeHint ? ", or native SOMI" : ""}. You only need one token; your agent swaps
-          across your selected QuickSwap pools to match your allocation.
+          {showNativeHint ? ", or native SOMI" : ""}. You only need one token; your agent
+          automatically swaps across your selected QuickSwap pools — no wallet popups or manual
+          approvals required.
         </p>
       </div>
 

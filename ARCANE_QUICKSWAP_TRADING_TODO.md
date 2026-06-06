@@ -60,9 +60,9 @@ sequenceDiagram
 - [x] Split chains: `getSomniaAgentEnv()` (testnet LLM) + `getQuickSwapEnv()` (mainnet pools)
 
 ### 0.3 Dependencies
-- [ ] Install `@cryptoalgebra/integral-periphery` (ABIs/interfaces)
-- [ ] Optionally install `@cryptoalgebra/integral-sdk` (route math helpers)
-- [ ] Keep `viem` as primary chain client (already installed)
+- [x] Install `@cryptoalgebra/integral-periphery` (ABIs/interfaces)
+- [x] Optionally install `@cryptoalgebra/integral-sdk` (route math helpers)
+- [x] Keep `viem` as primary chain client (already installed)
 
 ---
 

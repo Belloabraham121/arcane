@@ -18,7 +18,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arcane}
       POSTGRES_DB: ${POSTGRES_DB:-arcane}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Host port — change if 5434 conflicts with another local Postgres
+      - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

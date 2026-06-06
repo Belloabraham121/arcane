@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StrategyType {
+  auto
+  custom
+}
+
+enum StrategyStatus {
+  draft
+  active
+}
+
+enum ProtocolId {
+  uniswap
+  aave
+  compound
+  lido
+}
+
+model User {
+  id                   String         @id @default(uuid()) @db.Uuid
+  email                String         @unique @db.Text
+  passwordHash         String         @map("password_hash") @db.Text
+  walletAddress        String         @unique @map("wallet_address") @db.Text
+  walletDerivationPath String         @map("wallet_derivation_path") @db.Text
+  encryptedPrivateKey  String         @map("encrypted_private_key") @db.Text
+  encryptionIv         String         @map("encryption_iv") @db.Text
+  encryptionAuthTag    String         @map("encryption_auth_tag") @db.Text
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+  agentStrategy        AgentStrategy?
+
+  @@map("user")
+}
+
+model AgentStrategy {
+  id                  String               @id @default(uuid()) @db.Uuid
+  userId              String               @unique @map("user_id") @db.Uuid
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategyType        StrategyType         @map("strategy_type")
+  status              StrategyStatus       @default(draft)
+  depositAmount       Float                @default(0) @map("deposit_amount")
+  subAgentConfig      Json?                @map("sub_agent_config")
+  protocolAllocations ProtocolAllocation[]
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("agent_strategy")
+}
+
+model ProtocolAllocation {
+  id         String        @id @default(uuid()) @db.Uuid
+  strategyId String        @map("strategy_id") @db.Uuid
+  strategy   AgentStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  protocol   ProtocolId
+  amount     Float
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([strategyId, protocol], map: "uk_protocol_allocation_strategy_protocol")
+  @@map("protocol_allocation")
+}

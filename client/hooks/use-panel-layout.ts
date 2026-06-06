@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 
 export type PanelId =
   | "graph-settings"
@@ -8,17 +8,17 @@ export type PanelId =
   | "nodes-legend"
   | "live-trades"
   | "legend"
-  | "viz-info"
+  | "viz-info";
 
 export type PanelLayout = {
-  x: number
-  y: number
-  collapsed: boolean
-}
+  x: number;
+  y: number;
+  collapsed: boolean;
+};
 
-export type PanelLayouts = Record<PanelId, PanelLayout>
+export type PanelLayouts = Record<PanelId, PanelLayout>;
 
-export const GRID_SIZE = 24
+export const GRID_SIZE = 24;
 
 export const DEFAULT_PANEL_LAYOUTS: PanelLayouts = {
   "graph-settings": { x: 24, y: 24, collapsed: false },
@@ -27,49 +27,52 @@ export const DEFAULT_PANEL_LAYOUTS: PanelLayouts = {
   legend: { x: 0, y: 0, collapsed: false },
   "protocol-allocation": { x: 24, y: 0, collapsed: false },
   "viz-info": { x: 24, y: 0, collapsed: false },
-}
+};
 
-const STORAGE_KEY = "arcane-agents-panel-layout"
+const STORAGE_KEY = "arcane-agents-panel-layout";
 
 export function snapToGrid(value: number) {
-  return Math.round(value / GRID_SIZE) * GRID_SIZE
+  return Math.round(value / GRID_SIZE) * GRID_SIZE;
 }
 
 export function usePanelLayout() {
-  const [layouts, setLayouts] = useState<PanelLayouts>(DEFAULT_PANEL_LAYOUTS)
-  const [hydrated, setHydrated] = useState(false)
+  const [layouts, setLayouts] = useState<PanelLayouts>(DEFAULT_PANEL_LAYOUTS);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
+      const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<PanelLayouts>
-        setLayouts((prev) => ({ ...prev, ...parsed }))
+        const parsed = JSON.parse(raw) as Partial<PanelLayouts>;
+        setLayouts((prev) => ({ ...prev, ...parsed }));
       }
     } catch {
       // ignore invalid storage
     }
-    setHydrated(true)
-  }, [])
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
-    if (!hydrated) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(layouts))
-  }, [layouts, hydrated])
+    if (!hydrated) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(layouts));
+  }, [layouts, hydrated]);
 
-  const updatePanel = useCallback((id: PanelId, patch: Partial<PanelLayout>) => {
-    setLayouts((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], ...patch },
-    }))
-  }, [])
+  const updatePanel = useCallback(
+    (id: PanelId, patch: Partial<PanelLayout>) => {
+      setLayouts((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], ...patch },
+      }));
+    },
+    [],
+  );
 
   const toggleCollapsed = useCallback((id: PanelId) => {
     setLayouts((prev) => ({
       ...prev,
       [id]: { ...prev[id], collapsed: !prev[id].collapsed },
-    }))
-  }, [])
+    }));
+  }, []);
 
-  return { layouts, updatePanel, toggleCollapsed, hydrated }
+  return { layouts, updatePanel, toggleCollapsed, hydrated };
 }

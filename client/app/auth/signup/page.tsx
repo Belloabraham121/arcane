@@ -41,6 +41,7 @@ export default function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const passwordStrength = getPasswordStrength(password)
   const passwordsMatch = password && confirmPassword === password
@@ -50,12 +51,24 @@ export default function SignUpPage() {
     e.preventDefault()
     if (!isValid) return
     setIsLoading(true)
-    // Sign up logic would go here
-    setTimeout(() => {
+    setError(null)
+
+    try {
+      const { register: registerApi } = await import('@/lib/api/auth')
+      const result = await registerApi(email, password)
+
+      if (!result.success || !result.data) {
+        setError(result.error?.message ?? 'Registration failed')
+        return
+      }
+
+      const { resolvePostAuthRoute } = await import('@/lib/routing/resolve-post-auth')
+      router.push(await resolvePostAuthRoute())
+    } catch {
+      setError('Unable to reach the server. Is the backend running?')
+    } finally {
       setIsLoading(false)
-      // Redirect to dashboard after successful sign up
-      router.push('/dashboard')
-    }, 1000)
+    }
   }
 
   return (
@@ -228,6 +241,9 @@ export default function SignUpPage() {
               </div>
 
               {/* Submit Button */}
+              {error && (
+                <p className="text-xs font-mono text-[#ea580c]">{error}</p>
+              )}
               <motion.button
                 type="submit"
                 disabled={!isValid || isLoading}

@@ -20,7 +20,7 @@ docker compose down
 
 | Service   | Port(s)      | Role (per api-ref)                                      |
 | --------- | ------------ | ------------------------------------------------------- |
-| Postgres  | 5432         | Prisma — agents, signals, decisions, reputation         |
+| Postgres  | 5434 (host)  | Prisma — change `POSTGRES_PORT` if it conflicts locally |
 | Redis     | 6379         | BullMQ, ioredis — queues, cache, WebSocket coordination |
 | RabbitMQ  | 5672, 15672  | Async messaging (management UI on 15672)                |
 
@@ -61,6 +61,31 @@ npm run demo:wallet -- agent@arcane.dev
 ```
 
 Flow: `normalizeEmail` → `keccak256(email)` → index → `m/44'/60'/0'/0/<index>` → address. Wire `createWalletRecord(email)` into your auth handler after email verification; persist via Prisma when the DB layer lands.
+
+## Auth API (email + password)
+
+Register and sign-in from the frontend now hit the backend. On register, the server hashes the password (bcrypt), derives a deterministic Somnia wallet from email, stores encrypted key material in Postgres, and sets an **HttpOnly session cookie**.
+
+## Agent strategy API
+
+Persist auto vs custom strategy and protocol allocation (Uniswap, AAVE, Compound, Lido).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/agents/strategy` | Current user's strategy |
+| `PUT` | `/api/v1/agents/strategy` | Upsert `{ strategyType, depositAmount?, protocolAllocations? }` |
+| `PATCH` | `/api/v1/agents/strategy/protocol-allocations` | Update custom protocol splits |
+
+Requires auth cookie. Run `npm run db:push` after pulling schema changes.
+
+```bash
+npm run db:push          # after docker compose up (Postgres)
+npm run dev              # http://localhost:8080
+
+# Client: cp .env.local.example .env.local
+```
+
+Required env: `AUTH_JWT_SECRET`, `MASTER_SEED`, `ENCRYPTION_SECRET_KEY`, `DATABASE_URL`, `CORS_ORIGIN=http://localhost:3000`.
 
 ## Folder structure
 

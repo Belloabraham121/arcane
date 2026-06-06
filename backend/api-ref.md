@@ -420,43 +420,93 @@ const txHash = await sdk.createSoliditySubscription(subData);
 
 ## 6. DeFi Protocol APIs
 
-### QuickSwap V3 (AMM DEX — Live on Somnia)
+### QuickSwap V4 Algebra Integral (AMM DEX — Live on Somnia)
 
-**Used for:** Token swaps, liquidity provision, pool APY data.
+**Used for:** Token swaps, liquidity provision, pool discovery. On Somnia this is **Algebra Integral (V4)**, not a Uniswap V3 fork — swap params use `deployer`, not `fee`.
 
-| Item                 | Value                                                                   |
-| -------------------- | ----------------------------------------------------------------------- |
-| Docs                 | https://docs.quickswap.exchange                                         |
-| Smart Contracts      | https://docs.quickswap.exchange/technical-reference/smart-contracts/v3  |
-| API Reference        | https://docs.quickswap.exchange/technical-reference/api                 |
-| SDK Reference        | https://docs.quickswap.exchange/technical-reference/sdk/getting-started |
-| GitHub               | https://github.com/QuickSwap                                            |
-| Subgraph (pool data) | https://docs.quickswap.exchange/technical-reference/api/api-overview    |
+| Item                 | Value                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| Docs                 | https://docs.quickswap.exchange                                                            |
+| Contracts & Addresses| https://docs.quickswap.exchange/overview/contracts-and-addresses                           |
+| Algebra swap guides  | https://docs.algebra.finance/algebra-integral-documentation/algebra-integral-technical-reference/guides/swaps |
+| GitHub               | https://github.com/QuickSwap                                                               |
+| Pool data (Somnia)   | On-chain via `AlgebraFactory.poolByPair` + pool reads; Ormi subgraph for historical metrics |
+
+**There is no public REST API** at `api.quickswap.exchange/v3/pools` (returns 404). Arcane lists pools via backend `GET /api/v1/quickswap/pools` (on-chain reads).
 
 ```bash
-npm install @uniswap/v3-sdk @uniswap/sdk-core   # QuickSwap v3 is Uniswap v3 fork
+npm install @cryptoalgebra/integral-periphery
+# optional route math:
+npm install @cryptoalgebra/integral-sdk
 ```
 
-**Key contract interactions:**
+**Somnia Mainnet (`5031`) contract addresses:**
+
+| Contract                    | Address                                      |
+| --------------------------- | -------------------------------------------- |
+| AlgebraFactory              | `0x0ccff3D02A3a200263eC4e0Fdb5E60a56721B8Ae` |
+| SwapRouter                  | `0x1582f6f3D26658F7208A799Be46e34b1f366CE44` |
+| QuoterV2                    | `0xcB68373404a835268D3ED76255C8148578A82b77` |
+| NonfungiblePositionManager  | `0xfE02219e0578B1E4831CDE7C3CB36f71AEb4A833` |
+
+**Somnia Testnet (`50312`)** uses different addresses — see [Contracts & Addresses](https://docs.quickswap.exchange/overview/contracts-and-addresses). Verify bytecode on your RPC before trading.
+
+**Quote (off-chain only — do not call Quoter on-chain):**
 
 ```typescript
-// Swap via Router
+const ZERO_DEPLOYER = "0x0000000000000000000000000000000000000000";
+
+// QuoterV2.quoteExactInputSingle
+const { amountOut } = await quoter.quoteExactInputSingle({
+  tokenIn,
+  tokenOut,
+  deployer: ZERO_DEPLOYER, // base pools
+  amountIn,
+  limitSqrtPrice: 0n,
+});
+```
+
+**Swap via SwapRouter:**
+
+```typescript
+const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
+
 router.exactInputSingle({
-    tokenIn, tokenOut,
-    fee: 3000,
-    recipient: agentSmartAccount,
-    amountIn,
-    amountOutMinimum: quotedOut * 0.995n,  // 0.5% slippage
-    sqrtPriceLimitX96: 0n
+  tokenIn,
+  tokenOut,
+  deployer: ZERO_DEPLOYER,
+  recipient: agentSmartAccount,
+  deadline,
+  amountIn,
+  amountOutMinimum: (quotedOut * 995n) / 1000n, // 0.5% slippage
+  sqrtPriceLimitX96: 0n,
 });
 
-// Pool data via Subgraph (GraphQL)
-const query = `{
-    pools(orderBy: totalValueLockedUSD, orderDirection: desc, first: 10) {
-        id token0 { symbol } token1 { symbol }
-        feeTier totalValueLockedUSD volumeUSD
-    }
-}`;
+// Multihop: exactInput with path = token + deployer + token + deployer + token
+```
+
+**Pool discovery:**
+
+```typescript
+const pool = await factory.poolByPair(tokenA, tokenB); // address(0) if none
+```
+
+**Add liquidity (NonfungiblePositionManager.mint):**
+
+```typescript
+positionManager.mint({
+  token0,
+  token1,
+  deployer: ZERO_DEPLOYER,
+  tickLower,
+  tickUpper,
+  amount0Desired,
+  amount1Desired,
+  amount0Min,
+  amount1Min,
+  recipient: agentSmartAccount,
+  deadline,
+});
 ```
 
 ---
@@ -1060,6 +1110,18 @@ IDENTITY_REGISTRY_ADDRESS=
 VALIDATION_REGISTRY_ADDRESS=
 REPUTATION_SETTLER_ADDRESS=
 SOMNIA_AGENT_PLATFORM=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776
+SOMNIA_LLM_AGENT_ID=12847293847561029384
+SOMNIA_LLM_PER_AGENT_COST_WEI=70000000000000000
+
+# QuickSwap V4 Algebra (mainnet 5031 — separate RPC from SOMNIA_* testnet agent vars)
+QUICKSWAP_CHAIN_ID=5031
+QUICKSWAP_RPC_HTTP=https://api.infra.mainnet.somnia.network/
+QUICKSWAP_RPC_WS=wss://api.infra.mainnet.somnia.network/ws
+QUICKSWAP_FACTORY=0x0ccff3D02A3a200263eC4e0Fdb5E60a56721B8Ae
+QUICKSWAP_SWAP_ROUTER=0x1582f6f3D26658F7208A799Be46e34b1f366CE44
+QUICKSWAP_QUOTER_V2=0xcB68373404a835268D3ED76255C8148578A82b77
+QUICKSWAP_POSITION_MANAGER=0xfE02219e0578B1E4831CDE7C3CB36f71AEb4A833
+QUICKSWAP_DEFAULT_SLIPPAGE_BPS=50
 
 # ERC-4337 Bundler
 PIMLICO_API_KEY=

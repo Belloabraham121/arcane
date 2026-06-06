@@ -1,17 +1,27 @@
+import cookieParser from "cookie-parser";
+import cors from "cors";
 import express from "express";
 import { correlationIdMiddleware } from "./api/middleware/correlation-id";
 import { errorHandlerMiddleware } from "./api/middleware/error-handler";
 import { requestLoggerMiddleware } from "./api/middleware/request-logger";
 import { healthRouter } from "./api/routes/health";
-import { getServerEnv } from "./config/env";
+import { authRouter } from "./api/routes/v1/auth";
+import { agentStrategyRouter } from "./api/routes/v1/agents/strategy";
+import { getAuthEnv, getServerEnv } from "./config/env";
+import { createCorsOptions } from "./config/cors";
+import { prisma } from "./infrastructure/postgres/client";
 import { logger } from "./shared/logger";
 
 const app = express();
 
+app.use(cors(createCorsOptions()));
 app.use(express.json());
+app.use(cookieParser());
 app.use(correlationIdMiddleware);
 app.use(requestLoggerMiddleware);
 app.use(healthRouter);
+app.use(authRouter);
+app.use(agentStrategyRouter);
 
 app.use(errorHandlerMiddleware);
 
@@ -33,23 +43,49 @@ function registerProcessHandlers(): void {
 
 registerProcessHandlers();
 
-const server = app.listen(port, () => {
-  logger.info("Server started", {
-    port,
-    nodeEnv,
-    logLevel: logger.level,
-    routes: ["GET /health", "GET /api/v1/version"],
-  });
-});
+async function start() {
+  await prisma.$connect();
+  logger.info("Database connected");
 
-server.on("error", (err: NodeJS.ErrnoException) => {
-  if (err.code === "EADDRINUSE") {
-    logger.error("Port already in use", {
+  const server = app.listen(port, () => {
+    const { corsOrigin } = getAuthEnv();
+    logger.info("Server started", {
       port,
-      hint: `Stop the other process: lsof -ti :${port} | xargs kill — or set PORT in .env`,
+      nodeEnv,
+      logLevel: logger.level,
+      corsOrigin,
+      routes: [
+        "GET /health",
+        "GET /api/v1/version",
+        "POST /api/v1/auth/register",
+        "POST /api/v1/auth/login",
+        "POST /api/v1/auth/logout",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/agents/strategy",
+        "PUT /api/v1/agents/strategy",
+        "PATCH /api/v1/agents/strategy/protocol-allocations",
+        "PATCH /api/v1/agents/strategy/sub-agents",
+      ],
     });
-    process.exit(1);
-  }
-  logger.error("Server failed to start", { message: err.message, stack: err.stack });
-  throw err;
+  });
+
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      logger.error("Port already in use", {
+        port,
+        hint: `Stop the other process: lsof -ti :${port} | xargs kill — or set PORT in .env`,
+      });
+      process.exit(1);
+    }
+    logger.error("Server failed to start", { message: err.message, stack: err.stack });
+    throw err;
+  });
+}
+
+start().catch((err) => {
+  logger.error("Startup failed", {
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+  process.exit(1);
 });

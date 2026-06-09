@@ -11,6 +11,7 @@ import { PoolNodesLegend } from "@/components/pool-nodes-legend";
 import { PoolTradingCanvas } from "@/components/pool-trading-canvas";
 import { useTradingSocket } from "@/hooks/use-trading-socket";
 import { getAgentStrategy } from "@/lib/api/strategy";
+import type { AccountMode } from "@/lib/api/auth";
 import { useSession } from "@/providers/session-provider";
 import {
   DEFAULT_POOL_ALLOCATIONS,
@@ -26,6 +27,7 @@ import { APP_ROUTES } from "@/lib/routing/app-routes";
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth";
 import {
   GRID_SIZE,
+  panelLayoutStorageKey,
   snapToGrid,
   usePanelLayout,
   type PanelId,
@@ -40,8 +42,11 @@ export default function AgentsPage() {
   );
   const [loading, setLoading] = useState(true);
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const { layouts, updatePanel, toggleCollapsed, hydrated } = usePanelLayout();
-  const [defaultsApplied, setDefaultsApplied] = useState(false);
+  const { layouts, updatePanel, toggleCollapsed, hydrated } =
+    usePanelLayout(accountMode);
+  const [defaultsAppliedFor, setDefaultsAppliedFor] = useState<
+    AccountMode | null
+  >(null);
 
   const poolIds = useMemo(() => activePoolIds(poolAmounts), [poolAmounts]);
 
@@ -83,10 +88,15 @@ export default function AgentsPage() {
   }, [router, sessionReady, accountMode]);
 
   useEffect(() => {
-    if (!hydrated || defaultsApplied || !workspaceRef.current) return;
+    if (!hydrated || !accountMode || !workspaceRef.current) {
+      return;
+    }
+    if (defaultsAppliedFor === accountMode) {
+      return;
+    }
     const hasStoredLayout =
       typeof window !== "undefined" &&
-      !!localStorage.getItem("arcane-agents-panel-layout");
+      !!localStorage.getItem(panelLayoutStorageKey(accountMode));
     if (!hasStoredLayout) {
       const h = workspaceRef.current.clientHeight;
       updatePanel("protocol-allocation", {
@@ -102,8 +112,8 @@ export default function AgentsPage() {
         y: snapToGrid(Math.max(24, h - 120)),
       });
     }
-    setDefaultsApplied(true);
-  }, [hydrated, defaultsApplied, updatePanel]);
+    setDefaultsAppliedFor(accountMode);
+  }, [hydrated, accountMode, defaultsAppliedFor, updatePanel]);
 
   const setPosition = (id: PanelId) => (x: number, y: number) => {
     updatePanel(id, { x, y });
@@ -151,7 +161,11 @@ export default function AgentsPage() {
           backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
         }}
       >
-        <PoolTradingCanvas poolIds={poolIds} routeCommand={displayRoute} />
+        <PoolTradingCanvas
+          poolIds={poolIds}
+          routeCommand={displayRoute}
+          accountMode={accountMode ?? undefined}
+        />
 
         <DraggableGridPanel
           id="nodes-legend"
@@ -165,7 +179,10 @@ export default function AgentsPage() {
           width={520}
           contentClassName="py-2"
         >
-          <PoolNodesLegend poolIds={poolIds} />
+          <PoolNodesLegend
+            poolIds={poolIds}
+            accountMode={accountMode ?? undefined}
+          />
         </DraggableGridPanel>
 
         <DraggableGridPanel

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { AccountMode } from "@/lib/api/auth";
 
 export type PanelId =
   | "graph-settings"
@@ -29,33 +30,68 @@ export const DEFAULT_PANEL_LAYOUTS: PanelLayouts = {
   "viz-info": { x: 24, y: 0, collapsed: false },
 };
 
-const STORAGE_KEY = "arcane-agents-panel-layout";
+const LEGACY_STORAGE_KEY = "arcane-agents-panel-layout";
+
+export function panelLayoutStorageKey(
+  accountMode?: AccountMode | null,
+): string {
+  if (accountMode === "demo" || accountMode === "live") {
+    return `${LEGACY_STORAGE_KEY}:${accountMode}`;
+  }
+  return LEGACY_STORAGE_KEY;
+}
 
 export function snapToGrid(value: number) {
   return Math.round(value / GRID_SIZE) * GRID_SIZE;
 }
 
-export function usePanelLayout() {
+function loadLayoutsFromStorage(
+  accountMode?: AccountMode | null,
+): PanelLayouts {
+  if (typeof window === "undefined") {
+    return DEFAULT_PANEL_LAYOUTS;
+  }
+
+  const key = panelLayoutStorageKey(accountMode);
+
+  try {
+    let raw = localStorage.getItem(key);
+
+    if (!raw && accountMode) {
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        raw = legacy;
+        localStorage.setItem(key, legacy);
+      }
+    }
+
+    if (!raw) {
+      return DEFAULT_PANEL_LAYOUTS;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<PanelLayouts>;
+    return { ...DEFAULT_PANEL_LAYOUTS, ...parsed };
+  } catch {
+    return DEFAULT_PANEL_LAYOUTS;
+  }
+}
+
+export function usePanelLayout(accountMode?: AccountMode | null) {
+  const storageKey = panelLayoutStorageKey(accountMode);
   const [layouts, setLayouts] = useState<PanelLayouts>(DEFAULT_PANEL_LAYOUTS);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<PanelLayouts>;
-        setLayouts((prev) => ({ ...prev, ...parsed }));
-      }
-    } catch {
-      // ignore invalid storage
-    }
+    setLayouts(loadLayoutsFromStorage(accountMode));
     setHydrated(true);
-  }, []);
+  }, [storageKey, accountMode]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(layouts));
-  }, [layouts, hydrated]);
+    if (!hydrated) {
+      return;
+    }
+    localStorage.setItem(storageKey, JSON.stringify(layouts));
+  }, [layouts, hydrated, storageKey]);
 
   const updatePanel = useCallback(
     (id: PanelId, patch: Partial<PanelLayout>) => {
@@ -74,5 +110,5 @@ export function usePanelLayout() {
     }));
   }, []);
 
-  return { layouts, updatePanel, toggleCollapsed, hydrated };
+  return { layouts, updatePanel, toggleCollapsed, hydrated, storageKey };
 }

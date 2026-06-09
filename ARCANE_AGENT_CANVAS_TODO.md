@@ -109,13 +109,13 @@ flowchart TB
 - [x] Connection pill: `fork · connected` (amber) vs `live · connected` (green)
 
 ### C.2 Scene hints & legend
-- [ ] `PoolTradingCanvas` bottom hint: mode-specific copy (fork vs mainnet)
-- [ ] `PoolNodesLegend`: “animates on swap events” → mode-aware one-liner
-- [ ] Demo: subtle amber border or badge on canvas chrome (optional)
+- [x] `PoolTradingCanvas` bottom hint: mode-specific copy (fork vs mainnet)
+- [x] `PoolNodesLegend`: “animates on swap events” → mode-aware one-liner
+- [x] Demo: subtle amber ring + “Anvil fork” badge on canvas chrome
 
 ### C.3 Per-mode panel layout
-- [ ] Change `use-panel-layout.ts` storage key: `arcane-agents-panel-layout:demo` \| `:live`
-- [ ] Migrate or reset layout when switching mode first time
+- [x] Change `use-panel-layout.ts` storage key: `arcane-agents-panel-layout:demo` \| `:live`
+- [x] Migrate legacy `arcane-agents-panel-layout` into mode key on first load; default positions per mode when unset
 
 ### C.4 Draggable panels (unchanged structure)
 | Panel | Demo | Live |

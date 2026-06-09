@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
 import { OrbitControls, PerspectiveCamera } from "@react-three/drei"
 import * as THREE from "three"
+import type { AccountMode } from "@/lib/api/auth"
 import type { PoolRouteCommand } from "@/lib/trading-feed-helpers"
+import { cn } from "@/lib/utils"
 import {
   buildPoolNetworkNodes,
   poolNodeIndex,
@@ -182,13 +184,16 @@ function PoolTradingScene({
 type PoolTradingCanvasProps = {
   poolIds: string[]
   routeCommand?: PoolRouteCommand | null
+  accountMode?: AccountMode
 }
 
 export function PoolTradingCanvas({
   poolIds,
   routeCommand = null,
+  accountMode,
 }: PoolTradingCanvasProps) {
   const nodes = useMemo(() => buildPoolNetworkNodes(poolIds), [poolIds])
+  const isDemo = accountMode === "demo"
 
   if (poolIds.length === 0) {
     return (
@@ -199,7 +204,17 @@ export function PoolTradingCanvas({
   }
 
   return (
-    <div className="relative h-full w-full min-w-0 flex-1 bg-background">
+    <div
+      className={cn(
+        "relative h-full w-full min-w-0 flex-1 bg-background",
+        isDemo && "ring-1 ring-inset ring-amber-500/25",
+      )}
+    >
+      {isDemo && (
+        <div className="pointer-events-none absolute right-4 top-4 z-10 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-amber-700 backdrop-blur dark:text-amber-400">
+          Anvil fork
+        </div>
+      )}
       <Canvas>
         <PerspectiveCamera makeDefault position={[0, 28, 42]} fov={50} />
         <OrbitControls
@@ -211,8 +226,17 @@ export function PoolTradingCanvas({
         />
         <PoolTradingScene nodes={nodes} routeCommand={routeCommand} />
       </Canvas>
-      <div className="pointer-events-none absolute bottom-4 left-4 rounded border border-border bg-card/90 px-3 py-2 font-mono text-[10px] text-muted-foreground backdrop-blur">
-        Orange agent = your wallet · nodes = QuickSwap pools
+      <div
+        className={cn(
+          "pointer-events-none absolute bottom-4 left-4 rounded border bg-card/90 px-3 py-2 font-mono text-[10px] backdrop-blur",
+          isDemo
+            ? "border-amber-500/30 text-amber-800/90 dark:text-amber-300/90"
+            : "border-border text-muted-foreground",
+        )}
+      >
+        {isDemo
+          ? "Orange agent = demo wallet · nodes = QuickSwap pools on the Anvil fork"
+          : "Orange agent = your agent wallet · nodes = QuickSwap pools on Somnia mainnet"}
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
 "use client"
 
+import type { AccountMode } from "@/lib/api/auth"
 import { POOL_MARKET_COLORS } from "@/lib/pool-allocations"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 
@@ -11,9 +12,15 @@ const POOL_HEX: Record<string, string> = {
 
 type PoolNodesLegendProps = {
   poolIds: string[]
+  accountMode?: AccountMode
 }
 
-export function PoolNodesLegend({ poolIds }: PoolNodesLegendProps) {
+export function PoolNodesLegend({
+  poolIds,
+  accountMode,
+}: PoolNodesLegendProps) {
+  const isDemo = accountMode === "demo"
+
   if (poolIds.length === 0) {
     return (
       <p className="font-mono text-[10px] text-muted-foreground">
@@ -43,7 +50,12 @@ export function PoolNodesLegend({ poolIds }: PoolNodesLegendProps) {
       <div className="border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
         <p>• Orange octahedron = your agent wallet</p>
         <p>• Wireframe nodes = QuickSwap liquidity pools</p>
-        <p>• Agent animates pool → pool on live swap events</p>
+        <p>
+          • Agent animates pool → pool on{" "}
+          {isDemo
+            ? "demo fork swap events (paper trading)"
+            : "live mainnet swap events"}
+        </p>
       </div>
     </div>
   )

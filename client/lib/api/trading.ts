@@ -48,7 +48,7 @@ export type TradingCycleSummary = {
   executedTransactions: ExecutedTransaction[]
   llmPending: boolean
   llmResponse?: string | null
-  llmProvider?: "openai"
+  llmProvider?: "somnia" | string
   somniaAttestation?: SomniaAttestationSummary
   toolActions?: TradingToolAction[]
 }

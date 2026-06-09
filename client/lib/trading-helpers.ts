@@ -1,12 +1,14 @@
 import type { AccountMode } from "@/lib/api/auth"
 import type { WalletTokenBalance } from "@/lib/api/wallet"
-import type {
-  ExecutedTransaction,
-  PoolAllocationDrift,
-  TradingActionRecord,
-  TradingCycleSummary,
-  TradingHistoryDetail,
-  TradingStatus,
+import {
+  fetchTradingCycleDetail,
+  fetchTradingHistory,
+  type ExecutedTransaction,
+  type PoolAllocationDrift,
+  type TradingActionRecord,
+  type TradingCycleSummary,
+  type TradingHistoryDetail,
+  type TradingStatus,
 } from "@/lib/api/trading"
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
@@ -226,25 +228,66 @@ export function lastTradeFromCycle(
   return null
 }
 
+export function tradesFromHistoryDetail(
+  detail: TradingHistoryDetail,
+): LastTradeInfo[] {
+  return [...detail.actions]
+    .reverse()
+    .filter((action) => action.type === "swap" || action.type === "rebalance")
+    .map((action) => tradeFromAction(action))
+    .filter((trade): trade is LastTradeInfo => trade != null)
+    .map((trade) => ({ ...trade, accountMode: detail.accountMode }))
+}
+
 export function lastTradeFromHistoryDetail(
   detail: TradingHistoryDetail,
 ): LastTradeInfo | null {
-  const actions = [...detail.actions].reverse()
-  for (const action of actions) {
-    const trade = tradeFromAction(action)
-    if (trade?.txHash) {
-      return { ...trade, accountMode: detail.accountMode }
+  const trades = tradesFromHistoryDetail(detail)
+  return (
+    trades.find((trade) => trade.txHash) ??
+    trades[0] ??
+    null
+  )
+}
+
+const RECENT_TRADE_LIMIT = 5
+
+export async function loadRecentTrades(
+  accountMode: AccountMode,
+  limit = RECENT_TRADE_LIMIT,
+): Promise<LastTradeInfo[]> {
+  const historyResult = await fetchTradingHistory(1, 8, accountMode)
+  if (!historyResult.success || !historyResult.data?.items.length) {
+    return []
+  }
+
+  const detailResults = await Promise.all(
+    historyResult.data.items.map((item) => fetchTradingCycleDetail(item.id)),
+  )
+
+  const trades = detailResults
+    .flatMap((result) =>
+      result.success && result.data?.cycle
+        ? tradesFromHistoryDetail(result.data.cycle)
+        : [],
+    )
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+
+  const seen = new Set<string>()
+  const unique: LastTradeInfo[] = []
+  for (const trade of trades) {
+    const key = trade.txHash ?? `${trade.label}-${trade.at}`
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    unique.push(trade)
+    if (unique.length >= limit) {
+      break
     }
   }
 
-  for (const action of actions) {
-    const trade = tradeFromAction(action)
-    if (trade) {
-      return { ...trade, accountMode: detail.accountMode }
-    }
-  }
-
-  return null
+  return unique
 }
 
 export function formatReason(reason: string): string {

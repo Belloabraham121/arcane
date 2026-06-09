@@ -1,5 +1,6 @@
 "use client"
 
+import { MarkdownContent } from "@/components/agent/markdown-content"
 import { TxHashDisplay } from "@/components/trading/tx-hash-display"
 import type { AccountMode } from "@/lib/api/auth"
 import type { ExecutedTransaction } from "@/lib/api/trading"
@@ -95,9 +96,11 @@ export function AgentCycleExecutionPanel({
       </div>
 
       {!active && !swapsExecuted && display.llmResponse ? (
-        <div className="max-h-24 overflow-y-auto rounded border border-border bg-background/50 px-2 py-1.5 text-muted-foreground">
-          <p className="mb-1 uppercase tracking-widest text-[9px]">Agent summary</p>
-          <p className="line-clamp-4 whitespace-pre-wrap">{display.llmResponse}</p>
+        <div className="max-h-24 overflow-hidden rounded border border-border bg-background/50 px-2 py-1.5 text-muted-foreground">
+          <p className="mb-1 uppercase tracking-widest text-[9px]">Somnia LLM summary</p>
+          <div className="line-clamp-4">
+            <MarkdownContent content={display.llmResponse} />
+          </div>
         </div>
       ) : null}
 

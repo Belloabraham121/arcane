@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/trading"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
+import { MarkdownContent } from "@/components/agent/markdown-content"
 import { TxHashDisplay } from "@/components/trading/tx-hash-display"
 import { somniaTxUrl } from "@/lib/somnia-explorer"
 import {
@@ -72,11 +73,11 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
       {(detail.llmSummary || detail.llmResponse) && (
         <div>
           <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            OpenAI reasoning
+            Somnia LLM reasoning
           </p>
-          <p className="font-mono text-xs text-foreground whitespace-pre-wrap">
-            {detail.llmSummary ?? detail.llmResponse}
-          </p>
+          <div className="rounded border border-border bg-background/50 px-3 py-2">
+            <MarkdownContent content={detail.llmSummary ?? detail.llmResponse ?? ""} />
+          </div>
         </div>
       )}
 

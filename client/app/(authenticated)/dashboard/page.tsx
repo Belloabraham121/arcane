@@ -10,8 +10,6 @@ import { AccountModeSwitch } from "@/components/layout/account-mode-switch"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import {
-  fetchTradingCycleDetail,
-  fetchTradingHistory,
   fetchTradingStatus,
   type TradingStatus,
 } from "@/lib/api/trading"
@@ -23,7 +21,9 @@ import { ActivePoolsPanel } from "@/components/dashboard/active-pools-panel"
 import { AgentStatusBadge } from "@/components/dashboard/agent-status-badge"
 import { DemoDepositModal } from "@/components/dashboard/demo-deposit-modal"
 import { ViewAgentsLink } from "@/components/dashboard/view-agents-link"
-import { LastTradeCard } from "@/components/dashboard/last-trade-card"
+import { AgentLlmResponseDialog } from "@/components/agent-llm-response-dialog"
+import { RecentTradesCard } from "@/components/dashboard/recent-trades-card"
+import { SomniaLlmSummaryCard } from "@/components/dashboard/somnia-llm-summary-card"
 import { PoolMetricsStrip } from "@/components/dashboard/pool-metrics-strip"
 import {
   ActivePoolsPanelSkeleton,
@@ -48,8 +48,7 @@ import { allocatedPoolIds } from "@/lib/supported-tokens"
 import {
   buildActivePoolRows,
   deriveAgentDisplayStatus,
-  lastTradeFromCycle,
-  lastTradeFromHistoryDetail,
+  loadRecentTrades,
   type LastTradeInfo,
 } from "@/lib/trading-helpers"
 
@@ -73,7 +72,9 @@ export default function DashboardPage() {
   const [strategyLoading, setStrategyLoading] = useState(true)
   const [poolsLoading, setPoolsLoading] = useState(true)
   const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
-  const [lastTrade, setLastTrade] = useState<LastTradeInfo | null>(null)
+  const [recentTrades, setRecentTrades] = useState<LastTradeInfo[]>([])
+  const [recentTradesLoading, setRecentTradesLoading] = useState(false)
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false)
 
   useEffect(() => {
     if (!sessionReady) {
@@ -164,33 +165,18 @@ export default function DashboardPage() {
       return
     }
 
-    const [statusResult, historyResult] = await Promise.all([
-      fetchTradingStatus(viewMode),
-      fetchTradingHistory(1, 1, viewMode),
-    ])
-    if (statusResult.success && statusResult.data) {
-      setTradingStatus(statusResult.data.status)
-    }
-
-    const status = statusResult.success ? statusResult.data?.status : null
-    const fromCycle = lastTradeFromCycle(
-      status?.lastCycle ?? null,
-      status?.lastCycleAt ?? null,
-    )
-    if (fromCycle) {
-      setLastTrade(fromCycle)
-      return
-    }
-
-    const latest = historyResult.success ? historyResult.data?.items[0] : undefined
-    if (!latest) {
-      setLastTrade(null)
-      return
-    }
-
-    const detailResult = await fetchTradingCycleDetail(latest.id)
-    if (detailResult.success && detailResult.data?.cycle) {
-      setLastTrade(lastTradeFromHistoryDetail(detailResult.data.cycle))
+    setRecentTradesLoading(true)
+    try {
+      const [statusResult, trades] = await Promise.all([
+        fetchTradingStatus(viewMode),
+        loadRecentTrades(viewMode),
+      ])
+      if (statusResult.success && statusResult.data) {
+        setTradingStatus(statusResult.data.status)
+      }
+      setRecentTrades(trades)
+    } finally {
+      setRecentTradesLoading(false)
     }
   }, [viewMode])
 
@@ -576,20 +562,28 @@ export default function DashboardPage() {
               </p>
             )}
             {tradingStatus?.lastCycle?.llmResponse && (
-              <div className="border border-border px-4 py-4">
-                <p className="mb-1 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  OpenAI summary
-                </p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  {tradingStatus.lastCycle.llmResponse}
-                </p>
-              </div>
+              <SomniaLlmSummaryCard
+                summary={tradingStatus.lastCycle.llmResponse}
+                onClick={() => setAgentDialogOpen(true)}
+              />
             )}
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <ActivePoolsPanel pools={activePoolRows} />
-              <LastTradeCard trade={lastTrade} accountMode={viewMode} />
+              <RecentTradesCard
+                trades={recentTrades}
+                accountMode={viewMode}
+                loading={recentTradesLoading}
+              />
             </div>
+
+            <AgentLlmResponseDialog
+              open={agentDialogOpen}
+              onOpenChange={setAgentDialogOpen}
+              cycleId={tradingStatus?.lastCycle?.cycleId ?? null}
+              initialText={tradingStatus?.lastCycle?.llmResponse ?? null}
+              headline="Agent cycle summary"
+            />
 
             <div className="border border-border p-6">
               <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">

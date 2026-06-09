@@ -17,8 +17,8 @@ import {
   listActiveStrategiesForWorker,
   updateBalanceFingerprint,
 } from "../services/agents/trading.repository";
+import { getDemoTradingAvailability } from "../services/agents/trading-wallet-context.service";
 import {
-  getDemoTradingAvailability,
   resolvePortfolioWallet,
   withPortfolioRpc,
 } from "../services/portfolio/wallet-context.service";

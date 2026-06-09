@@ -1,6 +1,11 @@
-import { getMe } from "@/lib/api/auth"
+import { getMe, type AuthUser } from "@/lib/api/auth"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import { APP_ROUTES, setupRouteFor } from "./app-routes"
+
+/** Next onboarding step when account mode is unset. */
+export function accountModeOnboardingRoute(user: Pick<AuthUser, "accountMode">): string | null {
+  return user.accountMode == null ? APP_ROUTES.accountModeOnboarding : null
+}
 
 export async function resolvePostAuthRoute(): Promise<string> {
   const meResult = await getMe()
@@ -8,8 +13,9 @@ export async function resolvePostAuthRoute(): Promise<string> {
     return APP_ROUTES.signIn
   }
 
-  if (meResult.data.user.accountMode == null) {
-    return APP_ROUTES.accountModeOnboarding
+  const accountModeRoute = accountModeOnboardingRoute(meResult.data.user)
+  if (accountModeRoute) {
+    return accountModeRoute
   }
 
   const strategyResult = await getAgentStrategy()

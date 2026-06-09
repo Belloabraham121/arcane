@@ -43,7 +43,7 @@ function CopyAddressButton({ address }: { address: string }) {
 
 export default function AccountModeOnboardingPage() {
   const router = useRouter();
-  const { sessionReady } = useSession();
+  const { sessionReady, refreshSession } = useSession();
   const [loading, setLoading] = useState(true);
   const [choosing, setChoosing] = useState<"demo" | "live" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +99,7 @@ export default function AccountModeOnboardingPage() {
       return;
     }
 
+    await refreshSession();
     router.push(APP_ROUTES.strategyOnboarding);
   }
 

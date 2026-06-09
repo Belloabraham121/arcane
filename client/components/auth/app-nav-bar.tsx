@@ -1,12 +1,14 @@
 import Link from "next/link"
 import { Cpu } from "lucide-react"
+import type { AccountMode } from "@/lib/api/auth"
 import { LogoutButton } from "@/components/auth/logout-button"
 
 type AppNavBarProps = {
   walletAddress?: string | null
+  accountMode?: AccountMode | null
 }
 
-export function AppNavBar({ walletAddress }: AppNavBarProps) {
+export function AppNavBar({ walletAddress, accountMode }: AppNavBarProps) {
   const shortWallet =
     walletAddress != null
       ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
@@ -25,6 +27,17 @@ export function AppNavBar({ walletAddress }: AppNavBarProps) {
             </div>
           </Link>
           <div className="flex items-center gap-4">
+            {accountMode && (
+              <span
+                className={`font-mono text-[10px] uppercase tracking-widest ${
+                  accountMode === "demo"
+                    ? "text-amber-600"
+                    : "text-emerald-600"
+                }`}
+              >
+                {accountMode}
+              </span>
+            )}
             {shortWallet && (
               <span className="font-mono text-xs text-muted-foreground">{shortWallet}</span>
             )}

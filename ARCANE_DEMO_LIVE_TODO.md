@@ -159,10 +159,10 @@ flowchart TB
 - [x] `PATCH /api/v1/users/account-mode` or include in first strategy upsert
 
 ### 3.2 Routing
-- [ ] Update `resolve-post-auth.ts`:
+- [x] Update `resolve-post-auth.ts`:
   - No `account_mode` → `/onboarding/account-mode`
   - Then existing strategy onboarding flow
-- [ ] Persist mode in session/context (`AccountModeProvider` or extend `session-provider`)
+- [x] Persist mode in session/context (`AccountModeProvider` or extend `session-provider`)
 
 ### 3.3 Setup / deposit UI
 - [ ] Demo setup: hide “enter deposit USD” **or** pre-fill from detected demo balance; label “Simulation deposit (read-only)”

@@ -15,7 +15,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
 
 export default function StrategyOnboardingPage() {
   const router = useRouter();
-  const { walletAddress, sessionReady } = useSession();
+  const { walletAddress, sessionReady, accountMode } = useSession();
   const [hoveredStrategy, setHoveredStrategy] = useState<
     "auto" | "custom" | null
   >(null);
@@ -30,13 +30,7 @@ export default function StrategyOnboardingPage() {
 
     async function load() {
       try {
-        const { getMe } = await import("@/lib/api/auth");
-        const meResult = await getMe();
-        if (!meResult.success || !meResult.data?.user) {
-          router.replace(APP_ROUTES.signIn);
-          return;
-        }
-        if (meResult.data.user.accountMode == null) {
+        if (accountMode == null) {
           router.replace(APP_ROUTES.accountModeOnboarding);
           return;
         }
@@ -57,7 +51,7 @@ export default function StrategyOnboardingPage() {
     }
 
     void load();
-  }, [router, sessionReady]);
+  }, [router, sessionReady, accountMode]);
 
   useEffect(() => {
     if (!sessionReady) {

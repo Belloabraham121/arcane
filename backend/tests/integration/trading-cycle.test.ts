@@ -17,8 +17,9 @@ import {
 } from "../helpers/fixtures";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
+const describeIntegration = runIntegration ? describe : describe.skip;
 
-describe("runTradingCycle with mocked LLM", { skip: !runIntegration }) => {
+describeIntegration("runTradingCycle with mocked LLM", () => {
   let fixture: TestUserFixture;
 
   before(async () => {

@@ -6,8 +6,9 @@ import { prisma } from "../../src/infrastructure/postgres/client";
 import { startTestServer } from "../helpers/http";
 
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";
+const describeIntegration = runIntegration ? describe : describe.skip;
 
-describe("GET /api/v1/quickswap/pools", { skip: !runIntegration }) => {
+describeIntegration("GET /api/v1/quickswap/pools", () => {
   before(async () => {
     await prisma.$connect();
   });

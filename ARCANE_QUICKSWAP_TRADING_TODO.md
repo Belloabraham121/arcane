@@ -4,6 +4,7 @@
 > **No script-driven UX.** Scripts are dev-only smoke tests. All production flows start from the website and backend services.
 
 **References:**
+
 - [QuickSwap Contracts & Addresses](https://docs.quickswap.exchange/overview/contracts-and-addresses)
 - [Somnia LLM Inference Agent](https://agents.somnia.network/agent/12847293847561029384)
 - [Somnia LLM Inference Docs](https://docs.somnia.network/agents/base-agents/llm-inference)
@@ -46,11 +47,13 @@ sequenceDiagram
 ## Phase 0 — Foundations & config
 
 ### 0.1 Documentation corrections
+
 - [x] Update `backend/api-ref.md` QuickSwap section: V4 Algebra (not Uniswap V3), correct ABIs, remove broken `api.quickswap.exchange/v3/pools` URL
 - [x] Update `SYNAPSE_ARCHITECTURE.md` §10.1: replace `fee: 3000` with `deployer: ZERO_ADDRESS`
 - [x] Add QuickSwap + Somnia agent env vars to `backend/.env.example`
 
 ### 0.2 Chain & contract config
+
 - [x] Create `backend/src/config/quickswap.ts` with per-network addresses:
   - AlgebraFactory, SwapRouter, QuoterV2, NonfungiblePositionManager
   - Somnia Mainnet (`5031`) — verified live
@@ -60,6 +63,7 @@ sequenceDiagram
 - [x] Split chains: `getSomniaAgentEnv()` (testnet LLM) + `getQuickSwapEnv()` (mainnet pools)
 
 ### 0.3 Dependencies
+
 - [x] Install `@cryptoalgebra/integral-periphery` (ABIs/interfaces)
 - [x] Optionally install `@cryptoalgebra/integral-sdk` (route math helpers)
 - [x] Keep `viem` as primary chain client (already installed)
@@ -71,6 +75,7 @@ sequenceDiagram
 > **User-facing goal:** On onboarding, show real QuickSwap pools the user can allocate capital to.
 
 ### 1.1 Pool discovery service
+
 - [x] `backend/src/services/defi/quickswap/abis.ts` — SwapRouter, QuoterV2, Factory, Pool, NPM ABIs
 - [x] `backend/src/services/defi/quickswap/constants.ts` — `ZERO_DEPLOYER`, default slippage, seed pairs
 - [x] `backend/src/services/defi/quickswap/types.ts`:
@@ -84,6 +89,7 @@ sequenceDiagram
   - Filter out pools where address is `0x0`
 
 ### 1.2 Pool metrics & quoting
+
 - [x] `backend/src/services/defi/quickswap/quote.service.ts`:
   - `quoteExactIn(tokenIn, tokenOut, amountIn)` via QuoterV2 (`deployer: ZERO`)
   - Handle viem uint160 decode edge case (raw `eth_call` fallback if needed)
@@ -92,6 +98,7 @@ sequenceDiagram
   - Implied APR / volume (on-chain first; Ormi subgraph later)
 
 ### 1.3 REST API — pools (public / authenticated)
+
 - [x] `GET /api/v1/quickswap/pools` — list all available pools with token info + metrics
 - [x] `GET /api/v1/quickswap/pools/:poolId` — single pool detail + live quote samples
 - [x] `GET /api/v1/quickswap/pools/:poolId/quote?tokenIn=&amountIn=` — quote swap through pool
@@ -99,6 +106,7 @@ sequenceDiagram
 - [x] Register routes in `main.ts`
 
 ### 1.4 Client API client
+
 - [x] `client/lib/api/quickswap.ts` — `fetchPools()`, `fetchPool()`, `fetchPoolQuote()`
 - [x] `client/lib/api/quickswap-types.ts` — mirror backend pool types
 
@@ -109,6 +117,7 @@ sequenceDiagram
 > **User-facing goal:** During Auto/Custom setup, user sees **QuickSwap pools** (e.g. USDCe/WSOMI) instead of generic protocols (Uniswap, Aave).
 
 ### 2.1 Database schema migration
+
 - [x] Replace `ProtocolId` enum (`uniswap`, `aave`, …) with pool-based allocation:
   - Normalized `pool_allocation` table (`pool_id`, `amount`, `strategy_id`)
 - [x] Migration: `protocol_allocation` / JSON → `pool_allocation` (`npm run db:migrate-pools`)
@@ -116,12 +125,14 @@ sequenceDiagram
 - [x] Add `tradingEnabledAt`, `lastCycleAt` on `AgentStrategy`
 
 ### 2.2 Backend strategy types & service
+
 - [x] Update `strategy.types.ts`: `PoolAllocations = Record<poolId, number>`
 - [x] Update `strategy.service.ts` validation for pool IDs (seed pair ids)
 - [x] Update `strategy.repository.ts` read/write for pool allocations
 - [x] `PATCH /api/v1/agents/strategy/pool-allocations` (alongside legacy `protocol-allocations`)
 
 ### 2.3 Frontend — pool selection UI
+
 - [x] Rename `ProtocolAllocationEditor` → `PoolAllocationEditor`
 - [x] Fetch pools from `GET /api/v1/quickswap/pools` on setup pages
 - [x] Show pool cards: pair name (USDCe/WSOMI), token icons, live price, optional APR
@@ -131,6 +142,7 @@ sequenceDiagram
 - [x] Update sub-agent prompts: "Executes rebalances across **QuickSwap pools**" (not Aave/Lido)
 
 ### 2.4 Setup flow pages
+
 - [x] `client/app/setup/auto/page.tsx` — use `PoolAllocationEditor` + live pools
 - [x] `client/app/setup/custom/page.tsx` — same pool picker, user toggles sub-agents
 - [x] `client/app/onboarding/strategy/page.tsx` — copy update: "pools" not "protocols"
@@ -144,6 +156,7 @@ sequenceDiagram
 > **Goal:** Backend can swap and move liquidity between pools on behalf of the user's agent wallet.
 
 ### 3.1 Swap service
+
 - [x] `backend/src/services/defi/quickswap/swap.service.ts`:
   - `buildApprove(token, spender, amount)` — ERC20 approve calldata
   - `buildSwapExactIn(tokenIn, tokenOut, amountIn, slippageBps, recipient)` — `exactInputSingle`
@@ -152,6 +165,7 @@ sequenceDiagram
 - [x] `backend/src/services/defi/quickswap/quickswap.adapter.ts` — facade over quote + swap + pool
 
 ### 3.2 Route planner (pool-to-pool capital movement)
+
 - [x] `backend/src/services/defi/quickswap/route-planner.ts`:
   - Graph: tokens as nodes, pools as edges
   - Find paths between source pool token and target pool token (max 3 hops)
@@ -160,6 +174,7 @@ sequenceDiagram
 - [x] Use case: move USDCe from USDCe/WSOMI exposure → USDCe/WETH exposure via swap route
 
 ### 3.3 Liquidity provision (optional MVP+)
+
 - [x] `backend/src/services/defi/quickswap/liquidity.service.ts`:
   - `buildMintPosition(token0, token1, amounts, tickRange)` — NPM `mint`
   - `buildRemoveLiquidity(tokenId, percent)` — NPM `decreaseLiquidity`
@@ -167,6 +182,7 @@ sequenceDiagram
 - [x] MVP decision: **swaps only first**; LP add/remove in Phase 3.3 if time allows
 
 ### 3.4 Agent wallet execution
+
 - [x] `backend/src/services/agents/wallet-executor.ts`:
   - Load user agent wallet from encrypted key (existing `email-wallet.service`)
   - Sign + submit swap txs via viem `walletClient`
@@ -186,6 +202,7 @@ sequenceDiagram
 > **Method:** `inferToolsChat` — LLM returns tool calls; backend executes them.
 
 ### 4.1 Somnia agent service (production, not smoke script)
+
 - [x] Extract platform ABI + caller from `scripts/smoke-llm-inference.ts` into:
   - `backend/src/services/somnia/platform.abi.ts`
   - `backend/src/services/somnia/agent-caller.ts`
@@ -194,6 +211,7 @@ sequenceDiagram
 - [x] Scripts remain **dev-only** smoke tests; production uses `agent-caller.ts`
 
 ### 4.2 LLM tool definitions (onchain tools for inferToolsChat)
+
 - [x] `backend/src/services/somnia/quickswap-llm-tools.ts` — register tools the LLM can call:
   - `listPools()` — pools user allocated to + live metrics
   - `quoteSwap(tokenIn, tokenOut, amountIn)` — read-only quote
@@ -205,6 +223,7 @@ sequenceDiagram
 - [x] Custom: respect user sub-agent config + pool selection only
 
 ### 4.3 Trading runner service (core loop)
+
 - [x] `backend/src/services/agents/trading-runner.service.ts` (inferToolsChat + tool loop + per-user wallet):
 
 ```
@@ -231,14 +250,16 @@ runCycle(userId):
   - Risk limits from sub-agent config (max drawdown, max single move %)
 
 ### 4.4 Triggering trading (user side, not scripts)
+
 - [x] **On activate:** first cycle runs when user sets `status: "active"` after deposit (portfolio analysis MVP; LLM execution Phase 4.1–4.3)
 - [x] **Scheduled worker:** `backend/src/workers/trading-cycle.worker.ts`
   - Poll active strategies every N minutes (configurable per auto/custom)
   - Auto: every 5–15 min; Custom: user-defined interval in strategy config
-- [x] **Manual trigger:** `POST /api/v1/agents/trading/run-cycle` (authenticated)
+- [x] **Manual trigger:** `POST /api/**v1**/agents/trading/run-cycle` (authenticated)
 - [x] **Deposit detection:** optional — watch agent wallet balance; start cycle when deposit confirmed
 
 ### 4.5 REST API — trading
+
 - [x] `POST /api/v1/agents/trading/run-cycle` — trigger one cycle (analysis MVP)
 - [x] `GET /api/v1/agents/trading/status` — last cycle time, phase, agent state
 - [x] `GET /api/v1/agents/trading/history` — paginated list of swaps/rebalances
@@ -249,11 +270,13 @@ runCycle(userId):
 ## Phase 5 — Persistence & activity tracking
 
 ### 5.1 Database models
+
 - [x] `TradingCycle` — userId, strategyId, startedAt, finishedAt, status, llmSummary
 - [x] `TradingAction` — cycleId, type (swap|rebalance|approve|quote|tool), tokenIn, tokenOut, amountIn, amountOut, poolFrom, poolTo, txHash, status
 - [ ] `PoolSnapshot` — optional cache of pool metrics at cycle time (for audit / signals)
 
 ### 5.2 Repositories
+
 - [x] `trading.repository.ts` — CRUD for cycles + actions
 - [x] Link actions to user + strategy for dashboard history
 
@@ -264,17 +287,20 @@ runCycle(userId):
 > User sees agent working on their behalf after setup.
 
 ### 6.1 Dashboard widgets
+
 - [x] Active pools panel — pools agent is managing + current allocation %
 - [x] Last trade card — most recent swap/rebalance (pair, amount, time, tx link)
 - [x] Agent status — `idle` | `analyzing` | `executing` | `waiting_deposit`
 - [x] Pool metrics strip — live prices from selected pools
 
 ### 6.2 Trading history page
+
 - [x] `client/app/dashboard/trading/page.tsx` — list of cycles + actions
 - [x] Link to Somnia explorer for tx hashes
 - [x] Show LLM reasoning summary per cycle (from `TradingCycle.llmSummary`)
 
 ### 6.3 Real-time updates (later)
+
 - [x] WebSocket event: `trading:cycle_started`, `trading:action_executed`, `trading:cycle_completed`
 - [x] Push to dashboard particle visualiser (agent moves between pool nodes)
 
@@ -283,6 +309,7 @@ runCycle(userId):
 ## Phase 7 — Safety, limits & strategy rules
 
 ### 7.1 Risk controls (backend enforced, not LLM-only)
+
 - [x] Max % of portfolio per single swap (e.g. 20%)
 - [x] Max slippage bps (default 50 = 0.5%)
 - [x] Cooldown between cycles (prevent over-trading)
@@ -291,13 +318,14 @@ runCycle(userId):
 - [x] Risk Manager sub-agent rules map to hard backend limits
 
 ### 7.2 Auto vs Custom behaviour
-| | Auto Agent | Custom Agent |
-|---|---|---|
-| Pool selection | Top pools pre-selected by liquidity | User picks pools manually |
-| Allocation | Auto-balanced by TVL | User sets amounts |
-| Cycle interval | Fixed (e.g. 10 min) | User-configurable |
-| Sub-agents | Full preset (orchestrator, yield, signal, risk) | User toggles + custom prompts |
-| LLM prompt | Aggressive yield optimisation | Respect user constraints |
+
+|                | Auto Agent                                      | Custom Agent                  |
+| -------------- | ----------------------------------------------- | ----------------------------- |
+| Pool selection | Top pools pre-selected by liquidity             | User picks pools manually     |
+| Allocation     | Auto-balanced by TVL                            | User sets amounts             |
+| Cycle interval | Fixed (e.g. 10 min)                             | User-configurable             |
+| Sub-agents     | Full preset (orchestrator, yield, signal, risk) | User toggles + custom prompts |
+| LLM prompt     | Aggressive yield optimisation                   | Respect user constraints      |
 
 - [x] Auto: `GET /quickswap/pools?context=auto` picks 3–4 top pools (liquidity + APR score, unique pairs)
 - [x] Custom: `GET /quickswap/pools?context=custom&sort=` — all pools, sortable (liquidity, apy, tvl, volume)
@@ -311,11 +339,11 @@ runCycle(userId):
 
 > Scripts are **not** the product path — only for CI / local verification.
 
-- [ ] `scripts/smoke-quickswap-pools.ts` — list pools on mainnet
-- [ ] `scripts/smoke-quickswap-quote.ts` — quote USDCe→WSOMI
-- [ ] `scripts/smoke-trading-cycle.ts` — one full LLM cycle against test wallet (dev only)
-- [ ] Integration test: `GET /quickswap/pools` returns ≥ 1 pool
-- [ ] Integration test: active strategy → `run-cycle` → action recorded (mocked LLM optional)
+- [x] `scripts/smoke-quickswap-pools.ts` — list pools on mainnet (`listPoolsForContext`, all/auto/custom)
+- [x] `scripts/smoke-quickswap-quote.ts` — quote USDCe→WSOMI + enriched pool by address id
+- [x] `scripts/smoke-trading-cycle.ts` — one full LLM cycle against test wallet (dev only; `--user-id` or `--email`)
+- [x] Integration test: `GET /quickswap/pools` returns ≥ 1 pool (`tests/integration/quickswap-pools.test.ts`)
+- [x] Integration test: active strategy → `run-cycle` → action recorded (`tests/integration/trading-cycle.test.ts`, mocked LLM)
 
 ---
 
@@ -333,6 +361,7 @@ runCycle(userId):
 ## File checklist (new / modified)
 
 ### Backend — new files
+
 ```
 src/config/quickswap.ts
 src/services/defi/quickswap/
@@ -352,6 +381,7 @@ prisma/migrations/xxx_pool_allocations.sql
 ```
 
 ### Backend — modify
+
 ```
 src/main.ts                          # register new routes
 src/config/env.ts                    # quickswap + somnia env
@@ -365,6 +395,7 @@ prisma/schema.prisma
 ```
 
 ### Client — new files
+
 ```
 lib/api/quickswap.ts
 lib/api/quickswap-types.ts
@@ -376,6 +407,7 @@ components/dashboard/last-trade-card.tsx
 ```
 
 ### Client — modify
+
 ```
 lib/api/strategy-types.ts            # PoolAllocations
 lib/strategy-presets.ts              # pool labels, prompts
@@ -412,4 +444,4 @@ components/setup/protocol-allocation-editor.tsx  → deprecate / replace
 
 ---
 
-*Last updated: 2026-06-06*
+_Last updated: 2026-06-09_

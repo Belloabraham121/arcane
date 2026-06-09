@@ -89,6 +89,28 @@ npm run dev              # http://localhost:8080
 
 Required env: `AUTH_JWT_SECRET`, `MASTER_SEED`, `ENCRYPTION_SECRET_KEY`, `DATABASE_URL`, `CORS_ORIGIN=http://localhost:3000`.
 
+## QuickSwap & trading smoke tests (Phase 8)
+
+Dev-only scripts — not used in production user flows.
+
+```bash
+npm run smoke:quickswap:pools    # list viable pools (all / auto / custom contexts)
+npm run smoke:quickswap:quote    # USDCe→WSOMI quote + enriched pool metrics
+npm run smoke:trading:cycle -- --email=you@example.com   # one live LLM cycle (needs active strategy + STT)
+```
+
+Integration tests (Postgres + Somnia RPC; mocked LLM for trading cycle):
+
+```bash
+docker compose up -d postgres
+RUN_INTEGRATION_TESTS=1 npm test
+```
+
+| Test | What it verifies |
+|------|------------------|
+| `tests/integration/quickswap-pools.test.ts` | `GET /api/v1/quickswap/pools` returns ≥ 1 pool with TVL, volume, liquidity |
+| `tests/integration/trading-cycle.test.ts` | Active strategy → `runTradingCycle` → cycle + quote action persisted |
+
 ## Folder structure
 
 ```

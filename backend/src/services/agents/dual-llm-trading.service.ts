@@ -23,11 +23,16 @@ import {
   submitSomniaAttestation,
   type SomniaAttestation,
 } from "../somnia/somnia-attestation.service";
+import {
+  runSubAgentPhase,
+  type SubAgentOutput,
+} from "./sub-agent-orchestrator";
 
 const log = createLogger("dual-llm-trading");
 
 export type DualLlmTradingCycleResult = OpenAiTradingCycleResult & {
   somniaAttestation: SomniaAttestation;
+  subAgentOutputs: SubAgentOutput[];
 };
 
 export async function runDualLlmTradingCycle(input: {
@@ -46,6 +51,8 @@ export async function runDualLlmTradingCycle(input: {
   activePoolIds: readonly string[];
   riskLimits: EffectiveRiskLimits;
   onToolExecuted?: (outcome: ToolExecutionOutcome) => void;
+  onSubAgentStarted?: (agentId: string, agentName: string) => void;
+  onSubAgentCompleted?: (output: SubAgentOutput) => void;
   /** Skip Somnia createRequest (dev simulation). */
   skipSomniaAttestation?: boolean;
   /** Simulate swap/rebalance execution without broadcasting txs. */
@@ -77,6 +84,20 @@ export async function runDualLlmTradingCycle(input: {
 
   log.info("Starting dual-LLM trading cycle", { userId: input.userId });
 
+  const subAgentPhase = await runSubAgentPhase(
+    input.subAgents,
+    {
+      pools: input.pools,
+      balances: input.balances,
+      poolDrift: input.poolDrift,
+      recommendedAction: portfolio.recommendedAction,
+      riskLimits: input.riskLimits,
+      accountMode: input.accountMode,
+    },
+    input.onSubAgentCompleted,
+    input.onSubAgentStarted,
+  );
+
   const somniaAttestation = input.skipSomniaAttestation
     ? {
         status: "skipped" as const,
@@ -92,11 +113,13 @@ export async function runDualLlmTradingCycle(input: {
 
   const openAi = await runOpenAiTradingCycle({
     ...input,
+    subAgentContext: subAgentPhase.mergedContext || undefined,
     dryRunTrades: input.dryRunTrades,
   });
 
   return {
     ...openAi,
     somniaAttestation,
+    subAgentOutputs: subAgentPhase.outputs,
   };
 }

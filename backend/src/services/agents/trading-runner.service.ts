@@ -42,6 +42,8 @@ import {
 import {
   emitFromExecutedTransactions,
   emitFromToolOutcome,
+  emitSubAgentCompleted,
+  emitSubAgentStarted,
   emitTradingCycleCompleted,
   emitTradingCycleStarted,
 } from "../../websocket/trading-events";
@@ -631,6 +633,26 @@ export async function runTradingCycle(
           dryRunTrades: overrides?.simulation?.dryRunTrades,
           skipSomniaAttestation:
             isDemoCycle || overrides?.simulation?.skipSomniaAttestation,
+          onSubAgentStarted: (agentId: string, agentName: string) => {
+            emitSubAgentStarted(userId, {
+              cycleId,
+              accountMode: trading.accountMode,
+              agentId,
+              agentName,
+              at: new Date().toISOString(),
+            });
+          },
+          onSubAgentCompleted: (output: { agentId: string; agentName: string; summary: string; durationMs: number }) => {
+            emitSubAgentCompleted(userId, {
+              cycleId,
+              accountMode: trading.accountMode,
+              agentId: output.agentId,
+              agentName: output.agentName,
+              summary: output.summary,
+              durationMs: output.durationMs,
+              at: new Date().toISOString(),
+            });
+          },
           onToolExecuted: (outcome) => {
             emitFromToolOutcome(userId, cycleId, trading.accountMode, outcome);
           },

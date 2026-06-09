@@ -3,6 +3,8 @@ import type { AccountMode } from "@prisma/client";
 export const TRADING_SOCKET_EVENTS = {
   cycleStarted: "trading:cycle_started",
   actionExecuted: "trading:action_executed",
+  subAgentStarted: "trading:sub_agent_started",
+  subAgentCompleted: "trading:sub_agent_completed",
   cycleCompleted: "trading:cycle_completed",
 } as const;
 
@@ -34,6 +36,24 @@ export type SomniaAttestationEvent = {
   requestId: string | null;
   txHash: string | null;
   message: string;
+};
+
+export type SubAgentStartedEvent = {
+  cycleId: string;
+  accountMode: AccountMode;
+  agentId: string;
+  agentName: string;
+  at: string;
+};
+
+export type SubAgentCompletedEvent = {
+  cycleId: string;
+  accountMode: AccountMode;
+  agentId: string;
+  agentName: string;
+  summary: string;
+  durationMs: number;
+  at: string;
 };
 
 export type TradingCycleCompletedEvent = {

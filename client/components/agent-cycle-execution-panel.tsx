@@ -4,6 +4,7 @@ import { MarkdownContent } from "@/components/agent/markdown-content"
 import { TxHashDisplay } from "@/components/trading/tx-hash-display"
 import type { AccountMode } from "@/lib/api/auth"
 import type { ExecutedTransaction } from "@/lib/api/trading"
+import type { SubAgentStatus } from "@/lib/api/trading-socket-types"
 import {
   executionDetail,
   executionHeadline,
@@ -11,11 +12,19 @@ import {
 } from "@/lib/agent-cycle-outcome"
 import { cn } from "@/lib/utils"
 
+const SUB_AGENT_COLORS: Record<string, string> = {
+  "signal-scout": "#3b82f6",
+  "risk-manager": "#f59e0b",
+  "yield-executor": "#22c55e",
+  "bridge-scout": "#8b5cf6",
+}
+
 type AgentCycleExecutionPanelProps = {
   accountMode: AccountMode
   outcome: AgentCycleOutcome | null
   cycleActive: boolean
   executedTransactions?: ExecutedTransaction[]
+  subAgentStatuses?: SubAgentStatus[]
   onViewAgentResponse?: () => void
 }
 
@@ -24,6 +33,7 @@ export function AgentCycleExecutionPanel({
   outcome,
   cycleActive,
   executedTransactions = [],
+  subAgentStatuses = [],
   onViewAgentResponse,
 }: AgentCycleExecutionPanelProps) {
   const isDemo = accountMode === "demo"
@@ -101,6 +111,55 @@ export function AgentCycleExecutionPanel({
           <div className="line-clamp-4">
             <MarkdownContent content={display.llmResponse} />
           </div>
+        </div>
+      ) : null}
+
+      {subAgentStatuses.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="uppercase tracking-widest text-muted-foreground">
+            Sub-agent advisory
+          </p>
+          {subAgentStatuses.map((sa) => (
+            <div
+              key={sa.agentId}
+              className="flex items-start gap-2 border border-border px-2 py-1.5"
+            >
+              <span
+                className={cn(
+                  "mt-0.5 h-2 w-2 shrink-0 rounded-full",
+                  sa.status === "running" && "animate-pulse",
+                )}
+                style={{
+                  backgroundColor:
+                    SUB_AGENT_COLORS[sa.agentId] ?? "#6366f1",
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold uppercase tracking-widest text-foreground">
+                    {sa.agentName}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[8px] uppercase",
+                      sa.status === "running"
+                        ? "text-blue-500"
+                        : sa.status === "completed"
+                          ? "text-emerald-500"
+                          : "text-muted-foreground",
+                    )}
+                  >
+                    {sa.status}
+                  </span>
+                </div>
+                {sa.summary ? (
+                  <p className="mt-0.5 text-muted-foreground line-clamp-2">
+                    {sa.summary}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ))}
         </div>
       ) : null}
 

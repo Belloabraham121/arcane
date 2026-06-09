@@ -209,6 +209,7 @@ export async function runOpenAiTradingCycle(input: {
   activePoolIds: readonly string[];
   riskLimits: EffectiveRiskLimits;
   onToolExecuted?: (outcome: ToolExecutionOutcome) => void;
+  subAgentContext?: string;
   dryRunTrades?: boolean;
 }): Promise<OpenAiTradingCycleResult> {
   const { maxLlmToolRounds, openaiModel } = getTradingExecutionEnv();
@@ -256,6 +257,15 @@ export async function runOpenAiTradingCycle(input: {
     {
       role: "user",
       content: [
+        ...(input.subAgentContext
+          ? [
+              "=== SUB-AGENT ADVISORY CONTEXT ===",
+              "The following sub-agents have analyzed the portfolio. Use their insights to inform your decision:",
+              input.subAgentContext,
+              "=== END SUB-AGENT CONTEXT ===",
+              "",
+            ]
+          : []),
         "Portfolio context (JSON):",
         JSON.stringify(portfolio),
         "",

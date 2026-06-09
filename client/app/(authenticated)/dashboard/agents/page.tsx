@@ -28,6 +28,7 @@ import { useSession } from "@/providers/session-provider";
 import {
   DEFAULT_POOL_ALLOCATIONS,
   type PoolAllocations,
+  type SubAgentConfigItem,
 } from "@/lib/api/strategy-types";
 import {
   largestResolvablePoolId,
@@ -61,6 +62,7 @@ export default function AgentsPage() {
     DEFAULT_POOL_ALLOCATIONS,
   );
   const [quickswapPools, setQuickswapPools] = useState<QuickSwapPool[]>([]);
+  const [subAgentConfig, setSubAgentConfig] = useState<SubAgentConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [cycleOutcome, setCycleOutcome] = useState<AgentCycleOutcome | null>(
     null,
@@ -88,7 +90,15 @@ export default function AgentsPage() {
     return idleRouteForPool(poolId);
   }, [poolAmounts, quickswapPools]);
 
-  const { connected, feedItems, routeCommand, cycleActive } = useTradingSocket({
+  const enabledSubAgentIds = useMemo(
+    () =>
+      subAgentConfig
+        .filter((a) => a.enabled && a.id !== "root-orchestrator")
+        .map((a) => a.id),
+    [subAgentConfig],
+  );
+
+  const { connected, feedItems, routeCommand, cycleActive, subAgentStatuses } = useTradingSocket({
     accountMode: canvasMode ?? undefined,
     enabled: !loading && canvasMode != null,
     hydrateFromHistory: true,
@@ -149,6 +159,7 @@ export default function AgentsPage() {
 
       if (strategyResult.success && strategyResult.data?.strategy) {
         setPoolAmounts(strategyResult.data.strategy.poolAllocations);
+        setSubAgentConfig(strategyResult.data.strategy.subAgents ?? []);
       }
 
       if (poolsResult.success && poolsResult.data?.pools) {
@@ -313,6 +324,8 @@ export default function AgentsPage() {
           canvasPools={canvasPools}
           routeCommand={displayRoute}
           accountMode={canvasMode ?? undefined}
+          subAgentStatuses={subAgentStatuses}
+          enabledSubAgentIds={enabledSubAgentIds}
         />
 
         <DraggableGridPanel
@@ -418,6 +431,7 @@ export default function AgentsPage() {
               outcome={cycleOutcome}
               cycleActive={cycleActive}
               executedTransactions={lastExecutedTxs}
+              subAgentStatuses={subAgentStatuses}
               onViewAgentResponse={openLatestAgentResponse}
             />
           ) : null}

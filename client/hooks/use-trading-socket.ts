@@ -7,6 +7,9 @@ import { API_URL } from "@/lib/api/client"
 import {
   TRADING_SOCKET_EVENTS,
   type LiveTradingFeedItem,
+  type SubAgentCompletedEvent,
+  type SubAgentStartedEvent,
+  type SubAgentStatus,
   type TradingActionExecutedEvent,
   type TradingCycleCompletedEvent,
   type TradingCycleStartedEvent,
@@ -28,6 +31,8 @@ type UseTradingSocketOptions = {
   hydrateFromHistory?: boolean
   onCycleStarted?: (event: TradingCycleStartedEvent) => void
   onActionExecuted?: (event: TradingActionExecutedEvent) => void
+  onSubAgentStarted?: (event: SubAgentStartedEvent) => void
+  onSubAgentCompleted?: (event: SubAgentCompletedEvent) => void
   onCycleCompleted?: (event: TradingCycleCompletedEvent) => void
 }
 
@@ -72,6 +77,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
   const [historyRoute, setHistoryRoute] = useState<PoolRouteCommand | null>(null)
   const [liveRoute, setLiveRoute] = useState<PoolRouteCommand | null>(null)
   const [cycleActive, setCycleActive] = useState(false)
+  const [subAgentStatuses, setSubAgentStatuses] = useState<SubAgentStatus[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const socketRef = useRef<Socket | null>(null)
   const optionsRef = useRef(options)
@@ -94,6 +100,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
     setHistoryRoute(null)
     setLiveRoute(null)
     setCycleActive(false)
+    setSubAgentStatuses([])
   }, [accountMode])
 
   useEffect(() => {
@@ -149,6 +156,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
         return
       }
       setCycleActive(true)
+      setSubAgentStatuses([])
       pushLiveFeed({
         id: `start-${event.cycleId}`,
         at: event.startedAt,
@@ -158,6 +166,69 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
       })
       optionsRef.current.onCycleStarted?.(event)
     })
+
+    socket.on(
+      TRADING_SOCKET_EVENTS.subAgentStarted,
+      (event: SubAgentStartedEvent) => {
+        if (!matchesMode(event.accountMode)) {
+          return
+        }
+        setSubAgentStatuses((prev) => {
+          const exists = prev.find((s) => s.agentId === event.agentId)
+          if (exists) {
+            return prev.map((s) =>
+              s.agentId === event.agentId
+                ? { ...s, status: "running" as const }
+                : s,
+            )
+          }
+          return [
+            ...prev,
+            {
+              agentId: event.agentId,
+              agentName: event.agentName,
+              status: "running" as const,
+            },
+          ]
+        })
+        pushLiveFeed({
+          id: `sub-start-${event.cycleId}-${event.agentId}`,
+          at: event.at,
+          headline: `${event.agentName} analyzing`,
+          detail: "Sub-agent reading portfolio data…",
+          status: "running",
+        })
+        optionsRef.current.onSubAgentStarted?.(event)
+      },
+    )
+
+    socket.on(
+      TRADING_SOCKET_EVENTS.subAgentCompleted,
+      (event: SubAgentCompletedEvent) => {
+        if (!matchesMode(event.accountMode)) {
+          return
+        }
+        setSubAgentStatuses((prev) =>
+          prev.map((s) =>
+            s.agentId === event.agentId
+              ? {
+                  ...s,
+                  status: "completed" as const,
+                  summary: event.summary,
+                }
+              : s,
+          ),
+        )
+        pushLiveFeed({
+          id: `sub-done-${event.cycleId}-${event.agentId}`,
+          at: event.at,
+          headline: `${event.agentName} complete`,
+          detail: event.summary,
+          status: "completed",
+        })
+        optionsRef.current.onSubAgentCompleted?.(event)
+      },
+    )
 
     socket.on(
       TRADING_SOCKET_EVENTS.actionExecuted,
@@ -212,6 +283,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
     cycleActive,
     feedItems,
     routeCommand,
+    subAgentStatuses,
     historyLoading,
   }
 }

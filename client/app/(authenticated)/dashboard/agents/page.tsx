@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AccountModeBadge } from "@/components/layout/account-mode-badge";
 import { PageSubBar } from "@/components/layout/page-sub-bar";
 import { AgentsCanvasSkeleton } from "@/components/skeletons/content-skeletons";
 import { DraggableGridPanel } from "@/components/draggable-grid-panel";
@@ -28,7 +29,8 @@ import {
 
 export default function AgentsPage() {
   const router = useRouter();
-  const { sessionReady } = useSession();
+  const { sessionReady, accountMode } = useSession();
+  const isDemo = accountMode === "demo";
   const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>(
     DEFAULT_POOL_ALLOCATIONS,
   );
@@ -99,12 +101,19 @@ export default function AgentsPage() {
       <PageSubBar
         title={
           cycleActive
-            ? "QuickSwap Agent Network · cycle active"
-            : "QuickSwap Agent Network"
+            ? isDemo
+              ? "Demo Agent Network · cycle active"
+              : "QuickSwap Agent Network · cycle active"
+            : isDemo
+              ? "Demo Agent Network"
+              : "QuickSwap Agent Network"
         }
+        badge={accountMode ? <AccountModeBadge mode={accountMode} /> : undefined}
         action={
           connected ? (
-            <span className="font-mono text-[10px] text-[#16a34a]">live</span>
+            <span className="font-mono text-[10px] text-[#16a34a]">
+              {isDemo ? "fork" : "live"}
+            </span>
           ) : undefined
         }
         backHref={APP_ROUTES.dashboard}
@@ -142,7 +151,7 @@ export default function AgentsPage() {
 
         <DraggableGridPanel
           id="live-trades"
-          title="Live Trades"
+          title={isDemo ? "Demo Trades" : "Live Trades"}
           x={layouts["live-trades"].x}
           y={layouts["live-trades"].y}
           collapsed={layouts["live-trades"].collapsed}
@@ -202,7 +211,10 @@ export default function AgentsPage() {
           width={280}
         >
           <div className="space-y-1 text-muted-foreground">
-            <p>Real-time WebSocket feed from trading cycles.</p>
+            <p>
+              Real-time WebSocket feed from{" "}
+              {isDemo ? "demo fork" : "mainnet"} trading cycles.
+            </p>
             <p>Swaps and rebalances animate between pool nodes.</p>
             <p className="text-[10px]">
               Hold the grip icon to drag. Panels snap to the grid.

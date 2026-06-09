@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy";
 import type { PoolSortField } from "@/lib/api/quickswap-types";
 import {
+  DEFAULT_DEMO_DEPOSIT_AMOUNT,
   DEFAULT_DEPOSIT_AMOUNT,
   type PoolAllocations,
   type SubAgentConfigItem,
@@ -22,6 +23,10 @@ import { useQuickSwapPools } from "@/hooks/use-quickswap-pools";
 import { useSetupDeposit } from "@/hooks/use-setup-deposit";
 import { useWalletBalances } from "@/hooks/use-wallet-balances";
 import { useSession } from "@/providers/session-provider";
+import {
+  INFLATED_DEMO_DEPOSIT_THRESHOLD,
+  strategyDepositForSetup,
+} from "@/lib/setup-deposit";
 import {
   allocatedPoolIds,
   tokensFromAllocatedPools,
@@ -48,7 +53,8 @@ function AutoSetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isEditing = searchParams.get("edit") === "1";
-  const { accountMode, tradingWalletAddress, sessionReady } = useSession();
+  const { accountMode, tradingWalletAddress, sessionReady, refreshSession } =
+    useSession();
   const [strategyDeposit, setStrategyDeposit] = useState<number | undefined>(
     undefined,
   );
@@ -65,9 +71,7 @@ function AutoSetupContent() {
   const { meta: autoMeta, loading: autoMetaLoading } = useQuickSwapPools({
     context: "auto",
   });
-  const [depositInput, setDepositInput] = useState(
-    String(DEFAULT_DEPOSIT_AMOUNT),
-  );
+  const [depositInput, setDepositInput] = useState("");
   const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>({});
   const [subAgents, setSubAgents] = useState<SubAgentConfigItem[]>(
     toSubAgentsFromPresets(),
@@ -98,6 +102,33 @@ function AutoSetupContent() {
   );
 
   useSetupDeposit(accountMode, setDepositInput, strategyDeposit);
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
+
+  useEffect(() => {
+    if (!sessionReady || accountMode == null) {
+      return;
+    }
+    const amount = Number(depositInput);
+    if (
+      accountMode === "demo" &&
+      depositInput !== "" &&
+      amount >= INFLATED_DEMO_DEPOSIT_THRESHOLD
+    ) {
+      setDepositInput(String(DEFAULT_DEMO_DEPOSIT_AMOUNT));
+      setStrategyDeposit(undefined);
+      return;
+    }
+    if (depositInput === "" && strategyDeposit == null) {
+      setDepositInput(
+        accountMode === "demo"
+          ? String(DEFAULT_DEMO_DEPOSIT_AMOUNT)
+          : String(DEFAULT_DEPOSIT_AMOUNT),
+      );
+    }
+  }, [sessionReady, accountMode, depositInput, strategyDeposit]);
 
   useEffect(() => {
     if (!sessionReady) {
@@ -140,9 +171,15 @@ function AutoSetupContent() {
           return;
         }
         setSubAgents(strategy.subAgents);
-        if (strategy.depositAmount > 0) {
-          setDepositInput(String(strategy.depositAmount));
-          setStrategyDeposit(strategy.depositAmount);
+        const setupDeposit = strategyDepositForSetup(
+          accountMode,
+          strategy.depositAmount,
+        );
+        if (setupDeposit != null) {
+          setDepositInput(String(setupDeposit));
+          setStrategyDeposit(setupDeposit);
+        } else if (accountMode !== "demo") {
+          setStrategyDeposit(undefined);
         } else {
           setStrategyDeposit(undefined);
         }
@@ -158,7 +195,7 @@ function AutoSetupContent() {
     return () => {
       cancelled = true;
     };
-  }, [sessionReady, router, isEditing]);
+  }, [sessionReady, router, isEditing, accountMode]);
 
   useEffect(() => {
     if (pools.length === 0 || poolsHydratedRef.current || autoMetaLoading) {
@@ -184,7 +221,11 @@ function AutoSetupContent() {
   async function saveSetup() {
     const amount = Number(depositInput);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Enter the amount you deposited.");
+      setError(
+        accountMode === "demo"
+          ? "Simulation deposit baseline is missing."
+          : "Enter the amount you deposited.",
+      );
       return;
     }
 

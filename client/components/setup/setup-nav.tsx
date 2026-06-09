@@ -1,6 +1,9 @@
-import Link from "next/link"
-import { APP_ROUTES } from "@/lib/routing/app-routes"
+"use client"
+
+import { AccountModeBadge } from "@/components/layout/account-mode-badge"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
+import { APP_ROUTES } from "@/lib/routing/app-routes"
+import { useSession } from "@/providers/session-provider"
 
 type SetupNavProps = {
   title: string
@@ -13,5 +16,14 @@ export function SetupNav({
   backHref = APP_ROUTES.strategyOnboarding,
   backLabel = "Change strategy",
 }: SetupNavProps) {
-  return <PageSubBar title={title} backHref={backHref} backLabel={backLabel} />
+  const { accountMode } = useSession()
+
+  return (
+    <PageSubBar
+      title={title}
+      badge={accountMode ? <AccountModeBadge mode={accountMode} /> : undefined}
+      backHref={backHref}
+      backLabel={backLabel}
+    />
+  )
 }

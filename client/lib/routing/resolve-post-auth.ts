@@ -1,14 +1,16 @@
-import { getMe, type AuthUser } from "@/lib/api/auth"
+import { fetchUserProfile, type UserProfile } from "@/lib/api/profile"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import { APP_ROUTES, setupRouteFor } from "./app-routes"
 
 /** Next onboarding step when account mode is unset. */
-export function accountModeOnboardingRoute(user: Pick<AuthUser, "accountMode">): string | null {
+export function accountModeOnboardingRoute(
+  user: Pick<UserProfile, "accountMode">,
+): string | null {
   return user.accountMode == null ? APP_ROUTES.accountModeOnboarding : null
 }
 
 export async function resolvePostAuthRoute(): Promise<string> {
-  const meResult = await getMe()
+  const meResult = await fetchUserProfile()
   if (!meResult.success || !meResult.data?.user) {
     return APP_ROUTES.signIn
   }

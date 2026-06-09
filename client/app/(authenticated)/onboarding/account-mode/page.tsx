@@ -6,12 +6,9 @@ import { motion } from "framer-motion";
 import { Check, ChevronRight, Copy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/providers/session-provider";
-import { getMe } from "@/lib/api/auth";
-import {
-  fetchDemoPreview,
-  patchAccountMode,
-  type DemoPreview,
-} from "@/lib/api/account-mode";
+import { fetchDemoPreview } from "@/lib/api/account-mode";
+import { fetchUserProfile, updateAccountMode } from "@/lib/api/profile";
+import type { DemoPreview } from "@/lib/api/account-mode";
 import { APP_ROUTES } from "@/lib/routing/app-routes";
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -60,7 +57,7 @@ export default function AccountModeOnboardingPage() {
 
     async function load() {
       try {
-        const meResult = await getMe();
+        const meResult = await fetchUserProfile();
         if (!meResult.success || !meResult.data?.user) {
           router.replace(APP_ROUTES.signIn);
           return;
@@ -92,7 +89,7 @@ export default function AccountModeOnboardingPage() {
     setChoosing(mode);
     setError(null);
 
-    const result = await patchAccountMode(mode);
+    const result = await updateAccountMode(mode);
     if (!result.success) {
       setError(result.error?.message ?? "Failed to save account mode");
       setChoosing(null);

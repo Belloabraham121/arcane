@@ -494,6 +494,7 @@ export default function DashboardPage() {
               poolAllocations={strategy.poolAllocations}
               pools={pools}
               loading={poolsLoading}
+              accountMode={viewMode}
             />
             ) : null}
 
@@ -508,7 +509,9 @@ export default function DashboardPage() {
                 </p>
                 <AgentStatusBadge status={agentDisplayStatus} />
                 {socketConnected && (
-                  <span className="font-mono text-[10px] text-[#16a34a]">live</span>
+                  <span className="font-mono text-[10px] text-[#16a34a]">
+                    {isDemoView ? "fork" : "live"}
+                  </span>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-4 font-mono text-[10px] text-muted-foreground">
@@ -734,24 +737,30 @@ export default function DashboardPage() {
             <div className="border border-border p-6 space-y-6">
               <div className="flex items-center justify-between gap-4">
                 <p className="font-mono text-xs text-muted-foreground">
-                  Your agent network is active on Somnia.
+                  {isDemoView
+                    ? "Your demo agent network trades on the Anvil fork (paper trading)."
+                    : "Your agent network is active on Somnia mainnet."}
                 </p>
                 <Link
                   href={APP_ROUTES.agentCanvas}
                   className="shrink-0 border border-[#ea580c] px-4 py-2 font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:bg-[#ea580c]/10"
                 >
-                  View live agents
+                  {isDemoView ? "View demo agents" : "View live agents"}
                 </Link>
               </div>
               <ul className="space-y-2 font-mono text-sm text-foreground">
                 <li>• Rebalance across QuickSwap liquidity pools</li>
-                <li>• Swap via Algebra V4 on Somnia mainnet</li>
+                <li>
+                  • Swap via Algebra V4 on{" "}
+                  {isDemoView ? "the Anvil fork (demo)" : "Somnia mainnet"}
+                </li>
                 <li>• Monitor pool prices and migrate capital</li>
                 <li>• Execute moves with Somnia LLM inference agent</li>
               </ul>
               <p className="font-mono text-xs text-muted-foreground">
-                Open the live canvas to watch root and sub-agents move between pool
-                nodes in real time.
+                {isDemoView
+                  ? "Open the demo canvas to watch root and sub-agents move between pool nodes on the fork."
+                  : "Open the live canvas to watch root and sub-agents move between pool nodes in real time."}
               </p>
             </div>
           )}

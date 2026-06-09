@@ -1,19 +1,17 @@
 import { apiRequest, type ApiEnvelope } from "./client";
+import {
+  fetchUserProfile,
+  type AccountMode,
+  type UserProfile,
+} from "./profile";
 
-export type AccountMode = "demo" | "live";
+/** @deprecated Prefer `UserProfile` from `@/lib/api/profile`. */
+export type AuthUser = UserProfile;
 
-export type AuthUser = {
-  id: string;
-  email: string;
-  walletAddress: string;
-  accountMode: AccountMode | null;
-  demoWalletAddress: string;
-  liveWalletAddress: string;
-  createdAt: string;
-};
+export type { AccountMode };
 
 export type RegisterResponse = {
-  user: AuthUser;
+  user: UserProfile;
   wallet: {
     email: string;
     address: string;
@@ -29,7 +27,7 @@ export async function register(email: string, password: string) {
 }
 
 export async function login(email: string, password: string) {
-  return apiRequest<{ user: AuthUser }>("/api/v1/auth/login", {
+  return apiRequest<{ user: UserProfile }>("/api/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
@@ -41,8 +39,9 @@ export async function logout() {
   });
 }
 
+/** @deprecated Prefer `fetchUserProfile` from `@/lib/api/profile`. */
 export async function getMe() {
-  return apiRequest<{ user: AuthUser }>("/api/v1/auth/me");
+  return fetchUserProfile();
 }
 
 export type { ApiEnvelope };

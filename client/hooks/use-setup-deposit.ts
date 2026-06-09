@@ -1,11 +1,15 @@
 "use client"
 
 import { useEffect } from "react"
-import type { AccountMode } from "@/lib/api/auth"
+import type { AccountMode } from "@/lib/api/profile"
 import { fetchDemoPreview } from "@/lib/api/account-mode"
-import { DEFAULT_DEMO_DEPOSIT_AMOUNT } from "@/lib/api/strategy-types"
+import { fetchPortfolioSummary } from "@/lib/api/portfolio"
+import {
+  demoDepositFallback,
+  strategyDepositForSetup,
+} from "@/lib/setup-deposit"
 
-/** Pre-fill read-only demo deposit from preview API; live keeps manual entry. */
+/** Pre-fill read-only demo deposit from portfolio/preview; live keeps manual entry. */
 export function useSetupDeposit(
   accountMode: AccountMode | null,
   setDepositInput: (value: string) => void,
@@ -16,23 +20,40 @@ export function useSetupDeposit(
       return
     }
 
-    if (strategyDeposit != null && strategyDeposit > 0) {
-      setDepositInput(String(strategyDeposit))
+    const normalized = strategyDepositForSetup(accountMode, strategyDeposit)
+    if (normalized != null) {
+      setDepositInput(String(normalized))
       return
     }
 
     let cancelled = false
 
-    void fetchDemoPreview().then((result) => {
+    async function loadDemoDeposit() {
+      const portfolioResult = await fetchPortfolioSummary("demo")
+      if (cancelled) {
+        return
+      }
+      if (
+        portfolioResult.success &&
+        portfolioResult.data &&
+        portfolioResult.data.baselineUsd > 0
+      ) {
+        setDepositInput(String(portfolioResult.data.baselineUsd))
+        return
+      }
+
+      const previewResult = await fetchDemoPreview()
       if (cancelled) {
         return
       }
       const amount =
-        result.success && result.data
-          ? result.data.depositAmountUsd
-          : DEFAULT_DEMO_DEPOSIT_AMOUNT
+        previewResult.success && previewResult.data
+          ? previewResult.data.depositAmountUsd
+          : demoDepositFallback()
       setDepositInput(String(amount))
-    })
+    }
+
+    void loadDemoDeposit()
 
     return () => {
       cancelled = true

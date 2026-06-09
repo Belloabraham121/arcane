@@ -15,7 +15,8 @@ const ease = [0.22, 1, 0.36, 1] as const;
 
 export default function StrategyOnboardingPage() {
   const router = useRouter();
-  const { walletAddress, sessionReady, accountMode } = useSession();
+  const { sessionReady, accountMode, tradingWalletAddress } = useSession();
+  const isDemo = accountMode === "demo";
   const [hoveredStrategy, setHoveredStrategy] = useState<
     "auto" | "custom" | null
   >(null);
@@ -57,16 +58,16 @@ export default function StrategyOnboardingPage() {
     if (!sessionReady) {
       return;
     }
-    if (!walletAddress) {
+    if (!tradingWalletAddress) {
       router.replace(APP_ROUTES.signIn);
     }
-  }, [sessionReady, walletAddress, router]);
+  }, [sessionReady, tradingWalletAddress, router]);
 
   async function chooseStrategy(type: "auto" | "custom") {
     setChoosing(type);
     setError(null);
 
-    if (!walletAddress) {
+    if (!tradingWalletAddress) {
       router.push(APP_ROUTES.signIn);
       return;
     }
@@ -113,8 +114,9 @@ export default function StrategyOnboardingPage() {
         Agent Strategy
       </motion.h1>
       <p className="mb-8 max-w-xl text-xs font-mono text-muted-foreground">
-        Choose how your agent network is set up. This is separate from your
-        dashboard — you will configure and deposit on the next page.
+        {isDemo
+          ? "Choose how your demo agent is set up. Next step configures pools on the Anvil fork — no mainnet deposit."
+          : "Choose how your agent network is set up. Next step configures your live mainnet agent and deposit."}
       </p>
       {error && (
         <p className="mb-8 text-xs font-mono text-[#ea580c]">{error}</p>
@@ -167,8 +169,12 @@ export default function StrategyOnboardingPage() {
                   </h3>
                   <p className="text-xs font-mono text-muted-foreground leading-relaxed max-w-xs">
                     {type === "auto"
-                      ? "Arcane assigns a precise preset strategy and sub-agents. You review and deposit."
-                      : "Choose QuickSwap pools and sub-agents yourself, then deposit and launch."}
+                      ? isDemo
+                        ? "Preset strategy and sub-agents for paper trading on the demo fork."
+                        : "Arcane assigns a precise preset strategy and sub-agents. You review and deposit."
+                      : isDemo
+                        ? "Pick pools and prompts for demo trading on the fork."
+                        : "Choose QuickSwap pools and sub-agents yourself, then deposit and launch."}
                   </p>
                 </div>
 

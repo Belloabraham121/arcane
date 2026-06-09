@@ -2,6 +2,7 @@
 
 import { PoolStatsBadges } from "@/components/pool-stats-badges"
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
+import type { AccountMode } from "@/lib/api/auth"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
 import { poolDisplayStats } from "@/lib/pool-display"
 import { POOL_MARKET_COLORS } from "@/lib/pool-allocations"
@@ -11,13 +12,16 @@ type PoolMetricsStripProps = {
   poolAllocations: PoolAllocations
   pools: QuickSwapPool[]
   loading?: boolean
+  accountMode?: AccountMode
 }
 
 export function PoolMetricsStrip({
   poolAllocations,
   pools,
   loading = false,
+  accountMode,
 }: PoolMetricsStripProps) {
+  const isDemo = accountMode === "demo"
   const activeEntries = activeResolvablePoolEntries(poolAllocations, pools)
 
   if (activeEntries.length === 0) {
@@ -27,7 +31,7 @@ export function PoolMetricsStrip({
   return (
     <div className="border border-border">
       <p className="border-b border-border px-4 py-3 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-        Live pool metrics
+        {isDemo ? "Pool metrics (fork reference)" : "Live pool metrics"}
       </p>
       <div className="flex gap-px overflow-x-auto bg-border">
         {activeEntries.map(([poolId]) => {

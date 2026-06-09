@@ -1,5 +1,11 @@
 import { apiRequest } from "./client";
-import type { AccountMode, AuthUser } from "./auth";
+import {
+  updateAccountMode,
+  type AccountMode,
+  type UserProfile,
+} from "./profile";
+
+export type { AccountMode };
 
 export type DemoPreviewBalance = {
   symbol: string;
@@ -20,18 +26,12 @@ export async function fetchDemoPreview() {
   return apiRequest<DemoPreview>("/api/v1/demo/preview");
 }
 
+/** @deprecated Prefer `updateAccountMode` from `@/lib/api/profile`. */
 export async function patchAccountMode(
   accountMode: AccountMode,
   options?: { confirmLiveWallet?: boolean },
 ) {
-  return apiRequest<{ user: AuthUser; warning: string | null }>(
-    "/api/v1/users/account-mode",
-    {
-      method: "PATCH",
-      body: JSON.stringify({
-        accountMode,
-        confirmLiveWallet: options?.confirmLiveWallet,
-      }),
-    },
-  );
+  return updateAccountMode(accountMode, options);
 }
+
+export type { UserProfile };

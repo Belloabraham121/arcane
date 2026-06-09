@@ -10,6 +10,25 @@ export function formatUsd(
   })
 }
 
+/** Actual P&L return since activation — not annualized. */
+export function computeReturnSinceActivationPct(
+  netEarnedUsd: number,
+  baselineUsd: number,
+): number | null {
+  if (!Number.isFinite(baselineUsd) || baselineUsd <= 0) {
+    return null
+  }
+  return (netEarnedUsd / baselineUsd) * 100
+}
+
+export function formatReturnPct(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) {
+    return "—"
+  }
+  const sign = value > 0 ? "+" : ""
+  return `${sign}${value.toFixed(1)}%`
+}
+
 export function formatAprLine(
   aprSinceActivation: number | null,
   apr24h: number | null,
@@ -25,16 +44,13 @@ export function baselineDepositHint(summary: PortfolioSummary): string {
     return `Demo baseline from fork wallet value (CoinGecko-priced) — $${formatUsd(summary.baselineUsd)}`
   }
 
-  const manual = `$${formatUsd(summary.manualDepositUsd)} manual`
-  if (summary.detectedDepositUsd == null || summary.detectedDepositUsd <= 0) {
-    return manual
+  if (summary.awaitingOnChainDeposit) {
+    return "No funds detected on Somnia mainnet yet — deposit to your agent wallet to start"
   }
-  const detected = `$${formatUsd(summary.detectedDepositUsd)} detected from wallet`
-  if (summary.baselineUsd === summary.manualDepositUsd) {
-    return `${manual} · ${detected} (using manual)`
+
+  if (summary.detectedDepositUsd != null && summary.detectedDepositUsd > 0) {
+    return `Wallet balance at activation — $${formatUsd(summary.baselineUsd)} (current on-chain: $${formatUsd(summary.currentValueUsd)})`
   }
-  if (summary.baselineUsd === summary.detectedDepositUsd) {
-    return `${manual} · ${detected} (using detected)`
-  }
-  return `${manual} · ${detected} · baseline $${formatUsd(summary.baselineUsd)}`
+
+  return `Wallet balance at activation — $${formatUsd(summary.baselineUsd)}`
 }

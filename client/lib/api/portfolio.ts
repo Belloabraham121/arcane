@@ -6,6 +6,8 @@ export type PortfolioSummary = {
   baselineUsd: number
   manualDepositUsd: number
   detectedDepositUsd: number | null
+  /** Live: setup deposit declared but agent wallet has no on-chain funds yet. */
+  awaitingOnChainDeposit?: boolean
   netEarnedUsd: number
   aprSinceActivation: number | null
   apr24h: number | null

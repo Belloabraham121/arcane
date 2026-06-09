@@ -7,7 +7,6 @@ import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy";
 import type { PoolSortField } from "@/lib/api/quickswap-types";
 import {
   DEFAULT_DEMO_DEPOSIT_AMOUNT,
-  DEFAULT_DEPOSIT_AMOUNT,
   type PoolAllocations,
   type SubAgentConfigItem,
 } from "@/lib/api/strategy-types";
@@ -121,12 +120,12 @@ function AutoSetupContent() {
       setStrategyDeposit(undefined);
       return;
     }
-    if (depositInput === "" && strategyDeposit == null) {
-      setDepositInput(
-        accountMode === "demo"
-          ? String(DEFAULT_DEMO_DEPOSIT_AMOUNT)
-          : String(DEFAULT_DEPOSIT_AMOUNT),
-      );
+    if (
+      accountMode === "demo" &&
+      depositInput === "" &&
+      strategyDeposit == null
+    ) {
+      setDepositInput(String(DEFAULT_DEMO_DEPOSIT_AMOUNT));
     }
   }, [sessionReady, accountMode, depositInput, strategyDeposit]);
 
@@ -158,11 +157,7 @@ function AutoSetupContent() {
 
       if (strategyResult.success && strategyResult.data?.strategy) {
         const { strategy } = strategyResult.data;
-        if (
-          strategy.status === "active" &&
-          strategy.depositAmount > 0 &&
-          !isEditing
-        ) {
+        if (strategy.status === "active" && !isEditing) {
           router.replace(APP_ROUTES.dashboard);
           return;
         }
@@ -219,13 +214,13 @@ function AutoSetupContent() {
   }, [pools, autoMeta, autoMetaLoading, accountMode]);
 
   async function saveSetup() {
-    const amount = Number(depositInput);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError(
-        accountMode === "demo"
-          ? "Simulation deposit baseline is missing."
-          : "Enter the amount you deposited.",
-      );
+    const amount =
+      accountMode === "demo" ? Number(depositInput) : 0;
+    if (
+      accountMode === "demo" &&
+      (!Number.isFinite(amount) || amount <= 0)
+    ) {
+      setError("Simulation deposit baseline is missing.");
       return;
     }
 

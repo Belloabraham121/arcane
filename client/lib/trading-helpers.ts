@@ -19,6 +19,7 @@ import {
   formatPoolVolumeUsd,
   poolPairLabel,
 } from "@/lib/pool-display"
+import { poolColorForId, poolColorsForIds } from "@/lib/pool-node-colors"
 import { activeResolvablePoolEntries, resolvePoolById } from "@/lib/pool-resolve"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 
@@ -94,6 +95,8 @@ export type ActivePoolRow = {
   poolId: string
   label: string
   pair: string
+  /** Hex color from shared pool palette. */
+  color: string
   tvlUsd: string
   volumeUsd: string
   liquidity: string
@@ -101,26 +104,39 @@ export type ActivePoolRow = {
   targetPercent: number
   currentPercent: number | null
   driftPercent: number | null
+  /** Estimated USD in this pool from wallet allocation %. */
+  allocatedValueUsd: number | null
 }
 
 export function buildActivePoolRows(
   poolAllocations: PoolAllocations,
   poolDrift: PoolAllocationDrift[] | undefined,
   pools: QuickSwapPool[] = [],
+  options?: { portfolioValueUsd?: number },
 ): ActivePoolRow[] {
   const entries = activeResolvablePoolEntries(poolAllocations, pools)
   const total = entries.reduce((sum, [, amount]) => sum + amount, 0)
   const driftById = Object.fromEntries(
     (poolDrift ?? []).map((row) => [row.poolId, row]),
   )
+  const colorLookup = poolColorsForIds(entries.map(([id]) => id))
+  const portfolioValue = options?.portfolioValueUsd
+
   return entries.map(([poolId, amount]) => {
     const drift = driftById[poolId]
     const pool = resolvePoolById(poolId, pools)!
     const targetPercent = total > 0 ? (amount / total) * 100 : 0
+    const livePercent = drift?.currentPercent ?? targetPercent
+    const allocatedValueUsd =
+      portfolioValue != null && Number.isFinite(portfolioValue)
+        ? (portfolioValue * livePercent) / 100
+        : null
+
     return {
       poolId,
       label: drift?.label ?? pool?.label ?? POOL_LABELS[poolId] ?? poolId,
       pair: pool ? poolPairLabel(pool) : "—",
+      color: poolColorForId(poolId, colorLookup),
       tvlUsd: pool ? formatPoolTvlUsd(pool.metrics.totalValueLockedUsd) : "—",
       volumeUsd: pool ? formatPoolVolumeUsd(pool.metrics.volumeUsd) : "—",
       liquidity: pool ? formatOnChainLiquidity(pool.metrics.liquidity) : "—",
@@ -128,6 +144,7 @@ export function buildActivePoolRows(
       targetPercent,
       currentPercent: drift?.currentPercent ?? null,
       driftPercent: drift?.driftPercent ?? null,
+      allocatedValueUsd,
     }
   })
 }

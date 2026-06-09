@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Check, Copy } from "lucide-react"
+import { Check, ChevronRight, Copy } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { AccountModeBadge } from "@/components/layout/account-mode-badge"
@@ -23,7 +23,9 @@ import { DemoDepositModal } from "@/components/dashboard/demo-deposit-modal"
 import { ViewAgentsLink } from "@/components/dashboard/view-agents-link"
 import { AgentLlmResponseDialog } from "@/components/agent-llm-response-dialog"
 import { RecentTradesCard } from "@/components/dashboard/recent-trades-card"
+import { PortfolioPnlDetailDialog } from "@/components/dashboard/portfolio-pnl-detail-dialog"
 import { SomniaLlmSummaryCard } from "@/components/dashboard/somnia-llm-summary-card"
+import { PoolAllocationStrip } from "@/components/dashboard/pool-allocation-strip"
 import { PoolMetricsStrip } from "@/components/dashboard/pool-metrics-strip"
 import {
   ActivePoolsPanelSkeleton,
@@ -38,7 +40,8 @@ import { useSession } from "@/providers/session-provider"
 import type { AccountMode } from "@/lib/api/auth"
 import {
   baselineDepositHint,
-  formatAprLine,
+  computeReturnSinceActivationPct,
+  formatReturnPct,
   formatUsd,
 } from "@/lib/portfolio-display"
 import { fetchPools } from "@/lib/api/quickswap"
@@ -75,6 +78,7 @@ export default function DashboardPage() {
   const [recentTrades, setRecentTrades] = useState<LastTradeInfo[]>([])
   const [recentTradesLoading, setRecentTradesLoading] = useState(false)
   const [agentDialogOpen, setAgentDialogOpen] = useState(false)
+  const [pnlDetailOpen, setPnlDetailOpen] = useState(false)
 
   useEffect(() => {
     if (!sessionReady) {
@@ -235,9 +239,13 @@ export default function DashboardPage() {
   const marketRows = useMemo(
     () =>
       strategy
-        ? buildPoolMarketRows(strategy.poolAllocations, pools, strategy.depositAmount)
+        ? buildPoolMarketRows(
+            strategy.poolAllocations,
+            pools,
+            portfolio?.currentValueUsd ?? strategy.depositAmount,
+          )
         : [],
-    [strategy, pools],
+    [strategy, pools, portfolio?.currentValueUsd],
   )
 
   const activePoolIds = useMemo(
@@ -278,10 +286,13 @@ export default function DashboardPage() {
   const currentValueUsd = portfolio?.currentValueUsd
   const baselineUsd = portfolio?.baselineUsd
   const netEarnedUsd = portfolio?.netEarnedUsd
-  const aprLine =
-    portfolio != null
-      ? formatAprLine(portfolio.aprSinceActivation, portfolio.apr24h)
-      : "—"
+  const returnSinceActivationPct =
+    portfolio != null && !portfolio.awaitingOnChainDeposit
+      ? computeReturnSinceActivationPct(
+          portfolio.netEarnedUsd,
+          portfolio.baselineUsd,
+        )
+      : null
   const enabledSubAgents = strategy?.subAgents.filter((agent) => agent.enabled) ?? []
   const agentDisplayStatus = socketCycleActive
     ? tradingStatus?.lastCycle?.executedTransactions?.length
@@ -300,6 +311,7 @@ export default function DashboardPage() {
           strategy.poolAllocations,
           tradingStatus?.lastCycle?.poolDrift,
           pools,
+          { portfolioValueUsd: portfolio?.currentValueUsd },
         )
       : []
 
@@ -404,16 +416,33 @@ export default function DashboardPage() {
               </h1>
             </div>
 
+            {!isDemoView && portfolio?.awaitingOnChainDeposit && (
+              <p className="border border-amber-500/30 bg-amber-500/5 px-4 py-3 font-mono text-xs text-amber-800 dark:text-amber-300">
+                Live portfolio metrics stay at $0 until you deposit tokens to your
+                agent wallet on Somnia mainnet. Deposited and net earned are read
+                from your on-chain wallet — not a setup placeholder. Trading
+                history stays empty until the agent runs cycles after a deposit.
+              </p>
+            )}
+
             <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
               <div>
                 <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  {isDemoView ? "P&L baseline" : "Total deposited"}
+                  {isDemoView
+                    ? "P&L baseline"
+                    : portfolio?.awaitingOnChainDeposit
+                      ? "On-chain deposited"
+                      : "Total deposited"}
                 </p>
                 <p
                   className="text-lg font-mono font-bold"
                   title={portfolio ? baselineDepositHint(portfolio) : undefined}
                 >
-                  {baselineUsd != null ? `$${formatUsd(baselineUsd)}` : "—"}
+                  {portfolio?.awaitingOnChainDeposit
+                    ? "$0"
+                    : baselineUsd != null
+                      ? `$${formatUsd(baselineUsd)}`
+                      : "—"}
                 </p>
                 {portfolio && (
                   <p className="mt-1 font-mono text-[10px] text-muted-foreground">
@@ -432,20 +461,46 @@ export default function DashboardPage() {
                       : "text-[#ea580c]"
                   }`}
                 >
-                  {netEarnedUsd != null
-                    ? `$${formatUsd(netEarnedUsd, { maximumFractionDigits: 2 })}`
-                    : "—"}
+                  {portfolio?.awaitingOnChainDeposit
+                    ? "—"
+                    : netEarnedUsd != null
+                      ? `$${formatUsd(netEarnedUsd, { maximumFractionDigits: 2 })}`
+                      : "—"}
                 </p>
               </div>
-              <div>
-                <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  Portfolio APR
+              <button
+                type="button"
+                onClick={() => setPnlDetailOpen(true)}
+                disabled={!portfolio || portfolio.awaitingOnChainDeposit}
+                className="group text-left transition-colors hover:opacity-90 disabled:cursor-default disabled:opacity-60"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                    Return
+                  </p>
+                  {portfolio && !portfolio.awaitingOnChainDeposit ? (
+                    <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-[#ea580c] opacity-80 group-hover:opacity-100">
+                      Details
+                      <ChevronRight className="h-3 w-3" />
+                    </span>
+                  ) : null}
+                </div>
+                <p
+                  className={`text-lg font-mono font-bold ${
+                    returnSinceActivationPct != null &&
+                    returnSinceActivationPct < 0
+                      ? "text-red-600"
+                      : "text-[#ea580c]"
+                  }`}
+                >
+                  {portfolio?.awaitingOnChainDeposit
+                    ? "—"
+                    : formatReturnPct(returnSinceActivationPct)}
                 </p>
-                <p className="text-lg font-mono font-bold">{aprLine}</p>
                 <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  Since activation · 24h annualized
+                  Since activation · tap for P&L breakdown
                 </p>
-              </div>
+              </button>
             </div>
           </motion.div>
         )}
@@ -657,13 +712,27 @@ export default function DashboardPage() {
                 </p>
               ) : (
                 <>
-                  <div className="flex h-2 gap-1 overflow-hidden rounded bg-border">
+                  <PoolAllocationStrip
+                    segments={marketRows.map((market) => ({
+                      id: market.id,
+                      color: market.color,
+                      weight: market.allocated,
+                      label: `${market.name} — ${market.allocated.toFixed(1)}% ($${formatUsd(market.value, { maximumFractionDigits: 0 })})`,
+                    }))}
+                    heightClassName="h-2.5"
+                    className="mb-2"
+                  />
+                  <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1">
                     {marketRows.map((market) => (
-                      <div
-                        key={market.id}
-                        className={market.color}
-                        style={{ flex: market.allocated }}
-                      />
+                      <div key={market.id} className="flex items-center gap-1.5">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full border border-border"
+                          style={{ backgroundColor: market.color }}
+                        />
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {market.name}
+                        </span>
+                      </div>
                     ))}
                   </div>
                   <div className="border border-border">
@@ -682,8 +751,11 @@ export default function DashboardPage() {
                         className="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-border p-4 last:border-b-0 lg:grid-cols-8 lg:items-center"
                       >
                         <div className="col-span-2 flex items-start gap-2 font-mono text-sm">
-                          <div className={`mt-1 h-3 w-3 shrink-0 rounded-full ${market.color}`} />
-                          <div>
+                          <span
+                            className="mt-1 h-3 w-3 shrink-0 rounded-full border border-border"
+                            style={{ backgroundColor: market.color }}
+                          />
+                          <div className="min-w-0 flex-1">
                             <p className="text-foreground">{market.name}</p>
                             <p className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                               {market.pair}
@@ -693,6 +765,15 @@ export default function DashboardPage() {
                                 {market.priceHint}
                               </p>
                             )}
+                            <div className="mt-2 h-1.5 overflow-hidden rounded bg-border">
+                              <div
+                                className="h-full rounded"
+                                style={{
+                                  width: `${Math.min(market.allocated, 100)}%`,
+                                  backgroundColor: market.color,
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
                         <div className="font-mono text-sm text-foreground">
@@ -775,6 +856,12 @@ export default function DashboardPage() {
           void reloadPortfolio()
           void reloadBalances()
         }}
+      />
+
+      <PortfolioPnlDetailDialog
+        open={pnlDetailOpen}
+        onOpenChange={setPnlDetailOpen}
+        portfolio={portfolio}
       />
     </>
   )

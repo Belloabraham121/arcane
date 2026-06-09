@@ -7,8 +7,11 @@ import {
   TradingDemoDisabledError,
 } from "../agents/trading-wallet-context.service";
 import {
+  baselineForPortfolioMetrics,
   getDepositBaseline,
+  isLiveAwaitingOnChainDeposit,
   reconcileDemoBaselineIfNeeded,
+  reconcileLiveBaselineIfNeeded,
 } from "./baseline.service";
 import { findSnapshotBefore } from "./snapshot.service";
 import { valueWallet } from "./valuation.service";
@@ -22,6 +25,8 @@ export type PortfolioSummary = {
   baselineUsd: number;
   manualDepositUsd: number;
   detectedDepositUsd: number | null;
+  /** Live only — true when setup deposit is declared but wallet has no on-chain funds yet. */
+  awaitingOnChainDeposit: boolean;
   netEarnedUsd: number;
   aprSinceActivation: number | null;
   apr24h: number | null;
@@ -153,7 +158,33 @@ export async function getPortfolioSummary(
     baseline = healed;
   }
 
-  const netEarnedUsd = valuation.totalValueUsd - baseline.baselineUsd;
+  const liveHealed = await reconcileLiveBaselineIfNeeded({
+    userId,
+    strategyId: strategy.id,
+    accountMode,
+    manualDepositUsd: strategy.depositAmount,
+    storedBaselineUsd: strategy.baselineUsd,
+    storedDetectedUsd: strategy.detectedDepositUsd,
+    currentValueUsd: valuation.totalValueUsd,
+  });
+  if (liveHealed) {
+    baseline = liveHealed;
+  }
+
+  const awaitingOnChainDeposit = isLiveAwaitingOnChainDeposit({
+    accountMode,
+    currentValueUsd: valuation.totalValueUsd,
+    detectedDepositUsd: baseline.detectedDepositUsd,
+  });
+
+  baseline = baselineForPortfolioMetrics(baseline, {
+    accountMode,
+    currentValueUsd: valuation.totalValueUsd,
+  });
+
+  const netEarnedUsd = awaitingOnChainDeposit
+    ? 0
+    : valuation.totalValueUsd - baseline.baselineUsd;
 
   const twentyFourHoursAgo = new Date(Date.now() - 24 * MS_PER_DAY);
   const snapshot24h = await findSnapshotBefore(
@@ -167,6 +198,7 @@ export async function getPortfolioSummary(
     baselineUsd: baseline.baselineUsd,
     manualDepositUsd: baseline.manualDepositUsd,
     detectedDepositUsd: baseline.detectedDepositUsd,
+    awaitingOnChainDeposit,
     netEarnedUsd,
     aprSinceActivation: computeAprSinceActivation(
       netEarnedUsd,

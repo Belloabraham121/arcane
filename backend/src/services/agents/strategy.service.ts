@@ -15,7 +15,6 @@ import {
   DEFAULT_AUTO_SUB_AGENTS,
   DEFAULT_CUSTOM_SUB_AGENTS,
   DEFAULT_DEMO_DEPOSIT_USD,
-  DEFAULT_DEPOSIT_AMOUNT,
   DEFAULT_POOL_ALLOCATIONS,
   type AgentStrategyResponse,
   type PoolAllocations,
@@ -343,8 +342,7 @@ export async function upsertUserStrategy(
   const accountMode = await resolveStrategyAccountMode(userId);
   const isDemo = accountMode === "demo";
 
-  let depositAmount =
-    input.depositAmount ?? (status === "active" ? DEFAULT_DEPOSIT_AMOUNT : 0);
+  let depositAmount = input.depositAmount ?? 0;
 
   if (isDemo) {
     depositAmount =
@@ -361,10 +359,10 @@ export async function upsertUserStrategy(
     );
   }
 
-  if (status === "active" && depositAmount <= 0) {
+  if (status === "active" && isDemo && depositAmount <= 0) {
     throw new StrategyError(
       "VALIDATION_ERROR",
-      "depositAmount must be greater than zero to activate strategy",
+      "depositAmount must be greater than zero to activate demo strategy",
     );
   }
 
@@ -403,12 +401,6 @@ export async function upsertUserStrategy(
 
   const existing = await repo.findStrategyByUserId(userId, accountMode);
   const activating = status === "active" && existing?.status !== "active";
-  const triggerFirstCycle = shouldTriggerCycleOnActivate(
-    existing?.status,
-    existing?.lastCycleAt,
-    status,
-    depositAmount,
-  );
 
   const strategy = await repo.upsertStrategy(userId, accountMode, {
     strategyType: input.strategyType,
@@ -419,37 +411,55 @@ export async function upsertUserStrategy(
     cycleIntervalMinutes,
   });
 
-  log.info("Agent strategy saved", {
-    userId,
-    accountMode,
-    strategyType: input.strategyType,
-    depositAmount,
-    status,
-    triggerFirstCycle,
-  });
+  let effectiveDepositAmount = depositAmount;
 
   if (activating) {
     const activePoolIds = Object.entries(poolAllocations)
       .filter(([, amount]) => amount > 0)
       .map(([id]) => id);
-    void handleStrategyActivation({
+    await handleStrategyActivation({
       userId,
       strategyId: strategy.id,
       manualDepositUsd: depositAmount,
       poolIds: activePoolIds,
     });
+    const refreshed = await repo.findStrategyByUserId(userId, accountMode);
+    if (refreshed) {
+      effectiveDepositAmount = refreshed.depositAmount;
+    }
   }
+
+  const triggerFirstCycle = shouldTriggerCycleOnActivate(
+    existing?.status,
+    existing?.lastCycleAt,
+    status,
+    effectiveDepositAmount,
+  );
+
+  log.info("Agent strategy saved", {
+    userId,
+    accountMode,
+    strategyType: input.strategyType,
+    depositAmount: effectiveDepositAmount,
+    status,
+    triggerFirstCycle,
+  });
 
   if (
     status === "active" &&
-    depositAmount > 0 &&
+    effectiveDepositAmount > 0 &&
     !isUserCycleRunning(userId) &&
     (triggerFirstCycle || activating)
   ) {
     scheduleTradingCycle(userId, activating ? "activation" : "scheduled");
   }
 
-  return toResponse(strategy);
+  const responseStrategy =
+    activating
+      ? (await repo.findStrategyByUserId(userId, accountMode)) ?? strategy
+      : strategy;
+
+  return toResponse(responseStrategy);
 }
 
 export async function patchPoolAllocations(

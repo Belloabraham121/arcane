@@ -11,20 +11,16 @@ import {
   activeResolvablePoolEntries,
   resolvePoolById,
 } from "@/lib/pool-resolve";
+import { poolColorForId, poolColorsForIds } from "@/lib/pool-node-colors";
 import { POOL_LABELS } from "@/lib/strategy-presets";
 
 const ALLOCATION_TOTAL = 105_000_000;
-
-export const POOL_MARKET_COLORS: Record<string, string> = {
-  "usdce-wsomi": "bg-purple-500",
-  "usdce-weth": "bg-blue-500",
-  "wsomi-weth": "bg-green-500",
-};
 
 export type PoolMarketRow = {
   id: string;
   name: string;
   pair: string;
+  /** Hex color from shared pool palette. */
   color: string;
   allocated: number;
   value: number;
@@ -39,13 +35,15 @@ export type PoolMarketRow = {
 export function buildPoolMarketRows(
   allocations: PoolAllocations | undefined,
   pools: QuickSwapPool[],
-  depositAmount: number,
+  portfolioValueUsd: number,
 ): PoolMarketRow[] {
   const entries = activeResolvablePoolEntries(allocations ?? {}, pools);
   const total = entries.reduce((sum, [, amount]) => sum + amount, 0);
   if (total === 0) {
     return [];
   }
+
+  const colorLookup = poolColorsForIds(entries.map(([id]) => id));
 
   return entries.map(([id, amount]) => {
     const pool = resolvePoolById(id, pools)!;
@@ -54,9 +52,9 @@ export function buildPoolMarketRows(
       id,
       name: POOL_LABELS[id] ?? pool?.label ?? id,
       pair: pool ? poolPairLabel(pool) : "—",
-      color: POOL_MARKET_COLORS[id] ?? "bg-muted-foreground",
+      color: poolColorForId(id, colorLookup),
       allocated,
-      value: (depositAmount * allocated) / 100,
+      value: (portfolioValueUsd * allocated) / 100,
       feePercent: pool?.metrics.feeTierPercent ?? null,
       tvlUsd: pool ? formatPoolTvlUsd(pool.metrics.totalValueLockedUsd) : "—",
       volumeUsd: pool ? formatPoolVolumeUsd(pool.metrics.volumeUsd) : "—",

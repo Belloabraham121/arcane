@@ -5,7 +5,7 @@ import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { AccountMode } from "@/lib/api/auth"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
 import { poolDisplayStats } from "@/lib/pool-display"
-import { POOL_MARKET_COLORS } from "@/lib/pool-allocations"
+import { poolColorForId, poolColorsForIds } from "@/lib/pool-node-colors"
 import { activeResolvablePoolEntries, resolvePoolById } from "@/lib/pool-resolve"
 
 type PoolMetricsStripProps = {
@@ -23,6 +23,7 @@ export function PoolMetricsStrip({
 }: PoolMetricsStripProps) {
   const isDemo = accountMode === "demo"
   const activeEntries = activeResolvablePoolEntries(poolAllocations, pools)
+  const colorLookup = poolColorsForIds(activeEntries.map(([id]) => id))
 
   if (activeEntries.length === 0) {
     return null
@@ -45,7 +46,10 @@ export function PoolMetricsStrip({
             >
               <div className="mb-1 flex items-center gap-2">
                 <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${POOL_MARKET_COLORS[poolId] ?? "bg-muted-foreground"}`}
+                  className="h-2 w-2 shrink-0 rounded-full border border-border"
+                  style={{
+                    backgroundColor: poolColorForId(poolId, colorLookup),
+                  }}
                 />
                 <span className="font-mono text-xs text-foreground">
                   {pool?.label ?? poolId}

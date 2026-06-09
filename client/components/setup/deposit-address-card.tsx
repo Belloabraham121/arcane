@@ -133,23 +133,21 @@ export function DepositAddressCard({
         <label className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
           {isDemo
             ? "Simulation deposit (read-only)"
-            : "Total deposit (USD estimate)"}
+            : "Wallet value (USD estimate)"}
         </label>
         <p className="font-mono text-[10px] text-muted-foreground">
           {isDemo
             ? "Baseline USD for P&L tracking — matches the demo portfolio seed. Adjust pool allocation above; no manual deposit needed."
-            : "Enter the approximate USD value you deposited. The agent tracks pool targets from your allocation above and can auto-detect from wallet balances."}
+            : "Read from your on-chain wallet balances. Deposit tokens above, then activate — P&L baseline is captured from this value."}
         </p>
         <input
           type="number"
-          min={1}
+          min={0}
           value={depositAmount}
           onChange={(e) => onDepositAmountChange(e.target.value)}
-          readOnly={isDemo}
-          className={`w-full border border-border bg-background px-4 py-3 font-mono text-sm focus:outline-none focus:border-foreground ${
-            isDemo ? "cursor-not-allowed opacity-80" : ""
-          }`}
-          placeholder={isDemo ? "1000" : "500000"}
+          readOnly
+          className="w-full cursor-not-allowed border border-border bg-background px-4 py-3 font-mono text-sm opacity-80 focus:outline-none focus:border-foreground"
+          placeholder={isDemo ? "1000" : "0"}
         />
       </div>
     </div>

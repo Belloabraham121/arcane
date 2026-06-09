@@ -21,8 +21,8 @@ export const DEFAULT_POOL_ALLOCATIONS: PoolAllocations = {
   "wsomi-weth": 25_000_000,
 };
 
-/** Live onboarding default (manual USD estimate). */
-export const DEFAULT_DEPOSIT_AMOUNT = 500_000;
+/** Live strategies use wallet-detected USD at activation — no placeholder default. */
+export const DEFAULT_DEPOSIT_AMOUNT = 0;
 
 /** Demo simulation baseline — not a real deposit. */
 export const DEFAULT_DEMO_DEPOSIT_USD = 1_000;

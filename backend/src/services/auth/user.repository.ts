@@ -78,6 +78,7 @@ export async function createUser(input: CreateUserInput): Promise<PublicUser> {
       encryptedPrivateKey: input.wallet.encryptedPrivateKey.encryptedData,
       encryptionIv: input.wallet.encryptedPrivateKey.iv,
       encryptionAuthTag: input.wallet.encryptedPrivateKey.authTag,
+      // accountMode stays null until /onboarding/account-mode
     },
   });
   return toPublic(user);

@@ -186,25 +186,25 @@ flowchart TB
   - **APR** — show both `aprSinceActivation` and `apr24h` (e.g. “16.2% (24h: 0.4%)”)
 
 ### 4.3 Balances & markets tabs
-- [ ] `useWalletBalances(activePoolIds, mode)` → passes mode to API
-- [ ] Markets table APY: keep pool `feeApr`; add note “Pool APY ≠ your portfolio APR”
-- [ ] Agent wallet section label: “Demo wallet (simulation)” vs “Your agent wallet (mainnet)”
+- [x] `useWalletBalances(activePoolIds, mode)` → passes mode to API
+- [x] Markets table APY: keep pool `feeApr`; add note “Pool APY ≠ your portfolio APR”
+- [x] Agent wallet section label: “Demo wallet (simulation)” vs “Your agent wallet (mainnet)”
 
 ### 4.4 Trading status
-- [ ] `fetchTradingStatus` includes `accountMode` on last cycle
-- [ ] Explorer links: demo txs → local/fork note or omit; live → Somnia explorer
+- [x] `fetchTradingStatus` includes `accountMode` on last cycle
+- [x] Explorer links: demo txs → local/fork note or omit; live → Somnia explorer
 
 ---
 
 ## Phase 5 — Auth & user API (backend + client)
 
 ### 5.1 Registration flow
-- [ ] Signup still creates per-user live wallet (always) — demo mode does not skip wallet creation
-- [ ] Return `accountMode: null` on register until onboarding step completes
+- [x] Signup still creates per-user live wallet (always) — demo mode does not skip wallet creation
+- [x] Return `accountMode: null` on register until onboarding step completes
 
 ### 5.2 User profile
-- [ ] `GET /api/v1/auth/me` includes `accountMode`, `demoWalletAddress` (constant), `liveWalletAddress`
-- [ ] `PATCH /api/v1/users/account-mode` — set once or allow switch with warning (live → demo OK; demo → live requires deposit?)
+- [x] `GET /api/v1/auth/me` includes `accountMode`, `demoWalletAddress` (constant), `liveWalletAddress`
+- [x] `PATCH /api/v1/users/account-mode` — set once or allow switch with warning (live → demo OK; demo → live requires deposit?)
 
 ### 5.3 Account mode switch (optional v1)
 - [ ] If allowed: switching live → demo is instant; demo → live requires confirming own wallet address

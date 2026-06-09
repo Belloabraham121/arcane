@@ -20,9 +20,18 @@ export async function fetchDemoPreview() {
   return apiRequest<DemoPreview>("/api/v1/demo/preview");
 }
 
-export async function patchAccountMode(accountMode: AccountMode) {
-  return apiRequest<{ user: AuthUser }>("/api/v1/users/account-mode", {
-    method: "PATCH",
-    body: JSON.stringify({ accountMode }),
-  });
+export async function patchAccountMode(
+  accountMode: AccountMode,
+  options?: { confirmLiveWallet?: boolean },
+) {
+  return apiRequest<{ user: AuthUser; warning: string | null }>(
+    "/api/v1/users/account-mode",
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        accountMode,
+        confirmLiveWallet: options?.confirmLiveWallet,
+      }),
+    },
+  );
 }

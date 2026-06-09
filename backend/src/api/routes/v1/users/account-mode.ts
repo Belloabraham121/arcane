@@ -6,6 +6,8 @@ import { fail, ok } from "../../../../utils/http-response";
 
 const bodySchema = z.object({
   accountMode: z.enum(["demo", "live"]),
+  /** Required when switching demo → live. */
+  confirmLiveWallet: z.boolean().optional(),
 });
 
 export const userAccountModeRouter = Router();
@@ -24,11 +26,15 @@ userAccountModeRouter.patch(
     }
 
     try {
-      const user = await setUserAccountMode(
+      const result = await setUserAccountMode(
         req.user.id,
         parsed.data.accountMode,
+        { confirmLiveWallet: parsed.data.confirmLiveWallet },
       );
-      return ok(req, res, { user });
+      return ok(req, res, {
+        user: result.user,
+        warning: result.warning ?? null,
+      });
     } catch (err) {
       if (err instanceof UserAccountError) {
         return fail(req, res, err.status, {

@@ -1,3 +1,4 @@
+import type { AccountMode } from "@/lib/api/auth"
 import type { WalletTokenBalance } from "@/lib/api/wallet"
 import type {
   ExecutedTransaction,
@@ -141,6 +142,7 @@ export type LastTradeInfo = {
   txHash: string | null
   status: string
   at: string
+  accountMode?: AccountMode | null
 }
 
 function poolLabel(poolId: string | null): string | null {
@@ -208,16 +210,17 @@ export function lastTradeFromCycle(
   }
 
   const at = finishedAt ?? cycle.finishedAt
+  const accountMode = cycle.accountMode ?? null
   const swapTx = [...cycle.executedTransactions]
     .reverse()
     .find((tx) => tx.kind === "swap")
   if (swapTx) {
-    return tradeFromExecuted(swapTx, at)
+    return { ...tradeFromExecuted(swapTx, at), accountMode }
   }
 
   const anyTx = cycle.executedTransactions.at(-1)
   if (anyTx) {
-    return tradeFromExecuted(anyTx, at)
+    return { ...tradeFromExecuted(anyTx, at), accountMode }
   }
 
   return null
@@ -230,14 +233,14 @@ export function lastTradeFromHistoryDetail(
   for (const action of actions) {
     const trade = tradeFromAction(action)
     if (trade?.txHash) {
-      return trade
+      return { ...trade, accountMode: detail.accountMode }
     }
   }
 
   for (const action of actions) {
     const trade = tradeFromAction(action)
     if (trade) {
-      return trade
+      return { ...trade, accountMode: detail.accountMode }
     }
   }
 

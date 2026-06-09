@@ -2,19 +2,25 @@
 
 import Link from "next/link"
 import type { LastTradeInfo } from "@/lib/trading-helpers"
-import { somniaTxUrl } from "@/lib/somnia-explorer"
+import { TxHashDisplay } from "@/components/trading/tx-hash-display"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 
 type LastTradeCardProps = {
   trade: LastTradeInfo | null
+  accountMode?: LastTradeInfo["accountMode"]
 }
 
-export function LastTradeCard({ trade }: LastTradeCardProps) {
+export function LastTradeCard({ trade, accountMode }: LastTradeCardProps) {
+  const mode = trade?.accountMode ?? accountMode ?? null
+
   return (
     <div className="border border-border p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
           Last trade
+          {mode === "demo" && (
+            <span className="ml-2 text-[10px] text-amber-600">(demo fork)</span>
+          )}
         </p>
         <Link
           href={APP_ROUTES.tradingHistory}
@@ -50,14 +56,12 @@ export function LastTradeCard({ trade }: LastTradeCardProps) {
             </span>
           </p>
           {trade.txHash && (
-            <a
-              href={somniaTxUrl(trade.txHash)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-[#ea580c] hover:underline"
-            >
-              {trade.txHash.slice(0, 10)}…{trade.txHash.slice(-6)} ↗
-            </a>
+            <TxHashDisplay txHash={trade.txHash} accountMode={mode} />
+          )}
+          {mode === "demo" && trade.txHash && (
+            <p className="text-[10px] text-muted-foreground">
+              Fork tx — local Anvil only, not on Somnia explorer.
+            </p>
           )}
         </div>
       )}

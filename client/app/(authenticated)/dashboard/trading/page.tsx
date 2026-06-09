@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/trading"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
+import { TxHashDisplay } from "@/components/trading/tx-hash-display"
 import { somniaTxUrl } from "@/lib/somnia-explorer"
 import {
   formatReason,
@@ -156,14 +157,11 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
                   {action.status}
                 </span>
                 {action.txHash && (
-                  <a
-                    href={somniaTxUrl(action.txHash)}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <TxHashDisplay
+                    txHash={action.txHash}
+                    accountMode={detail.accountMode}
                     className="text-[#ea580c] hover:underline"
-                  >
-                    {action.txHash.slice(0, 8)}… ↗
-                  </a>
+                  />
                 )}
               </div>
             ))}

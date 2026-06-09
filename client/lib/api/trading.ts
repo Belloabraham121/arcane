@@ -37,6 +37,7 @@ export type SomniaAttestationSummary = {
 
 export type TradingCycleSummary = {
   cycleId: string
+  accountMode?: AccountMode
   reason: "activation" | "manual" | "scheduled" | "deposit"
   startedAt: string
   finishedAt: string

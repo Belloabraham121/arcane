@@ -550,12 +550,23 @@ export default function DashboardPage() {
               </p>
             )}
 
-            {tradingStatus?.lastCycle?.somniaAttestation?.txHash && (
+            {!isDemoView &&
+              tradingStatus?.lastCycle?.somniaAttestation?.txHash && (
               <p className="font-mono text-[10px] text-muted-foreground">
                 Somnia attestation:{" "}
                 <span className="text-foreground">
                   request #{tradingStatus.lastCycle.somniaAttestation.requestId ?? "—"}
                 </span>
+              </p>
+            )}
+            {isDemoView && tradingStatus?.lastCycle && (
+              <p className="font-mono text-[10px] text-muted-foreground">
+                Last cycle: demo fork
+                {tradingStatus.lastCycle.accountMode && (
+                  <> · {tradingStatus.lastCycle.accountMode}</>
+                )}
+                {tradingStatus.lastCycle.executedTransactions.length > 0 &&
+                  " · swaps run on local Anvil"}
               </p>
             )}
             {tradingStatus?.lastCycle?.llmResponse && (
@@ -571,7 +582,7 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <ActivePoolsPanel pools={activePoolRows} />
-              <LastTradeCard trade={lastTrade} />
+              <LastTradeCard trade={lastTrade} accountMode={viewMode} />
             </div>
 
             <div className="border border-border p-6">
@@ -592,7 +603,9 @@ export default function DashboardPage() {
 
             <div className="border border-border p-6">
               <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                {isDemoView ? "Demo wallet balances" : "Agent wallet balances"}
+                {isDemoView
+                  ? "Demo wallet (simulation)"
+                  : "Your agent wallet (mainnet)"}
               </p>
               <p className="mb-4 font-mono text-[10px] text-muted-foreground">
                 {isDemoView
@@ -623,7 +636,13 @@ export default function DashboardPage() {
           {activeTab === "markets" && (
             <div className="space-y-6">
               <p className="font-mono text-xs text-muted-foreground">
-                Live QuickSwap pools on Somnia mainnet — allocation from your agent strategy.
+                {isDemoView
+                  ? "QuickSwap pool catalog (mainnet reference). Your demo agent trades the same pools on the Anvil fork."
+                  : "Live QuickSwap pools on Somnia mainnet — allocation from your agent strategy."}
+              </p>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                Pool APY reflects on-chain fee yield per pool — not your portfolio APR
+                (see overview metrics).
               </p>
 
               {poolsError && (

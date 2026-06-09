@@ -694,12 +694,24 @@ export async function runTradingCycle(
             ? `${executionMessage} ${llm.marketplacePreflight.message}`
             : llm.marketplacePreflight.message;
         }
-        subAgentOutputs = llm.subAgentOutputs?.map((o: { agentId: string; agentName: string; summary: string; data: Record<string, unknown>; durationMs: number }) => ({
+        subAgentOutputs = llm.subAgentOutputs?.map((o) => ({
           agentId: o.agentId,
           agentName: o.agentName,
           summary: o.summary,
           data: o.data,
           durationMs: o.durationMs,
+          marketplaceProductId: o.marketplaceProductId,
+          marketplacePurchase: o.marketplacePurchase
+            ? {
+                productId: o.marketplaceProductId ?? "",
+                amountSttWei: o.marketplacePurchase.amountSttWei,
+                txHash: o.marketplacePurchase.txHash,
+                devBypass: o.marketplacePurchase.devBypass,
+                status: o.marketplacePurchase.status,
+                error: o.marketplacePurchase.error,
+                productData: o.marketplacePurchase.productData,
+              }
+            : undefined,
         }));
 
         if (executedTransactions.length === 0) {

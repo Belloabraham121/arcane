@@ -159,9 +159,9 @@ flowchart TB
 
 ## Phase 6 — Persistence & history
 
-- [ ] Prisma model: `MarketplacePurchase` (userId, cycleId, subAgentId, productId, amountSttWei, paymentTxHash, status, metadata JSONB)
-- [ ] Include Marketplace purchases in trading cycle summary / `TradingAction` records (`type: marketplace_purchase`)
-- [ ] Explorer + trading history detail panel: expandable x402 receipt (product, STT amount, raw response)
+- [x] Prisma model: `MarketplacePurchase` (userId, cycleId, subAgentId, productId, amountSttWei, paymentTxHash, status, metadata JSONB)
+- [x] Include Marketplace purchases in trading cycle summary / `TradingAction` records (`type: marketplace_purchase`)
+- [x] Explorer + trading history detail panel: expandable x402 receipt (product, STT amount, raw response)
 
 ---
 
@@ -227,11 +227,11 @@ flowchart TB
 | Phase | Status |
 |-------|--------|
 | 1 — Config & STT policy | `[x]` Complete |
-| 2 — Seller API | `[ ]` Not started |
-| 3 — Buyer + orchestrator | `[ ]` Not started |
+| 2 — Seller API | `[x]` Complete (api-ref OpenAPI pending) |
+| 3 — Buyer + orchestrator | `[x]` Complete |
 | 4 — Canvas | `[x]` Complete |
 | 5 — Client UI | `[x]` Complete |
-| 6 — Persistence | `[ ]` Not started |
+| 6 — Persistence | `[x]` Complete |
 | 7 — Testing | `[ ]` Not started |
 | 8 — Docs | `[ ]` Not started |
 

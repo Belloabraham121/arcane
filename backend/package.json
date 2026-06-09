@@ -32,8 +32,9 @@
     "db:migrate-strategy-account-mode": "tsx scripts/migrate-strategy-account-mode.ts",
     "db:migrate-marketplace-budget": "tsx scripts/migrate-marketplace-budget.ts",
     "db:migrate-marketplace-purchases": "tsx scripts/migrate-marketplace-purchases.ts",
+    "db:migrate-marketplace-phase6": "tsx scripts/migrate-marketplace-phase6.ts",
     "db:push": "prisma db push",
-    "db:upgrade": "npm run db:migrate-pools && npm run db:migrate-trading && npm run db:migrate-account-mode && npm run db:migrate-account-mode-nullable && npm run db:migrate-portfolio-snapshots && npm run db:migrate-trading-account-mode && npm run db:migrate-strategy-account-mode && npm run db:migrate-marketplace-budget && npm run db:migrate-marketplace-purchases && npm run db:generate && prisma db push --accept-data-loss"
+    "db:upgrade": "npm run db:migrate-pools && npm run db:migrate-trading && npm run db:migrate-account-mode && npm run db:migrate-account-mode-nullable && npm run db:migrate-portfolio-snapshots && npm run db:migrate-trading-account-mode && npm run db:migrate-strategy-account-mode && npm run db:migrate-marketplace-budget && npm run db:migrate-marketplace-purchases && npm run db:migrate-marketplace-phase6 && npm run db:generate && prisma db push --accept-data-loss"
   },
   "dependencies": {
     "@cryptoalgebra/integral-periphery": "^1.3.0-alpha.1",

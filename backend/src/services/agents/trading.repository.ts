@@ -142,6 +142,25 @@ export async function persistTradingCycle(
         durationMs: sa.durationMs,
       } as Prisma.InputJsonValue,
     });
+
+    if (sa.marketplaceProductId && sa.marketplacePurchase) {
+      const mp = sa.marketplacePurchase;
+      actions.push({
+        type: "marketplace_purchase",
+        toolName: sa.marketplaceProductId,
+        txHash: mp.txHash,
+        status: mp.status === "success" ? "success" : "failed",
+        metadata: {
+          agentId: sa.agentId,
+          agentName: sa.agentName,
+          productId: sa.marketplaceProductId,
+          amountSttWei: mp.amountSttWei,
+          devBypass: mp.devBypass,
+          error: mp.error ?? null,
+          productData: mp.productData ?? null,
+        } as Prisma.InputJsonValue,
+      });
+    }
   }
 
   for (const tool of toolActions ?? []) {

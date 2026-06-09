@@ -251,6 +251,12 @@ export type MarketplacePurchaseResult =
  * Deduplicates product purchases within a single trading cycle
  * (e.g. risk-manager and yield-executor share pools/snapshot).
  */
+export type MarketplacePurchaseBuyerContext = {
+  cycleId: string;
+  subAgentId: string;
+  subAgentName: string;
+};
+
 export class MarketplaceCyclePurchases {
   private readonly cache = new Map<
     MarketplaceProductId,
@@ -268,8 +274,17 @@ export class MarketplaceCyclePurchases {
     },
   ) {}
 
+  get userId(): string {
+    return this.input.userId;
+  }
+
+  get correlationId(): string {
+    return this.input.correlationId;
+  }
+
   async purchase(
     productId: MarketplaceProductId,
+    buyer?: MarketplacePurchaseBuyerContext,
   ): Promise<MarketplacePurchaseResult> {
     const cached = this.cache.get(productId);
     if (cached) {
@@ -279,6 +294,7 @@ export class MarketplaceCyclePurchases {
     const result = await purchaseMarketplaceProduct({
       ...this.input,
       productId,
+      buyer,
     });
     if (result.ok && !result.skipped) {
       this.cache.set(productId, result);
@@ -293,6 +309,7 @@ export async function purchaseMarketplaceProduct(input: {
   accountMode: AccountMode;
   budgetTracker: MarketplaceCycleBudgetTracker;
   correlationId: string;
+  buyer?: MarketplacePurchaseBuyerContext;
   useHttp?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<MarketplacePurchaseResult> {
@@ -341,6 +358,14 @@ export async function purchaseMarketplaceProduct(input: {
         accountMode: input.accountMode,
         payment,
         correlationId: input.correlationId,
+        receiptContext: input.buyer
+          ? {
+              cycleId: input.buyer.cycleId,
+              subAgentId: input.buyer.subAgentId,
+              subAgentName: input.buyer.subAgentName,
+              status: "success",
+            }
+          : undefined,
       });
       input.budgetTracker.recordSpend(priceWei);
       return {
@@ -405,6 +430,14 @@ export async function purchaseMarketplaceProduct(input: {
       accountMode: input.accountMode,
       payment,
       correlationId: input.correlationId,
+      receiptContext: input.buyer
+        ? {
+            cycleId: input.buyer.cycleId,
+            subAgentId: input.buyer.subAgentId,
+            subAgentName: input.buyer.subAgentName,
+            status: "success",
+          }
+        : undefined,
     });
 
     input.budgetTracker.recordSpend(priceWei);

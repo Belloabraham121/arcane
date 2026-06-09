@@ -2,7 +2,10 @@ import type { AccountMode } from "@prisma/client";
 import type { MarketplaceProductId } from "../../config/marketplace.js";
 import { loadMarketplaceUserContext } from "./marketplace-context.service.js";
 import { buildMarketplaceProduct } from "./products.js";
-import { recordMarketplacePurchase } from "./purchase.repository.js";
+import {
+  type MarketplacePurchaseReceiptContext,
+  recordMarketplacePurchase,
+} from "./purchase.repository.js";
 import type { MarketplaceSttPayment } from "./stt-paywall.js";
 
 export type MarketplaceDeliveryResult = {
@@ -22,6 +25,7 @@ export async function deliverMarketplaceProductForUser(input: {
   accountMode?: AccountMode;
   payment: MarketplaceSttPayment;
   correlationId: string;
+  receiptContext?: MarketplacePurchaseReceiptContext;
 }): Promise<MarketplaceDeliveryResult> {
   const context = await loadMarketplaceUserContext(
     input.userId,
@@ -33,6 +37,13 @@ export async function deliverMarketplaceProductForUser(input: {
     userId: input.userId,
     payment: input.payment,
     correlationId: input.correlationId,
+    context: {
+      ...input.receiptContext,
+      metadata: {
+        ...(input.receiptContext?.metadata ?? {}),
+        productData: product,
+      },
+    },
   });
 
   return {

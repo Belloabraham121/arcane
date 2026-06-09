@@ -3,11 +3,15 @@ import type { MarketplaceProductPricesSttWei, MarketplaceSummary } from "@/lib/a
 
 export type MarketplacePurchaseRecord = {
   id: string
+  cycleId: string | null
+  subAgentId: string | null
   productId: string
   amountSttWei: string
   txHash: string | null
   payerAddress: string
   correlationId: string
+  status: "success" | "failed" | "skipped"
+  metadata: unknown
   createdAt: string
 }
 

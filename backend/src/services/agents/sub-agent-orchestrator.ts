@@ -11,7 +11,12 @@ import {
   marketplaceProductForSubAgent,
   subAgentUsesMarketplaceData,
 } from "../marketplace/sub-agent-products.js";
+import {
+  enrichMarketplacePurchaseReceipt,
+  recordMarketplacePurchaseFailure,
+} from "../marketplace/purchase.repository.js";
 import type { MarketplaceCyclePurchases } from "../marketplace/x402-buyer.js";
+import { getMarketplaceBuyerWallet } from "../marketplace/buyer-wallet.js";
 
 const log = createLogger("sub-agent-orchestrator");
 
@@ -29,6 +34,9 @@ export type SubAgentOutput = {
     amountSttWei: string;
     txHash: string | null;
     devBypass: boolean;
+    status: "success" | "failed";
+    error?: string;
+    productData?: Record<string, unknown>;
   };
 };
 
@@ -190,7 +198,13 @@ async function fetchMarketplaceDataForAgent(
     amountSttWei: priceWei,
   });
 
-  const purchase = await marketplace.purchases.purchase(productId);
+  const buyer = {
+    cycleId: marketplace.cycleId,
+    subAgentId: agent.id,
+    subAgentName: agent.name,
+  };
+
+  const purchase = await marketplace.purchases.purchase(productId, buyer);
   const at = new Date().toISOString();
 
   if (purchase.ok && purchase.skipped) {
@@ -203,6 +217,30 @@ async function fetchMarketplaceDataForAgent(
   }
 
   if (!purchase.ok) {
+    try {
+      const { walletAddress } = await getMarketplaceBuyerWallet(
+        marketplace.purchases.userId,
+      );
+      await recordMarketplacePurchaseFailure({
+        userId: marketplace.purchases.userId,
+        productId,
+        amountSttWei: BigInt(priceWei),
+        payerAddress: walletAddress,
+        correlationId: marketplace.purchases.correlationId,
+        cycleId: marketplace.cycleId,
+        subAgentId: agent.id,
+        subAgentName: agent.name,
+        error: purchase.error,
+      });
+    } catch (recordErr) {
+      log.warn("Failed to record marketplace purchase failure", {
+        agentId: agent.id,
+        productId,
+        error:
+          recordErr instanceof Error ? recordErr.message : String(recordErr),
+      });
+    }
+
     marketplace.onPurchaseCompleted?.({
       cycleId: marketplace.cycleId,
       accountMode,
@@ -219,7 +257,34 @@ async function fetchMarketplaceDataForAgent(
       productId,
       error: purchase.error,
     });
-    return {};
+    return {
+      productId,
+      purchaseMeta: {
+        amountSttWei: priceWei,
+        txHash: null,
+        devBypass: false,
+        status: "failed",
+        error: purchase.error,
+      },
+    };
+  }
+
+  try {
+    await enrichMarketplacePurchaseReceipt({
+      userId: marketplace.purchases.userId,
+      correlationId: marketplace.purchases.correlationId,
+      productId,
+      cycleId: marketplace.cycleId,
+      subAgentId: agent.id,
+      subAgentName: agent.name,
+      metadata: { productData: purchase.data },
+    });
+  } catch (enrichErr) {
+    log.warn("Failed to enrich marketplace purchase receipt", {
+      agentId: agent.id,
+      productId,
+      error: enrichErr instanceof Error ? enrichErr.message : String(enrichErr),
+    });
   }
 
   marketplace.onPurchaseCompleted?.({
@@ -241,6 +306,8 @@ async function fetchMarketplaceDataForAgent(
       amountSttWei: purchase.amountSttWei.toString(),
       txHash: purchase.txHash,
       devBypass: purchase.devBypass,
+      status: "success",
+      productData: purchase.data,
     },
   };
 }

@@ -24,6 +24,12 @@ import {
   lastTradeFromHistoryDetail,
 } from "@/lib/trading-helpers"
 import { POOL_LABELS } from "@/lib/strategy-presets"
+import {
+  MarketplaceReceiptPanel,
+  type MarketplaceReceiptData,
+} from "@/components/marketplace/marketplace-receipt-panel"
+import { formatSttWei, marketplaceProductLabel } from "@/lib/marketplace-display"
+import type { TradingActionRecord } from "@/lib/api/trading"
 
 const PAGE_SIZE = 15
 
@@ -32,6 +38,41 @@ function poolLabel(poolId: string | null): string {
     return "—"
   }
   return POOL_LABELS[poolId] ?? poolId
+}
+
+function marketplaceReceiptFromAction(
+  action: TradingActionRecord,
+): MarketplaceReceiptData | null {
+  if (action.type !== "marketplace_purchase") {
+    return null
+  }
+  const meta =
+    action.metadata && typeof action.metadata === "object"
+      ? (action.metadata as Record<string, unknown>)
+      : null
+  if (!meta) {
+    return null
+  }
+  const productId =
+    typeof meta.productId === "string"
+      ? meta.productId
+      : (action.toolName ?? "unknown")
+  const amountSttWei =
+    typeof meta.amountSttWei === "string" ? meta.amountSttWei : "0"
+  return {
+    productId,
+    amountSttWei,
+    txHash: action.txHash,
+    status: action.status,
+    agentId: typeof meta.agentId === "string" ? meta.agentId : undefined,
+    agentName: typeof meta.agentName === "string" ? meta.agentName : undefined,
+    devBypass: meta.devBypass === true,
+    error: typeof meta.error === "string" ? meta.error : null,
+    productData:
+      meta.productData && typeof meta.productData === "object"
+        ? (meta.productData as Record<string, unknown>)
+        : null,
+  }
 }
 
 function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
@@ -126,46 +167,94 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
         </div>
       )}
 
+      {detail.actions.some((a) => a.type === "marketplace_purchase") && (
+        <div>
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Marketplace data (x402 · STT)
+          </p>
+          <div className="space-y-3">
+            {detail.actions
+              .filter((action) => action.type === "marketplace_purchase")
+              .map((action) => {
+                const receipt = marketplaceReceiptFromAction(action)
+                if (!receipt) {
+                  return null
+                }
+                return (
+                  <MarketplaceReceiptPanel
+                    key={action.id}
+                    receipt={receipt}
+                    compact
+                  />
+                )
+              })}
+          </div>
+        </div>
+      )}
+
       {detail.actions.length > 0 && (
         <div>
           <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Actions ({detail.actions.length})
           </p>
           <div className="space-y-2">
-            {detail.actions.map((action) => (
-              <div
-                key={action.id}
-                className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-3 py-2 font-mono text-[10px]"
-              >
-                <span className="uppercase text-foreground">
-                  {action.type}
-                  {action.toolName ? ` · ${action.toolName}` : ""}
-                </span>
-                <span className="text-muted-foreground">
-                  {action.poolFrom || action.poolTo
-                    ? `${poolLabel(action.poolFrom)} → ${poolLabel(action.poolTo)}`
-                    : action.tokenIn && action.tokenOut
-                      ? `${action.tokenIn} → ${action.tokenOut}`
-                      : ""}
-                </span>
-                <span
-                  className={
-                    action.status === "success"
-                      ? "text-[#16a34a]"
-                      : "text-[#ea580c]"
-                  }
+            {detail.actions.map((action) => {
+              const marketplaceReceipt =
+                action.type === "marketplace_purchase"
+                  ? marketplaceReceiptFromAction(action)
+                  : null
+
+              return (
+                <div
+                  key={action.id}
+                  className="border border-border bg-background px-3 py-2 font-mono text-[10px]"
                 >
-                  {action.status}
-                </span>
-                {action.txHash && (
-                  <TxHashDisplay
-                    txHash={action.txHash}
-                    accountMode={detail.accountMode}
-                    className="text-[#ea580c] hover:underline"
-                  />
-                )}
-              </div>
-            ))}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="uppercase text-foreground">
+                      {action.type === "marketplace_purchase"
+                        ? `marketplace · ${marketplaceProductLabel(
+                            marketplaceReceipt?.productId ??
+                              action.toolName ??
+                              "",
+                          )}`
+                        : action.type}
+                      {action.type !== "marketplace_purchase" &&
+                      action.toolName
+                        ? ` · ${action.toolName}`
+                        : ""}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {action.type === "marketplace_purchase" &&
+                      marketplaceReceipt
+                        ? formatSttWei(marketplaceReceipt.amountSttWei)
+                        : action.poolFrom || action.poolTo
+                          ? `${poolLabel(action.poolFrom)} → ${poolLabel(action.poolTo)}`
+                          : action.tokenIn && action.tokenOut
+                            ? `${action.tokenIn} → ${action.tokenOut}`
+                            : ""}
+                    </span>
+                    <span
+                      className={
+                        action.status === "success"
+                          ? action.type === "marketplace_purchase"
+                            ? "text-[#00ff88]"
+                            : "text-[#16a34a]"
+                          : "text-[#ea580c]"
+                      }
+                    >
+                      {action.status}
+                    </span>
+                    {action.txHash && action.type !== "marketplace_purchase" && (
+                      <TxHashDisplay
+                        txHash={action.txHash}
+                        accountMode={detail.accountMode}
+                        className="text-[#ea580c] hover:underline"
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

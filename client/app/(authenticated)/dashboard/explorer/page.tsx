@@ -27,6 +27,8 @@ import {
 import { POOL_LABELS } from "@/lib/strategy-presets"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
+import { MarketplaceReceiptPanel } from "@/components/marketplace/marketplace-receipt-panel"
+import { formatSttWei, marketplaceProductLabel } from "@/lib/marketplace-display"
 import { somniaTxUrl } from "@/lib/somnia-explorer"
 import { cn } from "@/lib/utils"
 
@@ -77,24 +79,6 @@ function methodLabel(tx: FlatTx): string {
   if (tx.type === "sub_agent") return "Analysis"
   if (tx.type === "tool") return tx.toolName ?? "Tool Call"
   return tx.type
-}
-
-function marketplaceProductLabel(productId: string): string {
-  if (productId === "pools/snapshot") return "Pool snapshot"
-  if (productId === "signals/spread") return "Spread signal"
-  if (productId === "signals/cross-chain") return "Cross-chain advisory"
-  return productId
-}
-
-function formatSttWei(wei: string): string {
-  try {
-    const value = BigInt(wei)
-    const stt = Number(value) / 1e18
-    if (stt >= 0.0001) return `${stt.toFixed(4)} STT`
-    return `${wei} wei`
-  } catch {
-    return `${wei} wei`
-  }
 }
 
 function typeIcon(type: string): string {
@@ -156,57 +140,47 @@ function timeAgo(dateStr: string): string {
 
 /* ─── detail panel for a single expanded tx ────────────────── */
 
+function marketplaceMetadata(
+  purchase: MarketplacePurchaseRecord,
+): Record<string, unknown> | null {
+  if (!purchase.metadata || typeof purchase.metadata !== "object") {
+    return null
+  }
+  return purchase.metadata as Record<string, unknown>
+}
+
 function MarketplaceDetailPanel({
   purchase,
 }: {
   purchase: MarketplacePurchaseRecord
 }) {
+  const meta = marketplaceMetadata(purchase)
+  const productData =
+    meta?.productData && typeof meta.productData === "object"
+      ? (meta.productData as Record<string, unknown>)
+      : null
+
   return (
-    <div className="border-t border-border/50 bg-muted/10 px-5 py-4 space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <DetailRow label="Product">
-          <span className="text-[10px] text-[#00ff88]">
-            {marketplaceProductLabel(purchase.productId)}
-          </span>
-          <code className="ml-2 text-[9px] text-muted-foreground">
-            {purchase.productId}
-          </code>
-        </DetailRow>
-        <DetailRow label="Amount (STT)">
-          <span className="text-[10px]">{formatSttWei(purchase.amountSttWei)}</span>
-        </DetailRow>
-        <DetailRow label="Payer">
-          <code className="break-all text-[10px] text-muted-foreground">
-            {purchase.payerAddress}
-          </code>
-        </DetailRow>
-        <DetailRow label="Payment Tx">
-          {purchase.txHash ? (
-            <a
-              href={somniaTxUrl(purchase.txHash)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="break-all text-[10px] text-[#00ff88] hover:underline"
-            >
-              {purchase.txHash}
-            </a>
-          ) : (
-            <span className="text-[10px] text-muted-foreground/40">
-              Dev bypass / no on-chain tx
-            </span>
-          )}
-        </DetailRow>
-        <DetailRow label="Correlation">
-          <code className="text-[9px] text-muted-foreground">
-            {purchase.correlationId}
-          </code>
-        </DetailRow>
-        <DetailRow label="Timestamp">
-          <span className="text-[10px]">
-            {new Date(purchase.createdAt).toLocaleString()}
-          </span>
-        </DetailRow>
-      </div>
+    <div className="border-t border-border/50 bg-muted/10 px-5 py-4">
+      <MarketplaceReceiptPanel
+        receipt={{
+          productId: purchase.productId,
+          amountSttWei: purchase.amountSttWei,
+          txHash: purchase.txHash,
+          status: purchase.status,
+          agentId: purchase.subAgentId ?? undefined,
+          agentName:
+            typeof meta?.subAgentName === "string"
+              ? meta.subAgentName
+              : undefined,
+          devBypass: !purchase.txHash && purchase.status === "success",
+          error: typeof meta?.error === "string" ? meta.error : null,
+          productData,
+          payerAddress: purchase.payerAddress,
+          correlationId: purchase.correlationId,
+          createdAt: purchase.createdAt,
+        }}
+      />
     </div>
   )
 }

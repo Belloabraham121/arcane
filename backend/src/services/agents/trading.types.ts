@@ -33,12 +33,24 @@ export type SomniaAttestationSummary = {
   message: string;
 };
 
+export type SubAgentMarketplacePurchaseSummary = {
+  productId: string;
+  amountSttWei: string;
+  txHash: string | null;
+  devBypass: boolean;
+  status: "success" | "failed";
+  error?: string;
+  productData?: Record<string, unknown>;
+};
+
 export type SubAgentOutputSummary = {
   agentId: string;
   agentName: string;
   summary: string;
   data: Record<string, unknown>;
   durationMs: number;
+  marketplaceProductId?: string;
+  marketplacePurchase?: SubAgentMarketplacePurchaseSummary;
 };
 
 export type TradingCycleSummary = {

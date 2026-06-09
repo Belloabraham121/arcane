@@ -103,10 +103,10 @@ flowchart TB
 ## Phase C — Agent canvas UI (demo vs live polish)
 
 ### C.1 Rename & mode-aware trade panel
-- [ ] Rename `LiveTradingFeed` → `AgentTradingFeed` (or keep file, add `accountMode` prop)
-- [ ] Header: “Demo agent activity” (amber) vs “Live agent activity” (green)
-- [ ] Use `TxHashDisplay` with `accountMode` instead of always `somniaTxUrl`
-- [ ] Connection pill: `fork` vs `live` (agents page partially done)
+- [x] Rename `LiveTradingFeed` → `AgentTradingFeed` (`live-trading-feed.tsx` re-exports deprecated alias)
+- [x] Header: “Demo agent activity” (amber) vs “Live agent activity” (green)
+- [x] Use `TxHashDisplay` with `accountMode` instead of always `somniaTxUrl`
+- [x] Connection pill: `fork · connected` (amber) vs `live · connected` (green)
 
 ### C.2 Scene hints & legend
 - [ ] `PoolTradingCanvas` bottom hint: mode-specific copy (fork vs mainnet)

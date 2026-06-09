@@ -6,7 +6,7 @@ import { AccountModeBadge } from "@/components/layout/account-mode-badge";
 import { PageSubBar } from "@/components/layout/page-sub-bar";
 import { AgentsCanvasSkeleton } from "@/components/skeletons/content-skeletons";
 import { DraggableGridPanel } from "@/components/draggable-grid-panel";
-import { LiveTradingFeed } from "@/components/live-trading-feed";
+import { AgentTradingFeed } from "@/components/agent-trading-feed";
 import { PoolNodesLegend } from "@/components/pool-nodes-legend";
 import { PoolTradingCanvas } from "@/components/pool-trading-canvas";
 import { useTradingSocket } from "@/hooks/use-trading-socket";
@@ -124,7 +124,13 @@ export default function AgentsPage() {
         badge={accountMode ? <AccountModeBadge mode={accountMode} /> : undefined}
         action={
           connected ? (
-            <span className="font-mono text-[10px] text-[#16a34a]">
+            <span
+              className={`font-mono text-[10px] ${
+                isDemo
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-[#16a34a]"
+              }`}
+            >
               {isDemo ? "fork" : "live"}
             </span>
           ) : undefined
@@ -175,11 +181,14 @@ export default function AgentsPage() {
           alignRight
           contentClassName="p-0"
         >
-          <LiveTradingFeed
-            items={feedItems}
-            connected={connected}
-            className="max-h-[min(50vh,360px)] border-0 bg-transparent"
-          />
+          {accountMode ? (
+            <AgentTradingFeed
+              accountMode={accountMode}
+              items={feedItems}
+              connected={connected}
+              className="max-h-[min(50vh,360px)] border-0 bg-transparent"
+            />
+          ) : null}
         </DraggableGridPanel>
 
         <DraggableGridPanel

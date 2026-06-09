@@ -15,7 +15,6 @@ export type SubAgentRiskLimits = {
 export type SubAgentConfigItem = {
   id: string;
   name: string;
-  model: string;
   systemPrompt: string;
   enabled: boolean;
   limits?: SubAgentRiskLimits;

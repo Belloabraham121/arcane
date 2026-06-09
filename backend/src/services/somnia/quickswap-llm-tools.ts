@@ -135,12 +135,42 @@ export class TradingToolError extends Error {
   }
 }
 
+function normalizeSubAgentRecord(raw: unknown): SubAgentConfigItem | null {
+  if (typeof raw !== "object" || raw == null) {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  if (
+    typeof record.id !== "string" ||
+    typeof record.name !== "string" ||
+    typeof record.systemPrompt !== "string" ||
+    typeof record.enabled !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    name: record.name,
+    systemPrompt: record.systemPrompt,
+    enabled: record.enabled,
+    ...(record.limits != null && typeof record.limits === "object"
+      ? { limits: record.limits as SubAgentConfigItem["limits"] }
+      : {}),
+  };
+}
+
 export function resolveSubAgents(
   strategyType: StrategyType,
   subAgentConfig: unknown,
 ): SubAgentConfigItem[] {
   if (Array.isArray(subAgentConfig) && subAgentConfig.length > 0) {
-    return subAgentConfig as SubAgentConfigItem[];
+    const parsed = subAgentConfig
+      .map(normalizeSubAgentRecord)
+      .filter((agent): agent is SubAgentConfigItem => agent != null);
+    if (parsed.length > 0) {
+      return parsed;
+    }
   }
   return strategyType === "auto"
     ? DEFAULT_AUTO_SUB_AGENTS

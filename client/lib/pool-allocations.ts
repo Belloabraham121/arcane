@@ -7,7 +7,10 @@ import {
   formatPoolVolumeUsd,
   poolPairLabel,
 } from "@/lib/pool-display";
-import { activeResolvablePoolEntries, resolvePoolById } from "@/lib/pool-resolve";
+import {
+  activeResolvablePoolEntries,
+  resolvePoolById,
+} from "@/lib/pool-resolve";
 import { POOL_LABELS } from "@/lib/strategy-presets";
 
 const ALLOCATION_TOTAL = 105_000_000;
@@ -111,6 +114,25 @@ export function defaultAllocationsFromPools(
   return result;
 }
 
+/** Map legacy slugs (e.g. usdce-wsomi) to live pool address ids for editor state. */
+export function canonicalizePoolAllocations(
+  allocations: PoolAllocations,
+  pools: readonly QuickSwapPool[],
+): PoolAllocations {
+  const result: PoolAllocations = {};
+
+  for (const [id, amount] of Object.entries(allocations)) {
+    if (amount <= 0) {
+      continue;
+    }
+    const resolved = resolvePoolById(id, pools);
+    const key = resolved?.id ?? id;
+    result[key] = amount;
+  }
+
+  return result;
+}
+
 export function mergeStrategyPoolAllocations(
   saved: PoolAllocations | undefined,
   pools: QuickSwapPool[],
@@ -124,29 +146,35 @@ export function mergeStrategyPoolAllocations(
       }
       const hasPositive = Object.values(result).some((amount) => amount > 0);
       if (hasPositive) {
-        return result;
+        return canonicalizePoolAllocations(result, pools);
       }
     }
-    return defaultAllocationsFromPools(pools);
+    return canonicalizePoolAllocations(
+      defaultAllocationsFromPools(pools),
+      pools,
+    );
   }
 
-  const result: PoolAllocations = {};
+  const merged: PoolAllocations = {};
   for (const pool of pools) {
-    result[pool.id] = saved[pool.id] ?? 0;
+    merged[pool.id] = saved[pool.id] ?? 0;
   }
 
   for (const [id, amount] of Object.entries(saved)) {
-    if (amount > 0 && result[id] == null) {
-      result[id] = amount;
+    if (amount > 0 && merged[id] == null) {
+      merged[id] = amount;
     }
   }
 
-  const hasPositive = Object.values(result).some((amount) => amount > 0);
+  const hasPositive = Object.values(merged).some((amount) => amount > 0);
   if (!hasPositive) {
-    return defaultAllocationsFromPools(pools);
+    return canonicalizePoolAllocations(
+      defaultAllocationsFromPools(pools),
+      pools,
+    );
   }
 
-  return result;
+  return canonicalizePoolAllocations(merged, pools);
 }
 
 export function activePoolAllocations(

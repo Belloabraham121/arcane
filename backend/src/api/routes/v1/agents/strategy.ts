@@ -21,7 +21,6 @@ const upsertSchema = z.object({
     z.object({
       id: z.string().min(1),
       name: z.string().min(1),
-      model: z.string().min(1),
       systemPrompt: z.string().min(1),
       enabled: z.boolean(),
       limits: z
@@ -46,7 +45,6 @@ const patchSubAgentsSchema = z.object({
     z.object({
       id: z.string().min(1),
       name: z.string().min(1),
-      model: z.string().min(1),
       systemPrompt: z.string().min(1),
       enabled: z.boolean(),
       limits: z

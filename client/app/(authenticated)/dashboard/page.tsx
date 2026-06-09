@@ -400,9 +400,6 @@ export default function DashboardPage() {
                 {enabledSubAgents.map((agent) => (
                   <div key={agent.id}>
                     <p className="font-mono text-sm text-foreground">{agent.name}</p>
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-[#ea580c]">
-                      {agent.model}
-                    </p>
                     <p className="font-mono text-xs text-muted-foreground">
                       {agent.systemPrompt}
                     </p>

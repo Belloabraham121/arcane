@@ -1,12 +1,5 @@
 import type { SubAgentConfigItem } from "@/lib/api/strategy-types"
 
-const MODEL_OPTIONS = [
-  "gpt-4o-mini",
-  "gpt-4o",
-  "claude-sonnet-4-6",
-  "claude-haiku-4-5",
-] as const
-
 type SubAgentEditorProps = {
   agents: SubAgentConfigItem[]
   onChange: (next: SubAgentConfigItem[]) => void
@@ -44,25 +37,6 @@ export function SubAgentEditor({
                 className="flex-1 border border-border bg-background px-2 py-1 font-mono text-sm text-foreground"
               />
             </label>
-            <div className="space-y-1">
-              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                Model
-              </label>
-              <select
-                value={agent.model}
-                onChange={(e) => updateAgent(agent.id, { model: e.target.value })}
-                className="w-full border border-border bg-background px-2 py-2 font-mono text-xs text-foreground"
-              >
-                {MODEL_OPTIONS.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-                {!MODEL_OPTIONS.includes(agent.model as (typeof MODEL_OPTIONS)[number]) && (
-                  <option value={agent.model}>{agent.model}</option>
-                )}
-              </select>
-            </div>
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
                 System prompt

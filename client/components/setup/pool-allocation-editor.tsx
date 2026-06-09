@@ -4,8 +4,28 @@ import { PoolAllocationEditorSkeleton } from "@/components/skeletons/content-ske
 import { Skeleton } from "@/components/ui/skeleton"
 import type { PoolSortField, QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
+import { canonicalizePoolAllocations } from "@/lib/pool-allocations"
 import { poolDisplayStats } from "@/lib/pool-display"
 import { resolvePoolById } from "@/lib/pool-resolve"
+
+type ActivePoolEntry = {
+  allocationId: string
+  pool: QuickSwapPool
+}
+
+function poolIsAllocated(
+  pool: QuickSwapPool,
+  values: PoolAllocations,
+  pools: readonly QuickSwapPool[],
+): boolean {
+  return Object.entries(values).some(([id, amount]) => {
+    if (amount <= 0) {
+      return false
+    }
+    const resolved = resolvePoolById(id, pools)
+    return id === pool.id || resolved?.id === pool.id
+  })
+}
 
 const SORT_OPTIONS: Array<{ value: PoolSortField; label: string }> = [
   { value: "liquidity", label: "Liquidity" },
@@ -117,34 +137,54 @@ export function PoolAllocationEditor({
 }: PoolAllocationEditorProps) {
   const total = Object.values(values).reduce((sum, value) => sum + value, 0)
 
-  const { activePools, catalogPools } = useMemo(() => {
+  function commitAllocations(next: PoolAllocations) {
+    onChange(canonicalizePoolAllocations(next, pools))
+  }
+
+  const { activeEntries, catalogPools } = useMemo(() => {
     if (!editMode) {
-      return { activePools: pools, catalogPools: [] as QuickSwapPool[] }
+      return {
+        activeEntries: pools.map((pool) => ({ allocationId: pool.id, pool })),
+        catalogPools: [] as QuickSwapPool[],
+      }
     }
 
     const activeIds = Object.entries(values)
       .filter(([, amount]) => amount > 0)
       .map(([id]) => id)
 
-    const active = activeIds.map((id) => resolvePoolById(id, pools) ?? stubPool(id))
-    const activeIdSet = new Set(activeIds)
-    const catalog = pools.filter((pool) => !activeIdSet.has(pool.id))
+    const activeEntries: ActivePoolEntry[] = activeIds.map((allocationId) => ({
+      allocationId,
+      pool: resolvePoolById(allocationId, pools) ?? stubPool(allocationId),
+    }))
 
-    return { activePools: active, catalogPools: catalog }
+    const catalog = pools.filter((pool) => !poolIsAllocated(pool, values, pools))
+
+    return { activeEntries, catalogPools: catalog }
   }, [editMode, pools, values])
 
-  function setAmount(poolId: string, amount: number) {
-    onChange({ ...values, [poolId]: Math.max(0, amount) })
+  function setAmount(allocationId: string, amount: number) {
+    const next = { ...values, [allocationId]: Math.max(0, amount) }
+    if (next[allocationId] === 0) {
+      delete next[allocationId]
+    }
+    commitAllocations(next)
   }
 
   function addPool(poolId: string) {
     const activeCount = Object.values(values).filter((amount) => amount > 0).length
     const fallback = Math.max(1, Math.round(total / Math.max(activeCount + 1, 1)))
-    onChange({ ...values, [poolId]: fallback })
+    commitAllocations({ ...values, [poolId]: fallback })
   }
 
-  function removePool(poolId: string) {
-    onChange({ ...values, [poolId]: 0 })
+  function removePool(allocationId: string) {
+    const next = { ...values }
+    delete next[allocationId]
+    const resolved = resolvePoolById(allocationId, pools)
+    if (resolved && resolved.id !== allocationId) {
+      delete next[resolved.id]
+    }
+    commitAllocations(next)
   }
 
   function togglePool(poolId: string, enabled: boolean) {
@@ -155,32 +195,32 @@ export function PoolAllocationEditor({
     removePool(poolId)
   }
 
-  function renderActivePool(pool: QuickSwapPool) {
-    const amount = values[pool.id] ?? 0
+  function renderActivePool({ allocationId, pool }: ActivePoolEntry) {
+    const amount = values[allocationId] ?? 0
 
     return (
-      <div key={pool.id} className="space-y-2 border-b border-border pb-4 last:border-b-0">
+      <div key={allocationId} className="space-y-2 border-b border-border pb-4 last:border-b-0">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="font-mono text-xs uppercase tracking-wide text-foreground">
-                {pool.label}
-              </p>
-              {editMode && (
-                <button
-                  type="button"
-                  onClick={() => removePool(pool.id)}
-                  className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
+            <p className="font-mono text-xs uppercase tracking-wide text-foreground">
+              {pool.label}
+            </p>
             <PoolMetricsLines pool={pool} />
           </div>
-          <span className="shrink-0 font-mono text-xs text-muted-foreground">
-            {total > 0 ? `${((amount / total) * 100).toFixed(1)}%` : "0%"}
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span className="font-mono text-xs text-muted-foreground">
+              {total > 0 ? `${((amount / total) * 100).toFixed(1)}%` : "0%"}
+            </span>
+            {editMode && (
+              <button
+                type="button"
+                onClick={() => removePool(allocationId)}
+                className="border border-[#ea580c]/40 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-[#ea580c] transition-colors hover:bg-[#ea580c]/10"
+              >
+                Remove
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <input
@@ -188,7 +228,7 @@ export function PoolAllocationEditor({
             value={amount / 1_000_000}
             onChange={(e) => {
               const next = Math.max(0, parseFloat(e.target.value) || 0) * 1_000_000
-              setAmount(pool.id, next)
+              setAmount(allocationId, next)
             }}
             className="flex-1 rounded border border-border bg-background px-2 py-2 font-mono text-xs text-foreground"
           />
@@ -293,7 +333,7 @@ export function PoolAllocationEditor({
     )
   }
 
-  if (pools.length === 0 && activePools.length === 0) {
+  if (pools.length === 0 && activeEntries.length === 0) {
     return (
       <div className="border border-border p-6">
         <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
@@ -344,14 +384,14 @@ export function PoolAllocationEditor({
         <div className={`space-y-6 ${refetching ? "opacity-60" : ""}`}>
           <div>
             <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Your pools ({activePools.length})
+              Your pools ({activeEntries.length})
             </p>
-            {activePools.length === 0 ? (
+            {activeEntries.length === 0 ? (
               <p className="font-mono text-[10px] text-muted-foreground">
                 No pools selected yet — add from the catalog below.
               </p>
             ) : (
-              <div className="space-y-5">{activePools.map(renderActivePool)}</div>
+              <div className="space-y-5">{activeEntries.map(renderActivePool)}</div>
             )}
           </div>
 

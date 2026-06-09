@@ -38,8 +38,6 @@ function toSubAgentsFromPresets(): SubAgentConfigItem[] {
   return AUTO_PRESET_SUB_AGENTS.map((agent) => ({
     id: agent.id,
     name: agent.name,
-    model:
-      agent.model === "Claude Sonnet" ? "claude-sonnet-4-6" : "gpt-4o-mini",
     systemPrompt: agent.role,
     enabled: true,
   }));
@@ -53,13 +51,15 @@ function AutoSetupContent() {
   const [poolSort, setPoolSort] = useState<PoolSortField>("liquidity");
   const {
     pools,
-    meta,
     loading: poolsLoading,
     refetching: poolsRefetching,
     error: poolsError,
   } = useQuickSwapPools({
-    context: isEditing ? "custom" : "auto",
-    sort: isEditing ? poolSort : undefined,
+    context: "custom",
+    sort: poolSort,
+  });
+  const { meta: autoMeta, loading: autoMetaLoading } = useQuickSwapPools({
+    context: "auto",
   });
   const [depositInput, setDepositInput] = useState(
     String(DEFAULT_DEPOSIT_AMOUNT),
@@ -141,7 +141,7 @@ function AutoSetupContent() {
   }, [sessionReady, router, isEditing]);
 
   useEffect(() => {
-    if (pools.length === 0 || poolsHydratedRef.current) {
+    if (pools.length === 0 || poolsHydratedRef.current || autoMetaLoading) {
       return;
     }
 
@@ -151,11 +151,15 @@ function AutoSetupContent() {
           ? strategyResult.data.strategy.poolAllocations
           : undefined;
       setPoolAmounts(
-        mergeStrategyPoolAllocations(saved, pools, meta?.suggestedAllocations),
+        mergeStrategyPoolAllocations(
+          saved,
+          pools,
+          autoMeta?.suggestedAllocations,
+        ),
       );
       poolsHydratedRef.current = true;
     });
-  }, [pools, meta]);
+  }, [pools, autoMeta, autoMetaLoading]);
 
   async function saveSetup() {
     const amount = Number(depositInput);
@@ -233,7 +237,7 @@ function AutoSetupContent() {
           </h1>
           <p className="max-w-2xl text-xs font-mono leading-relaxed text-muted-foreground">
             Arcane starts you with a preset strategy. Adjust QuickSwap pool
-            allocation, sub-agent models, and system prompts, then deposit to
+            allocation, sub-agent prompts, then deposit to
             your generated address.
           </p>
         </motion.div>
@@ -260,19 +264,17 @@ function AutoSetupContent() {
             values={poolAmounts}
             onChange={setPoolAmounts}
             mode="auto"
-            editMode={isEditing}
-            loading={poolsLoading}
+            editMode
+            loading={poolsLoading || autoMetaLoading}
             refetching={poolsRefetching}
             error={poolsError}
             sort={poolSort}
-            onSortChange={isEditing ? setPoolSort : undefined}
-            title={isEditing ? "QuickSwap pools" : "Top QuickSwap pools"}
+            onSortChange={setPoolSort}
+            title={isEditing ? "QuickSwap pools" : "QuickSwap pools"}
             subtitle={
               isEditing
                 ? "Adjust your active pools or add others from the full catalog below."
-                : meta?.selectionCount
-                  ? `Arcane selected ${meta.selectionCount} high-liquidity, high-APR pools. Allocations are auto-balanced — adjust if needed.`
-                  : "Top pools by liquidity and implied APR."
+                : "Arcane suggests high-liquidity pools — remove any you do not want and add others from the catalog below."
             }
           />
         </div>

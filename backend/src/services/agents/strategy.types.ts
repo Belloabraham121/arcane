@@ -34,7 +34,6 @@ export type SubAgentRiskLimits = {
 export type SubAgentConfigItem = {
   id: string;
   name: string;
-  model: string;
   systemPrompt: string;
   enabled: boolean;
   /** Optional hard limits (typically on risk-manager). */
@@ -45,7 +44,6 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
   {
     id: "root-orchestrator",
     name: "Root Orchestrator",
-    model: "claude-sonnet-4-6",
     systemPrompt:
       "Portfolio-level strategy and capital routing across QuickSwap pools. Maximize risk-adjusted yield.",
     enabled: true,
@@ -53,7 +51,6 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
   {
     id: "yield-executor",
     name: "Yield Executor",
-    model: "gpt-4o-mini",
     systemPrompt:
       "Executes rebalances across QuickSwap liquidity pools when price and fee spreads exceed threshold.",
     enabled: true,
@@ -61,7 +58,6 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
   {
     id: "signal-scout",
     name: "Signal Scout",
-    model: "gpt-4o-mini",
     systemPrompt:
       "Monitors APR shifts and publishes buy/sell signals to the agent marketplace.",
     enabled: true,
@@ -69,7 +65,6 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
   {
     id: "risk-manager",
     name: "Risk Manager",
-    model: "gpt-4o-mini",
     systemPrompt:
       "Caps exposure per QuickSwap pool and pauses risky routes when drawdown limits are breached.",
     enabled: true,
@@ -86,21 +81,18 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: SubAgentConfigItem[] = [
   {
     id: "yield-executor",
     name: "Yield Executor",
-    model: "gpt-4o-mini",
     systemPrompt: "Execute capital moves across selected QuickSwap pools.",
     enabled: true,
   },
   {
     id: "signal-scout",
     name: "Signal Scout",
-    model: "gpt-4o-mini",
     systemPrompt: "Scan markets and generate trading signals.",
     enabled: true,
   },
   {
     id: "risk-manager",
     name: "Risk Manager",
-    model: "gpt-4o-mini",
     systemPrompt: "Limit exposure and halt risky agent actions.",
     enabled: true,
     limits: {
@@ -113,7 +105,6 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: SubAgentConfigItem[] = [
   {
     id: "bridge-scout",
     name: "Bridge Scout",
-    model: "gpt-4o-mini",
     systemPrompt: "Find and evaluate cross-chain opportunities.",
     enabled: false,
   },

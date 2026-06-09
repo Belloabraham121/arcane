@@ -107,7 +107,6 @@ export function parseSubAgents(
     const record = item as Record<string, unknown>;
     const id = record.id;
     const name = record.name;
-    const model = record.model;
     const systemPrompt = record.systemPrompt;
     const enabled = record.enabled;
 
@@ -121,12 +120,6 @@ export function parseSubAgents(
       throw new StrategyError(
         "VALIDATION_ERROR",
         `subAgents[${index}].name is required`,
-      );
-    }
-    if (typeof model !== "string" || model.trim().length === 0) {
-      throw new StrategyError(
-        "VALIDATION_ERROR",
-        `subAgents[${index}].model is required`,
       );
     }
     if (typeof systemPrompt !== "string" || systemPrompt.trim().length === 0) {
@@ -209,7 +202,6 @@ export function parseSubAgents(
     return {
       id: id.trim(),
       name: name.trim(),
-      model: model.trim(),
       systemPrompt: systemPrompt.trim(),
       enabled,
       ...(limits ? { limits } : {}),

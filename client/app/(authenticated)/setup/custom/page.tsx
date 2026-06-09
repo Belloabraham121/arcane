@@ -32,7 +32,6 @@ function defaultCustomSubAgents(): SubAgentConfigItem[] {
   return DEFAULT_CUSTOM_SUB_AGENTS.map((agent) => ({
     id: agent.id,
     name: agent.name,
-    model: "gpt-4o-mini",
     systemPrompt: agent.role,
     enabled: agent.enabled,
   }))
@@ -198,7 +197,7 @@ function CustomSetupContent() {
             Custom Agent Setup
           </h1>
           <p className="max-w-2xl text-xs font-mono leading-relaxed text-muted-foreground">
-            Choose QuickSwap pools, define sub-agent models and system prompts, deposit to your
+            Choose QuickSwap pools, define sub-agent system prompts, deposit to your
             address, then launch your dashboard.
           </p>
         </motion.div>
@@ -225,7 +224,7 @@ function CustomSetupContent() {
             values={poolAmounts}
             onChange={setPoolAmounts}
             mode="custom"
-            editMode={isEditing}
+            editMode
             loading={poolsLoading}
             refetching={poolsRefetching}
             error={poolsError}
@@ -236,8 +235,8 @@ function CustomSetupContent() {
               isEditing
                 ? "Manage your active pools or add more from the catalog below."
                 : meta?.total
-                  ? `${meta.total} pools available — sorted by ${poolSort}. Enable pools and set allocations.`
-                  : undefined
+                  ? `${meta.total} pools available — sorted by ${poolSort}. Remove pools you do not want or add from the catalog below.`
+                  : "Remove pools you do not want or add from the catalog below."
             }
           />
         </div>

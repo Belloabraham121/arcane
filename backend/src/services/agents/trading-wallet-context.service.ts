@@ -120,4 +120,33 @@ export async function withDemoAgentSigning<T>(
   }
 }
 
+export type DemoTradingAvailability = {
+  available: boolean;
+  reason: string | null;
+};
+
+/** Whether scheduled/manual demo cycles may run (env flag + Anvil health). */
+export async function getDemoTradingAvailability(): Promise<DemoTradingAvailability> {
+  const demoEnv = getDemoEnv();
+  if (!demoEnv.tradingEnabled) {
+    return {
+      available: false,
+      reason: "Demo trading is disabled (DEMO_TRADING_ENABLED=false)",
+    };
+  }
+
+  try {
+    await assertAnvilForkHealthy(demoEnv.anvilRpcUrl);
+    return { available: true, reason: null };
+  } catch (err) {
+    const reason =
+      err instanceof AnvilForkUnhealthyError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Anvil fork is unavailable";
+    return { available: false, reason };
+  }
+}
+
 export { withPortfolioRpc as withTradingRpc, AnvilForkUnhealthyError };

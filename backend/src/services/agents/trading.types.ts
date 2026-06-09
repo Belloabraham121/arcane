@@ -59,8 +59,13 @@ export type TradingCycleSummary = {
 
 export type TradingStatusResponse = {
   phase: TradingCyclePhase;
+  accountMode: "demo" | "live";
   tradingEnabledAt: string | null;
   lastCycleAt: string | null;
   lastCycle: TradingCycleSummary | null;
   lastError: string | null;
+  /** Shown when accountMode is demo. */
+  demoWalletNotice: string | null;
+  demoTradingAvailable: boolean;
+  demoCycleBusy: boolean;
 };

@@ -2,6 +2,7 @@ import type { Address } from "viem";
 import { getTradingExecutionEnv } from "../config/env";
 import { createLogger } from "../shared/logger";
 import { resolveSubAgents } from "../services/somnia/quickswap-llm-tools";
+import { isDemoWalletCycleRunning } from "../services/agents/demo-cycle-mutex.service";
 import {
   isCycleCooldownActive,
   resolveRiskLimits,
@@ -16,6 +17,11 @@ import {
   listActiveStrategiesForWorker,
   updateBalanceFingerprint,
 } from "../services/agents/trading.repository";
+import {
+  getDemoTradingAvailability,
+  resolvePortfolioWallet,
+  withPortfolioRpc,
+} from "../services/portfolio/wallet-context.service";
 import { getWalletBalances } from "../services/wallet/token-balance.service";
 
 const log = createLogger("trading-worker");
@@ -84,9 +90,29 @@ export async function runTradingWorkerTick(): Promise<void> {
     }
 
     try {
-      const balances = await getWalletBalances(
+      if (strategy.accountMode === "demo") {
+        const demoAvailability = await getDemoTradingAvailability();
+        if (!demoAvailability.available) {
+          log.debug("Demo strategy skipped — fork unavailable", {
+            userId: strategy.userId,
+            reason: demoAvailability.reason,
+          });
+          continue;
+        }
+        if (isDemoWalletCycleRunning()) {
+          log.debug("Demo strategy skipped — shared wallet cycle in progress", {
+            userId: strategy.userId,
+          });
+          continue;
+        }
+      }
+
+      const resolved = resolvePortfolioWallet(
+        strategy.accountMode,
         strategy.walletAddress as Address,
-        strategy.poolIds,
+      );
+      const balances = await withPortfolioRpc(resolved.rpcMode, () =>
+        getWalletBalances(resolved.walletAddress, strategy.poolIds),
       );
       const fingerprint = balanceFingerprint(balances);
 

@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
+import type { AccountMode } from "@prisma/client";
 import type { Address } from "viem";
+import { getServerEnv } from "../../config/env";
 import { createLogger } from "../../shared/logger";
 import { findUserById } from "../auth/user.repository";
+import {
+  acquireDemoCycleLock,
+  DEMO_WALLET_NOTICE,
+  isDemoWalletCycleRunning,
+  releaseDemoCycleLock,
+  resetDemoCycleMutexForTests,
+} from "./demo-cycle-mutex.service";
 import { listPoolsWithMetrics } from "../defi/quickswap/pool-metrics.service";
 import type { QuickSwapPool } from "../defi/quickswap/types";
 import { planRebalance } from "../defi/quickswap/route-planner";
@@ -17,6 +26,7 @@ import {
   AnvilForkUnhealthyError,
   assertTradingRpcHealthy,
   ensureDemoTradingWalletFunded,
+  getDemoTradingAvailability,
   resolveTradingRpc,
   resolveTradingWallet,
   TradingDemoDisabledError,
@@ -87,6 +97,8 @@ export type TradingCycleOverrides = {
   };
   /** Dev smoke: bypass TRADING_CYCLE_COOLDOWN_MINUTES. */
   skipCycleCooldown?: boolean;
+  /** Dev-only override; production uses the user's stored account_mode. */
+  accountMode?: AccountMode;
 };
 
 /** Clears in-memory cycle state between integration tests. */
@@ -94,6 +106,27 @@ export function resetTradingRunnerStateForTests(): void {
   runningUsers.clear();
   lastCycleByUser.clear();
   lastErrorByUser.clear();
+  resetDemoCycleMutexForTests();
+}
+
+export function resolveAccountModeForCycle(
+  storedMode: AccountMode,
+  override?: AccountMode,
+): AccountMode {
+  if (!override || override === storedMode) {
+    return storedMode;
+  }
+
+  const { nodeEnv } = getServerEnv();
+  if (nodeEnv !== "development") {
+    throw new TradingError(
+      "MODE_OVERRIDE_FORBIDDEN",
+      "Account mode override is only allowed in development",
+      403,
+    );
+  }
+
+  return override;
 }
 
 export function isUserCycleRunning(userId: string): boolean {
@@ -389,28 +422,39 @@ export function getTradingStatus(userId: string): TradingStatusResponse {
 
   return {
     phase,
+    accountMode: "live",
     tradingEnabledAt: null,
     lastCycleAt: null,
     lastCycle: lastCycleByUser.get(userId) ?? null,
     lastError: lastErrorByUser.get(userId) ?? null,
+    demoWalletNotice: null,
+    demoTradingAvailable: false,
+    demoCycleBusy: false,
   };
 }
 
 export async function getTradingStatusForUser(
   userId: string,
 ): Promise<TradingStatusResponse> {
-  const strategy = await repo.findStrategyByUserId(userId);
+  const [strategy, user] = await Promise.all([
+    repo.findStrategyByUserId(userId),
+    findUserById(userId),
+  ]);
   const base = getTradingStatus(userId);
+  const accountMode = user?.accountMode ?? "live";
+  const demoAvailability = await getDemoTradingAvailability();
 
-  if (!strategy) {
-    return base;
-  }
-
-  return {
+  const status: TradingStatusResponse = {
     ...base,
-    tradingEnabledAt: strategy.tradingEnabledAt?.toISOString() ?? null,
-    lastCycleAt: strategy.lastCycleAt?.toISOString() ?? null,
+    accountMode,
+    demoWalletNotice: accountMode === "demo" ? DEMO_WALLET_NOTICE : null,
+    demoTradingAvailable: demoAvailability.available,
+    demoCycleBusy: isDemoWalletCycleRunning(),
+    tradingEnabledAt: strategy?.tradingEnabledAt?.toISOString() ?? null,
+    lastCycleAt: strategy?.lastCycleAt?.toISOString() ?? null,
   };
+
+  return status;
 }
 
 /**
@@ -464,7 +508,11 @@ export async function runTradingCycle(
       throw new TradingError("USER_NOT_FOUND", "User not found", 404);
     }
 
-    const trading = resolveTradingWallet(user);
+    const effectiveAccountMode = resolveAccountModeForCycle(
+      user.accountMode,
+      overrides?.accountMode,
+    );
+    const trading = resolveTradingWallet(user, effectiveAccountMode);
     try {
       await assertTradingRpcHealthy(trading.rpcMode);
     } catch (err) {
@@ -475,6 +523,10 @@ export async function runTradingCycle(
         throw new TradingError("ANVIL_UNHEALTHY", err.message, 503);
       }
       throw err;
+    }
+
+    if (trading.rpcMode === "fork") {
+      await acquireDemoCycleLock(userId);
     }
 
     const poolAllocations = poolAllocationsFromRows(strategy.poolAllocations);
@@ -791,6 +843,7 @@ export async function runTradingCycle(
     log.error("Trading cycle failed", { userId, cycleId, reason, message });
     throw err;
   } finally {
+    releaseDemoCycleLock(userId);
     runningUsers.delete(userId);
   }
 }

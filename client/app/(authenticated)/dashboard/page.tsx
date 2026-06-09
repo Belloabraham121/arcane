@@ -362,6 +362,16 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {tradingStatus?.demoWalletNotice && (
+              <p className="border border-amber-500/30 bg-amber-500/5 px-4 py-3 font-mono text-xs text-amber-700 dark:text-amber-400">
+                {tradingStatus.demoWalletNotice}
+                {!tradingStatus.demoTradingAvailable &&
+                  " — Anvil fork is offline; demo cycles are paused."}
+                {tradingStatus.demoCycleBusy &&
+                  " — A demo cycle is running; yours will queue."}
+              </p>
+            )}
+
             {tradingStatus?.lastError && (
               <p className="border border-[#ea580c]/30 bg-[#ea580c]/5 px-4 py-3 font-mono text-xs text-[#ea580c]">
                 {tradingStatus.lastError}

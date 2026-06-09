@@ -135,13 +135,13 @@ flowchart TB
 - [x] Persist `account_mode` on `TradingCycle` rows for history filtering
 
 ### 2.3 Demo cycle API
-- [ ] `POST /api/v1/trading/cycles` respects account mode (or `?mode=demo` for explicit dev)
-- [ ] Worker / scheduler: demo users can trigger cycles only when `DEMO_TRADING_ENABLED` and Anvil up
-- [ ] Rate limit demo cycles (shared wallet — one cycle at a time globally?)
+- [x] `POST /api/v1/trading/cycles` respects account mode (or `?mode=demo` for explicit dev)
+- [x] Worker / scheduler: demo users can trigger cycles only when `DEMO_TRADING_ENABLED` and Anvil up
+- [x] Rate limit demo cycles (shared wallet — one cycle at a time globally?)
 
 ### 2.4 Shared-wallet concurrency
-- [ ] Mutex / queue for demo wallet trades (all demo users share one key)
-- [ ] UI message: “Demo trades run on a shared simulation wallet”
+- [x] Mutex / queue for demo wallet trades (all demo users share one key)
+- [x] UI message: “Demo trades run on a shared simulation wallet”
 
 ---
 

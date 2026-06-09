@@ -53,10 +53,14 @@ export type TradingCycleSummary = {
 
 export type TradingStatus = {
   phase: TradingCyclePhase
+  accountMode: "demo" | "live"
   tradingEnabledAt: string | null
   lastCycleAt: string | null
   lastCycle: TradingCycleSummary | null
   lastError: string | null
+  demoWalletNotice: string | null
+  demoTradingAvailable: boolean
+  demoCycleBusy: boolean
 }
 
 export async function fetchTradingStatus() {

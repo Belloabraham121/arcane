@@ -49,6 +49,7 @@ export type ActiveStrategyForWorker = {
   userId: string;
   strategyId: string;
   strategyType: string;
+  accountMode: "demo" | "live";
   walletAddress: string;
   depositAmount: number;
   lastCycleAt: Date | null;
@@ -286,7 +287,7 @@ export async function listActiveStrategiesForWorker(): Promise<
     },
     include: {
       poolAllocations: true,
-      user: { select: { id: true, walletAddress: true } },
+      user: { select: { id: true, walletAddress: true, accountMode: true } },
     },
   });
 
@@ -294,6 +295,7 @@ export async function listActiveStrategiesForWorker(): Promise<
     userId: row.user.id,
     strategyId: row.id,
     strategyType: row.strategyType,
+    accountMode: row.user.accountMode,
     walletAddress: row.user.walletAddress,
     depositAmount: row.depositAmount,
     lastCycleAt: row.lastCycleAt,

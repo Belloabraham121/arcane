@@ -54,6 +54,7 @@ async function start() {
         "PATCH /api/v1/agents/strategy/pool-allocations",
         "GET /api/v1/agents/trading/status",
         "POST /api/v1/agents/trading/run-cycle",
+        "POST /api/v1/trading/cycles",
         "GET /api/v1/agents/trading/history",
         "GET /api/v1/agents/trading/history/:id",
         "PATCH /api/v1/agents/strategy/sub-agents",

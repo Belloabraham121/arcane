@@ -1,7 +1,9 @@
+import type { AccountMode } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../../../middleware/auth";
 import {
+  resolveAccountModeForCycle,
   TradingError,
   getTradingStatusForUser,
   runTradingCycle,
@@ -10,7 +12,12 @@ import {
   getTradingCycleDetail,
   listTradingCycles,
 } from "../../../../services/agents/trading.repository";
+import { findUserById } from "../../../../services/auth/user.repository";
 import { fail, ok } from "../../../../utils/http-response";
+
+const runCycleQuerySchema = z.object({
+  mode: z.enum(["demo", "live"]).optional(),
+});
 
 const historyQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
@@ -32,8 +39,31 @@ agentTradingRouter.get("/api/v1/agents/trading/status", requireAuth, async (req,
 });
 
 agentTradingRouter.post("/api/v1/agents/trading/run-cycle", requireAuth, async (req, res) => {
+  const parsed = runCycleQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return fail(req, res, 400, {
+      code: "VALIDATION_ERROR",
+      message: "Invalid run-cycle query",
+      details: parsed.error.flatten().fieldErrors,
+    });
+  }
+
   try {
-    const summary = await runTradingCycle(req.user.id, "manual");
+    const mode = parsed.data.mode;
+    if (mode) {
+      const user = await findUserById(req.user.id);
+      if (!user) {
+        return fail(req, res, 404, {
+          code: "USER_NOT_FOUND",
+          message: "User not found",
+        });
+      }
+      resolveAccountModeForCycle(user.accountMode, mode as AccountMode);
+    }
+
+    const summary = await runTradingCycle(req.user.id, "manual", {
+      accountMode: parsed.data.mode,
+    });
     return ok(req, res, { cycle: summary }, 202);
   } catch (err) {
     if (err instanceof TradingError) {

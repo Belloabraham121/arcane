@@ -1,4 +1,8 @@
 import type { AccountMode } from "@prisma/client";
+import {
+  buildMarketplaceSummary,
+  parseSubAgentX402BudgetSttWei,
+} from "../../config/marketplace.js";
 import { createLogger } from "../../shared/logger";
 import { findUserById } from "../auth/user.repository";
 import { handleStrategyActivation } from "../portfolio/activation.service";
@@ -299,6 +303,7 @@ function toResponse(
   strategy: NonNullable<Awaited<ReturnType<typeof repo.findStrategyByUserId>>>,
 ): AgentStrategyResponse {
   const strategyType = strategy.strategyType as StrategyType;
+  const budgetWei = strategy.subAgentX402BudgetSttWei;
   return {
     id: strategy.id,
     accountMode: strategy.accountMode,
@@ -308,6 +313,11 @@ function toResponse(
     poolAllocations: poolAllocationsFromRows(strategy.poolAllocations),
     subAgents: subAgentsFromDb(strategyType, strategy.subAgentConfig),
     cycleIntervalMinutes: strategy.cycleIntervalMinutes,
+    subAgentX402BudgetSttWei: budgetWei?.toString() ?? null,
+    marketplace: buildMarketplaceSummary({
+      strategyBudgetSttWei: budgetWei,
+      spendSttWei: 0n,
+    }),
     tradingEnabledAt: strategy.tradingEnabledAt?.toISOString() ?? null,
     lastCycleAt: strategy.lastCycleAt?.toISOString() ?? null,
     createdAt: strategy.createdAt.toISOString(),
@@ -336,6 +346,7 @@ export async function upsertUserStrategy(
     poolAllocations?: PoolAllocations;
     subAgents?: SubAgentConfigItem[];
     cycleIntervalMinutes?: number | null;
+    subAgentX402BudgetSttWei?: bigint | null;
   },
 ): Promise<AgentStrategyResponse> {
   const status = input.status ?? "draft";
@@ -399,6 +410,20 @@ export async function upsertUserStrategy(
     );
   }
 
+  let subAgentX402BudgetSttWei: bigint | null | undefined;
+  if (input.subAgentX402BudgetSttWei !== undefined) {
+    try {
+      subAgentX402BudgetSttWei = parseSubAgentX402BudgetSttWei(
+        input.subAgentX402BudgetSttWei,
+      );
+    } catch (err) {
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        err instanceof Error ? err.message : "Invalid subAgentX402BudgetSttWei",
+      );
+    }
+  }
+
   const existing = await repo.findStrategyByUserId(userId, accountMode);
   const activating = status === "active" && existing?.status !== "active";
 
@@ -409,6 +434,7 @@ export async function upsertUserStrategy(
     status,
     subAgentConfig,
     cycleIntervalMinutes,
+    subAgentX402BudgetSttWei,
   });
 
   let effectiveDepositAmount = depositAmount;

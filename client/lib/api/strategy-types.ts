@@ -20,6 +20,24 @@ export type SubAgentConfigItem = {
   limits?: SubAgentRiskLimits;
 };
 
+export type MarketplaceProductPricesSttWei = {
+  "pools/snapshot": string;
+  "signals/spread": string;
+  "signals/cross-chain": string;
+};
+
+export type MarketplaceSummary = {
+  enabled: boolean;
+  paymentAsset: "STT";
+  facilitatorUrl: string;
+  sellerAddress: string | null;
+  chainId: number;
+  budgetSttWei: string;
+  spendSttWei: string;
+  remainingSttWei: string;
+  productPricesSttWei: MarketplaceProductPricesSttWei;
+};
+
 export type AgentStrategy = {
   id: string;
   accountMode: "demo" | "live";
@@ -29,6 +47,8 @@ export type AgentStrategy = {
   poolAllocations: PoolAllocations;
   subAgents: SubAgentConfigItem[];
   cycleIntervalMinutes: number | null;
+  subAgentX402BudgetSttWei: string | null;
+  marketplace: MarketplaceSummary;
   tradingEnabledAt: string | null;
   lastCycleAt: string | null;
   createdAt: string;

@@ -114,6 +114,13 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: SubAgentConfigItem[] = [
   },
 ];
 
+import type {
+  MarketplaceProductPricesSttWei,
+  MarketplaceSummary,
+} from "../../config/marketplace.js";
+
+export type { MarketplaceProductPricesSttWei, MarketplaceSummary };
+
 export type AgentStrategyResponse = {
   id: string;
   accountMode: "demo" | "live";
@@ -124,6 +131,10 @@ export type AgentStrategyResponse = {
   subAgents: SubAgentConfigItem[];
   /** Custom agents only — minutes between scheduled trading cycles. */
   cycleIntervalMinutes: number | null;
+  /** Per-cycle x402 STT budget override (wei string); null uses env default. */
+  subAgentX402BudgetSttWei: string | null;
+  /** Read-only Marketplace payment + spend summary for UI. */
+  marketplace: MarketplaceSummary;
   tradingEnabledAt: string | null;
   lastCycleAt: string | null;
   createdAt: string;

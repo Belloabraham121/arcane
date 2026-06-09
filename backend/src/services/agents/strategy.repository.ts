@@ -68,6 +68,7 @@ export async function upsertStrategy(
     poolAllocations: PoolAllocations;
     subAgentConfig?: SubAgentConfigItem[];
     cycleIntervalMinutes?: number | null;
+    subAgentX402BudgetSttWei?: bigint | null;
   },
 ) {
   return prisma.$transaction(async (tx) => {
@@ -97,6 +98,7 @@ export async function upsertStrategy(
         tradingEnabledAt,
         cycleIntervalMinutes,
         subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue | undefined,
+        subAgentX402BudgetSttWei: input.subAgentX402BudgetSttWei ?? null,
       },
       update: {
         strategyType: input.strategyType,
@@ -108,6 +110,9 @@ export async function upsertStrategy(
           : {}),
         ...(input.subAgentConfig !== undefined
           ? { subAgentConfig: input.subAgentConfig as Prisma.InputJsonValue }
+          : {}),
+        ...(input.subAgentX402BudgetSttWei !== undefined
+          ? { subAgentX402BudgetSttWei: input.subAgentX402BudgetSttWei }
           : {}),
       },
     });

@@ -89,6 +89,8 @@ model AgentStrategy {
   lastCycleAt      DateTime?        @map("last_cycle_at") @db.Timestamptz
   /// Custom agents: user-defined interval; auto uses env default when null.
   cycleIntervalMinutes Int?         @map("cycle_interval_minutes")
+  /// Max STT (wei) sub-agents may spend on Marketplace x402 purchases per cycle.
+  subAgentX402BudgetSttWei BigInt?   @map("sub_agent_x402_budget_stt_wei")
   /// Fingerprint of last observed wallet balances (deposit detection).
   lastObservedBalanceFingerprint String? @map("last_observed_balance_fingerprint") @db.Text
   /// First detected wallet value (USD) after activation.

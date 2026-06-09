@@ -240,3 +240,11 @@ export function getTradingExecutionEnv() {
     openaiModel: optional("OPENAI_MODEL", "gpt-4o-mini"),
   };
 }
+
+/** Marketplace x402 config (STT-only). See `getMarketplaceEnv` in `./marketplace.ts`. */
+export { getMarketplaceEnv } from "./marketplace.js";
+export type {
+  MarketplaceEnv,
+  MarketplaceProductId,
+  MarketplaceSummary,
+} from "./marketplace.js";

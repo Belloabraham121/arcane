@@ -57,6 +57,7 @@ model User {
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
   agentStrategies      AgentStrategy[]
   portfolioSnapshots   PortfolioSnapshot[]
+  marketplacePurchases MarketplacePurchase[]
 
   @@map("user")
 }
@@ -166,4 +167,20 @@ model PoolAllocation {
   @@unique([strategyId, poolId], map: "uk_pool_allocation_strategy_pool")
   @@index([poolId], map: "idx_pool_allocation_pool_id")
   @@map("pool_allocation")
+}
+
+/// x402 Marketplace purchase receipts (STT wei only).
+model MarketplacePurchase {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String   @map("product_id") @db.Text
+  amountSttWei  BigInt   @map("amount_stt_wei")
+  txHash        String?  @map("tx_hash") @db.Text
+  payerAddress  String   @map("payer_address") @db.Text
+  correlationId String   @map("correlation_id") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_marketplace_purchase_user_created")
+  @@map("marketplace_purchase")
 }

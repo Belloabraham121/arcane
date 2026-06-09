@@ -89,21 +89,21 @@ flowchart TB
 ## Phase 2 — Marketplace seller API (backend)
 
 ### 2.1 x402 seller middleware (STT)
-- [ ] Create `backend/src/services/marketplace/` module
-- [ ] Install `@x402/express`, `@x402/core`, `@x402/evm` (if not already present)
-- [ ] Implement seller paywall with **native STT** pricing (not `$0.05 USDC` — use wei STT per endpoint)
-- [ ] Register routes under `/api/v1/marketplace/...` (versioned REST)
-- [ ] Response envelope: standard `success` / `data` / `meta` / `error` shape
+- [x] Create `backend/src/services/marketplace/` module
+- [x] Install `@x402/express`, `@x402/core`, `@x402/evm` (if not already present)
+- [x] Implement seller paywall with **native STT** pricing (not `$0.05 USDC` — use wei STT per endpoint)
+- [x] Register routes under `/api/v1/marketplace/...` (versioned REST)
+- [x] Response envelope: standard `success` / `data` / `meta` / `error` shape
 
 ### 2.2 Data product endpoints
-- [ ] `GET /api/v1/marketplace/pools/snapshot` — current QuickSwap pool metrics for user's selected pools
-- [ ] `GET /api/v1/marketplace/signals/spread` — latest spread / rebalance opportunity (derived from `trading-recommendations`)
-- [ ] `GET /api/v1/marketplace/signals/cross-chain` — Bridge Scout advisory payload (static/LLM-enriched until LI.FI)
+- [x] `GET /api/v1/marketplace/pools/snapshot` — current QuickSwap pool metrics for user's selected pools
+- [x] `GET /api/v1/marketplace/signals/spread` — latest spread / rebalance opportunity (derived from `trading-recommendations`)
+- [x] `GET /api/v1/marketplace/signals/cross-chain` — Bridge Scout advisory payload (static/LLM-enriched until LI.FI)
 - [ ] Each endpoint: x402-gated, returns JSON schema documented in OpenAPI / `api-ref.md`
 
 ### 2.3 Catalog & pricing
-- [ ] `GET /api/v1/marketplace/catalog` — list products, STT price (wei), description (ungated or lightly gated)
-- [ ] Persist purchase receipts in DB (buyer userId, productId, amountSttWei, txHash, correlationId, createdAt)
+- [x] `GET /api/v1/marketplace/catalog` — list products, STT price (wei), description (ungated or lightly gated)
+- [x] Persist purchase receipts in DB (buyer userId, productId, amountSttWei, txHash, correlationId, createdAt)
 
 ---
 

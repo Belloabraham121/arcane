@@ -15,6 +15,7 @@ import { tradingCyclesRouter } from "./api/routes/v1/trading/cycles";
 import { userAccountModeRouter } from "./api/routes/v1/users/account-mode";
 import { portfolioSummaryRouter } from "./api/routes/v1/portfolio/summary";
 import { walletBalancesRouter } from "./api/routes/v1/wallets/balances";
+import { marketplaceRouter } from "./api/routes/v1/marketplace/index.js";
 import { createCorsOptions } from "./config/cors";
 
 /** Express app without DB connect, workers, or WebSocket (for tests and main entry). */
@@ -37,6 +38,7 @@ export function createApp() {
   app.use(quickswapPoolsRouter);
   app.use(portfolioSummaryRouter);
   app.use(walletBalancesRouter);
+  app.use(marketplaceRouter);
   app.use(errorHandlerMiddleware);
 
   return app;

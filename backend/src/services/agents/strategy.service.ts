@@ -3,6 +3,7 @@ import {
   buildMarketplaceSummary,
   parseSubAgentX402BudgetSttWei,
 } from "../../config/marketplace.js";
+import { sumMarketplaceSpendSttWei } from "../marketplace/purchase.repository.js";
 import { createLogger } from "../../shared/logger";
 import { findUserById } from "../auth/user.repository";
 import { handleStrategyActivation } from "../portfolio/activation.service";
@@ -299,11 +300,12 @@ async function resolveStrategyAccountMode(
   return mode;
 }
 
-function toResponse(
+async function toResponse(
   strategy: NonNullable<Awaited<ReturnType<typeof repo.findStrategyByUserId>>>,
-): AgentStrategyResponse {
+): Promise<AgentStrategyResponse> {
   const strategyType = strategy.strategyType as StrategyType;
   const budgetWei = strategy.subAgentX402BudgetSttWei;
+  const spendSttWei = await sumMarketplaceSpendSttWei(strategy.userId);
   return {
     id: strategy.id,
     accountMode: strategy.accountMode,
@@ -316,7 +318,7 @@ function toResponse(
     subAgentX402BudgetSttWei: budgetWei?.toString() ?? null,
     marketplace: buildMarketplaceSummary({
       strategyBudgetSttWei: budgetWei,
-      spendSttWei: 0n,
+      spendSttWei,
     }),
     tradingEnabledAt: strategy.tradingEnabledAt?.toISOString() ?? null,
     lastCycleAt: strategy.lastCycleAt?.toISOString() ?? null,
@@ -334,7 +336,7 @@ export async function getUserStrategy(
   if (!strategy) {
     return null;
   }
-  return toResponse(strategy);
+  return await toResponse(strategy);
 }
 
 export async function upsertUserStrategy(
@@ -485,7 +487,7 @@ export async function upsertUserStrategy(
       ? (await repo.findStrategyByUserId(userId, accountMode)) ?? strategy
       : strategy;
 
-  return toResponse(responseStrategy);
+  return await toResponse(responseStrategy);
 }
 
 export async function patchPoolAllocations(
@@ -518,7 +520,7 @@ export async function patchPoolAllocations(
     scheduleTradingCycle(userId, "scheduled");
   }
 
-  return toResponse(strategy);
+  return await toResponse(strategy);
 }
 
 export async function patchSubAgents(
@@ -549,5 +551,5 @@ export async function patchSubAgents(
 
   log.info("Sub-agent config updated", { userId, count: subAgents.length });
 
-  return toResponse(strategy);
+  return await toResponse(strategy);
 }

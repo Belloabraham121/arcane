@@ -147,10 +147,22 @@ export function isUserCycleRunning(userId: string): boolean {
 
 export function resolveCycleIntervalMinutes(input: {
   strategyType: "auto" | "custom";
+  accountMode?: AccountMode;
   cycleIntervalMinutes: number | null;
   autoCycleIntervalMinutes: number;
   customCycleIntervalMinutes: number;
+  demoCycleIntervalMinutes: number;
 }): number {
+  if (input.accountMode === "demo") {
+    if (
+      input.strategyType === "custom" &&
+      input.cycleIntervalMinutes != null
+    ) {
+      return Math.max(5, Math.min(input.cycleIntervalMinutes, 24 * 60));
+    }
+    return Math.max(5, Math.min(input.demoCycleIntervalMinutes, 24 * 60));
+  }
+
   if (input.strategyType === "custom" && input.cycleIntervalMinutes != null) {
     return Math.max(5, Math.min(input.cycleIntervalMinutes, 24 * 60));
   }

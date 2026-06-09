@@ -68,6 +68,8 @@ function feedItemsFromCycleDetail(detail: TradingHistoryDetail): LiveTradingFeed
       headline: `Cycle ${detail.status}`,
       detail: detail.llmResponse ?? detail.message,
       status: detail.status,
+      cycleId: detail.id,
+      llmResponse: detail.llmResponse,
     },
   ]
 
@@ -110,6 +112,8 @@ function feedItemFromListRow(item: TradingHistoryListItem): LiveTradingFeedItem[
       headline: `Cycle ${item.status}`,
       detail: item.llmResponse ?? item.message,
       status: item.status,
+      cycleId: item.id,
+      llmResponse: item.llmResponse,
     },
     {
       id: `history-start-${item.id}`,

@@ -75,6 +75,7 @@ export async function runTradingWorkerTick(): Promise<void> {
     depositDetectionEnabled,
     autoCycleIntervalMinutes,
     customCycleIntervalMinutes,
+    demoCycleIntervalMinutes,
   } = getTradingExecutionEnv();
 
   const strategies = await listActiveStrategiesForWorker();
@@ -135,19 +136,34 @@ export async function runTradingWorkerTick(): Promise<void> {
 
       const intervalMinutes = resolveCycleIntervalMinutes({
         strategyType: strategy.strategyType as "auto" | "custom",
+        accountMode: strategy.accountMode,
         cycleIntervalMinutes: strategy.cycleIntervalMinutes,
         autoCycleIntervalMinutes,
         customCycleIntervalMinutes,
+        demoCycleIntervalMinutes,
       });
 
-      if (
-        fingerprint.length > 0 &&
-        isDueForScheduledCycle({
-          lastCycleAt: strategy.lastCycleAt,
-          tradingEnabledAt: strategy.tradingEnabledAt,
+      const scheduledDue = isDueForScheduledCycle({
+        lastCycleAt: strategy.lastCycleAt,
+        tradingEnabledAt: strategy.tradingEnabledAt,
+        intervalMinutes,
+      });
+
+      if (fingerprint.length === 0) {
+        log.debug("Strategy skipped — no token balances on wallet", {
+          userId: strategy.userId,
+          accountMode: strategy.accountMode,
+        });
+      } else if (!scheduledDue) {
+        log.debug("Strategy skipped — interval not elapsed", {
+          userId: strategy.userId,
+          accountMode: strategy.accountMode,
           intervalMinutes,
-        })
-      ) {
+          lastCycleAt: strategy.lastCycleAt?.toISOString() ?? null,
+        });
+      }
+
+      if (fingerprint.length > 0 && scheduledDue) {
         const fullStrategy = await findStrategyByUserId(
           strategy.userId,
           strategy.accountMode,

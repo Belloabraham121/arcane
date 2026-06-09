@@ -1,14 +1,7 @@
 "use client"
 
 import type { AccountMode } from "@/lib/api/auth"
-import { POOL_MARKET_COLORS } from "@/lib/pool-allocations"
 import type { StrategyCanvasPool } from "@/lib/pool-resolve"
-
-const POOL_HEX: Record<string, string> = {
-  "usdce-wsomi": "#a855f7",
-  "usdce-weth": "#3b82f6",
-  "wsomi-weth": "#22c55e",
-}
 
 type PoolNodesLegendProps = {
   canvasPools: StrategyCanvasPool[]
@@ -39,9 +32,7 @@ export function PoolNodesLegend({
           <div key={pool.poolId} className="flex items-center gap-2">
             <span
               className="h-3 w-3 shrink-0 rounded-full border border-border"
-              style={{
-                backgroundColor: POOL_HEX[pool.poolId] ?? "#ea580c",
-              }}
+              style={{ backgroundColor: pool.color }}
             />
             <span className="whitespace-nowrap text-foreground/90">
               {pool.label}
@@ -49,15 +40,12 @@ export function PoolNodesLegend({
             <span className="whitespace-nowrap font-mono text-[10px] text-muted-foreground">
               {pool.pair}
             </span>
-            <span
-              className={`hidden h-2 w-2 rounded-full sm:inline-block ${POOL_MARKET_COLORS[pool.poolId] ?? ""}`}
-            />
           </div>
         ))}
       </div>
       <div className="border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
         <p>• Orange octahedron = your agent (moves between pools)</p>
-        <p>• Wireframe nodes = QuickSwap liquidity pools from your strategy</p>
+        <p>• Colored wireframe nodes = QuickSwap pools from your strategy</p>
         <p>
           • Agent animates pool → pool on{" "}
           {isDemo

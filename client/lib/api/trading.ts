@@ -72,9 +72,10 @@ export async function fetchTradingStatus(mode?: AccountMode) {
   )
 }
 
-export async function runTradingCycle() {
+export async function runTradingCycle(mode?: AccountMode) {
+  const query = mode ? `?mode=${mode}` : ""
   return apiRequest<{ cycle: TradingCycleSummary }>(
-    "/api/v1/agents/trading/run-cycle",
+    `/api/v1/agents/trading/run-cycle${query}`,
     { method: "POST" },
   )
 }

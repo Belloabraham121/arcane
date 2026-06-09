@@ -1,12 +1,6 @@
-import { POOL_MARKET_COLORS } from "@/lib/pool-allocations"
 import type { StrategyCanvasPool } from "@/lib/pool-resolve"
-import { POOL_LABELS } from "@/lib/strategy-presets"
 
-const POOL_HEX_COLORS: Record<string, string> = {
-  "usdce-wsomi": "#a855f7",
-  "usdce-weth": "#3b82f6",
-  "wsomi-weth": "#22c55e",
-}
+export { CANVAS_POOL_PALETTE, poolNodePaletteColor } from "@/lib/pool-node-colors"
 
 export type PoolNetworkNode = {
   id: string
@@ -34,7 +28,6 @@ export function buildPoolNetworkNodes(
 
   return canvasPools.map((pool, index) => {
     const angle = (index / count) * Math.PI * 2 - Math.PI / 2
-    const tailwind = POOL_MARKET_COLORS[pool.poolId]
     return {
       id: pool.poolId,
       label: pool.label,
@@ -43,8 +36,8 @@ export function buildPoolNetworkNodes(
         0,
         Math.sin(angle) * radius,
       ] as [number, number, number],
-      color: POOL_HEX_COLORS[pool.poolId] ?? "#ea580c",
-      radius: 8 + (tailwind ? 2 : 0),
+      color: pool.color,
+      radius: 9,
     }
   })
 }

@@ -7,6 +7,10 @@ import {
   type DemoDepositSymbol,
 } from "../dev/anvil-fork.service";
 import { findUserById } from "../auth/user.repository";
+import {
+  isUserCycleRunning,
+  scheduleTradingCycle,
+} from "../agents/trading-runner.service";
 
 export class DemoDepositError extends Error {
   constructor(
@@ -70,6 +74,10 @@ export async function depositToDemoWallet(
     symbol,
     amount,
   });
+
+  if (!isUserCycleRunning(userId)) {
+    scheduleTradingCycle(userId, "deposit");
+  }
 
   return {
     walletAddress,

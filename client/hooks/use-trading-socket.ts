@@ -194,6 +194,8 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
           headline: `Cycle ${event.status}`,
           detail: event.llmResponse ?? event.message,
           status: event.status,
+          cycleId: event.cycleId,
+          llmResponse: event.llmResponse,
         })
         optionsRef.current.onCycleCompleted?.(event)
       },

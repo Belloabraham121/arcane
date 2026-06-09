@@ -3,6 +3,7 @@ import { createLogger } from "../../shared/logger";
 import { findUserById } from "../auth/user.repository";
 import { handleStrategyActivation } from "../portfolio/activation.service";
 import {
+  isUserCycleRunning,
   scheduleTradingCycle,
   shouldTriggerCycleOnActivate,
 } from "./trading-runner.service";
@@ -437,8 +438,13 @@ export async function upsertUserStrategy(
     });
   }
 
-  if (triggerFirstCycle) {
-    scheduleTradingCycle(userId, "activation");
+  if (
+    status === "active" &&
+    depositAmount > 0 &&
+    !isUserCycleRunning(userId) &&
+    (triggerFirstCycle || activating)
+  ) {
+    scheduleTradingCycle(userId, activating ? "activation" : "scheduled");
   }
 
   return toResponse(strategy);
@@ -463,6 +469,14 @@ export async function patchPoolAllocations(
   }
 
   log.info("Pool allocations updated", { userId });
+
+  if (
+    strategy.status === "active" &&
+    strategy.depositAmount > 0 &&
+    !isUserCycleRunning(userId)
+  ) {
+    scheduleTradingCycle(userId, "scheduled");
+  }
 
   return toResponse(strategy);
 }

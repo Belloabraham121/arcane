@@ -9,13 +9,24 @@ type AgentTradingFeedProps = {
   accountMode: AccountMode
   items: LiveTradingFeedItem[]
   connected?: boolean
+  cycleActive?: boolean
+  onViewAgentResponse?: (item: LiveTradingFeedItem) => void
   className?: string
+}
+
+function isCycleSummaryItem(item: LiveTradingFeedItem): boolean {
+  return (
+    item.headline.startsWith("Cycle ") ||
+    Boolean(item.cycleId && item.llmResponse != null)
+  )
 }
 
 export function AgentTradingFeed({
   accountMode,
   items,
   connected = false,
+  cycleActive = false,
+  onViewAgentResponse,
   className,
 }: AgentTradingFeedProps) {
   const isDemo = accountMode === "demo"
@@ -33,6 +44,11 @@ export function AgentTradingFeed({
         )}
       >
         {title}
+        {cycleActive ? (
+          <span className="ml-2 uppercase text-[#ea580c]">· executing</span>
+        ) : (
+          <span className="ml-2 text-muted-foreground">· auto</span>
+        )}
         <span
           className={cn(
             "ml-2 inline-flex items-center gap-1",
@@ -53,49 +69,65 @@ export function AgentTradingFeed({
         {items.length === 0 ? (
           <p className="px-3 py-4 text-[10px] text-muted-foreground">
             {isDemo
-              ? "Waiting for demo trading cycles on the Anvil fork. Past and live events appear here."
-              : "Waiting for live trading cycles on mainnet. Events appear here in real time when the agent analyzes pools or executes swaps."}
+              ? "Cycles run automatically on the Anvil fork. Open this canvas to watch swaps live."
+              : "Cycles run automatically on mainnet. Events appear here when the agent trades."}
           </p>
         ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className="border-b border-border px-3 py-2.5 last:border-b-0"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-foreground">{item.headline}</span>
-                <span
-                  className={cn(
-                    "text-[10px] uppercase",
-                    item.status === "success" || item.status === "completed"
-                      ? "text-[#16a34a]"
-                      : item.status === "running"
-                        ? isDemo
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-[#ea580c]"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {item.status}
-                </span>
-              </div>
-              <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                {item.detail}
-              </p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {new Date(item.at).toLocaleTimeString()}
-              </p>
-              {item.txHash && (
-                <div className="mt-1">
-                  <TxHashDisplay
-                    txHash={item.txHash}
-                    accountMode={accountMode}
-                    className="inline-block font-mono text-[10px] text-[#ea580c] hover:underline"
-                  />
+          items.map((item) => {
+            const showAgentButton =
+              onViewAgentResponse != null && isCycleSummaryItem(item)
+
+            return (
+              <div
+                key={item.id}
+                className="border-b border-border px-3 py-2.5 last:border-b-0"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-foreground">{item.headline}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {showAgentButton ? (
+                      <button
+                        type="button"
+                        onClick={() => onViewAgentResponse(item)}
+                        className="text-[10px] uppercase tracking-widest text-[#ea580c] hover:underline"
+                      >
+                        View agent
+                      </button>
+                    ) : null}
+                    <span
+                      className={cn(
+                        "text-[10px] uppercase",
+                        item.status === "success" || item.status === "completed"
+                          ? "text-[#16a34a]"
+                          : item.status === "running"
+                            ? isDemo
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-[#ea580c]"
+                            : "text-muted-foreground",
+                      )}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))
+                <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                  {item.detail}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {new Date(item.at).toLocaleTimeString()}
+                </p>
+                {item.txHash && (
+                  <div className="mt-1">
+                    <TxHashDisplay
+                      txHash={item.txHash}
+                      accountMode={accountMode}
+                      className="inline-block font-mono text-[10px] text-[#ea580c] hover:underline"
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })
         )}
       </div>
     </aside>

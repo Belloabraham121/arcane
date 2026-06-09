@@ -6,10 +6,20 @@ import { AccountModeBadge } from "@/components/layout/account-mode-badge";
 import { PageSubBar } from "@/components/layout/page-sub-bar";
 import { AgentsCanvasSkeleton } from "@/components/skeletons/content-skeletons";
 import { DraggableGridPanel } from "@/components/draggable-grid-panel";
+import { AgentCycleExecutionPanel } from "@/components/agent-cycle-execution-panel";
+import { AgentLlmResponseDialog } from "@/components/agent-llm-response-dialog";
 import { AgentTradingFeed } from "@/components/agent-trading-feed";
 import { PoolNodesLegend } from "@/components/pool-nodes-legend";
 import { PoolTradingCanvas } from "@/components/pool-trading-canvas";
 import { useTradingSocket } from "@/hooks/use-trading-socket";
+import {
+  outcomeFromCycleSummary,
+  outcomeFromSocketCompleted,
+  runningOutcome,
+  type AgentCycleOutcome,
+} from "@/lib/agent-cycle-outcome";
+import { fetchTradingStatus, type ExecutedTransaction } from "@/lib/api/trading";
+import type { LiveTradingFeedItem } from "@/lib/api/trading-socket-types";
 import { fetchPools } from "@/lib/api/quickswap";
 import type { QuickSwapPool } from "@/lib/api/quickswap-types";
 import { getAgentStrategy } from "@/lib/api/strategy";
@@ -52,6 +62,15 @@ export default function AgentsPage() {
   );
   const [quickswapPools, setQuickswapPools] = useState<QuickSwapPool[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cycleOutcome, setCycleOutcome] = useState<AgentCycleOutcome | null>(
+    null,
+  );
+  const [lastExecutedTxs, setLastExecutedTxs] = useState<ExecutedTransaction[]>(
+    [],
+  );
+  const [llmDialogOpen, setLlmDialogOpen] = useState(false);
+  const [llmDialogCycleId, setLlmDialogCycleId] = useState<string | null>(null);
+  const [llmDialogText, setLlmDialogText] = useState<string | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const { layouts, updatePanel, toggleCollapsed, hydrated } =
     usePanelLayout(canvasMode);
@@ -73,6 +92,35 @@ export default function AgentsPage() {
     accountMode: canvasMode ?? undefined,
     enabled: !loading && canvasMode != null,
     hydrateFromHistory: true,
+    onCycleStarted: (event) => {
+      setCycleOutcome(runningOutcome(event.cycleId, event.reason));
+      setLastExecutedTxs([]);
+    },
+    onCycleCompleted: (event) => {
+      setCycleOutcome(outcomeFromSocketCompleted(event));
+    },
+    onActionExecuted: (event) => {
+      if (!event.txHash) {
+        return;
+      }
+      setLastExecutedTxs((prev) => {
+        if (prev.some((tx) => tx.hash === event.txHash)) {
+          return prev;
+        }
+        return [
+          {
+            kind: event.type === "approve" ? "approve" : "swap",
+            hash: event.txHash!,
+            status: event.status === "success" ? "success" : "reverted",
+            tokenIn: event.tokenIn ?? undefined,
+            tokenOut: event.tokenOut ?? undefined,
+            amountIn: event.amountIn ?? undefined,
+            amountOut: event.amountOut ?? undefined,
+          },
+          ...prev,
+        ];
+      });
+    },
   });
 
   const displayRoute = useMemo(() => {
@@ -105,6 +153,15 @@ export default function AgentsPage() {
 
       if (poolsResult.success && poolsResult.data?.pools) {
         setQuickswapPools(poolsResult.data.pools);
+      }
+
+      if (canvasMode) {
+        const statusResult = await fetchTradingStatus(canvasMode);
+        if (statusResult.success && statusResult.data?.status.lastCycle) {
+          const last = statusResult.data.status.lastCycle;
+          setCycleOutcome(outcomeFromCycleSummary(last));
+          setLastExecutedTxs(last.executedTransactions ?? []);
+        }
       }
 
       setLoading(false);
@@ -145,6 +202,34 @@ export default function AgentsPage() {
     updatePanel(id, { x, y });
   };
 
+  function openAgentResponse(input: {
+    cycleId?: string | null;
+    text?: string | null;
+  }) {
+    setLlmDialogCycleId(input.cycleId ?? null);
+    setLlmDialogText(input.text ?? null);
+    setLlmDialogOpen(true);
+  }
+
+  function openLatestAgentResponse() {
+    openAgentResponse({
+      cycleId: cycleOutcome?.cycleId ?? null,
+      text: cycleOutcome?.llmResponse ?? cycleOutcome?.message ?? null,
+    });
+  }
+
+  function openFeedAgentResponse(item: LiveTradingFeedItem) {
+    openAgentResponse({
+      cycleId: item.cycleId ?? null,
+      text: item.llmResponse ?? item.detail,
+    });
+  }
+
+  const canViewLatestAgent =
+    cycleOutcome != null &&
+    cycleOutcome.status !== "running" &&
+    Boolean(cycleOutcome.llmResponse || cycleOutcome.message);
+
   return (
     <>
       <PageSubBar
@@ -170,17 +255,43 @@ export default function AgentsPage() {
           ) : undefined
         }
         action={
-          connected ? (
-            <span
-              className={`font-mono text-[10px] ${
-                isDemo
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-[#16a34a]"
-              }`}
-            >
-              {isDemo ? "fork" : "live"}
-            </span>
-          ) : undefined
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-3">
+              {canViewLatestAgent ? (
+                <button
+                  type="button"
+                  onClick={openLatestAgentResponse}
+                  className="border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-foreground transition-colors hover:bg-muted/50"
+                >
+                  View agent
+                </button>
+              ) : null}
+              {cycleActive ? (
+                <span className="font-mono text-[10px] uppercase tracking-widest text-[#ea580c]">
+                  Cycle running
+                </span>
+              ) : (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  Auto trading
+                </span>
+              )}
+              {connected ? (
+                <span
+                  className={`font-mono text-[10px] ${
+                    isDemo
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-[#16a34a]"
+                  }`}
+                >
+                  {isDemo ? "fork · connected" : "live · connected"}
+                </span>
+              ) : (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  connecting…
+                </span>
+              )}
+            </div>
+          </div>
         }
         backHref={APP_ROUTES.dashboard}
         backLabel="Back to dashboard"
@@ -240,6 +351,8 @@ export default function AgentsPage() {
               accountMode={canvasMode}
               items={feedItems}
               connected={connected}
+              cycleActive={cycleActive}
+              onViewAgentResponse={openFeedAgentResponse}
               className="max-h-[min(50vh,360px)] border-0 bg-transparent"
             />
           ) : null}
@@ -267,7 +380,11 @@ export default function AgentsPage() {
                   key={pool.poolId}
                   className="flex items-center justify-between gap-3"
                 >
-                  <div className="min-w-0">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-border"
+                    style={{ backgroundColor: pool.color }}
+                  />
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
                       {pool.label}
                     </p>
@@ -286,28 +403,35 @@ export default function AgentsPage() {
 
         <DraggableGridPanel
           id="viz-info"
-          title="Visualization"
+          title="Cycle execution"
           x={layouts["viz-info"].x}
           y={layouts["viz-info"].y}
           collapsed={layouts["viz-info"].collapsed}
           onPositionChange={setPosition("viz-info")}
           onToggleCollapsed={() => toggleCollapsed("viz-info")}
           containerRef={workspaceRef}
-          width={280}
+          width={320}
         >
-          <div className="space-y-1 text-muted-foreground">
-            <p>
-              Real-time WebSocket feed from{" "}
-              {isDemo ? "demo fork" : "mainnet"} trading cycles.
-            </p>
-            <p>Swaps and rebalances animate between pool nodes.</p>
-            <p className="text-[10px]">
-              Hold the grip icon to drag. Panels snap to the grid.
-            </p>
-          </div>
+          {canvasMode ? (
+            <AgentCycleExecutionPanel
+              accountMode={canvasMode}
+              outcome={cycleOutcome}
+              cycleActive={cycleActive}
+              executedTransactions={lastExecutedTxs}
+              onViewAgentResponse={openLatestAgentResponse}
+            />
+          ) : null}
         </DraggableGridPanel>
       </div>
       )}
+
+      <AgentLlmResponseDialog
+        open={llmDialogOpen}
+        onOpenChange={setLlmDialogOpen}
+        cycleId={llmDialogCycleId}
+        initialText={llmDialogText}
+        headline={isDemo ? "Demo agent response" : "Live agent response"}
+      />
     </>
   );
 }

@@ -49,4 +49,6 @@ export type LiveTradingFeedItem = {
   poolFrom?: string | null
   poolTo?: string | null
   status: string
+  cycleId?: string
+  llmResponse?: string | null
 }

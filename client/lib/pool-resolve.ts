@@ -1,6 +1,7 @@
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
 import { poolPairLabel } from "@/lib/pool-display"
+import { poolNodePaletteColor } from "@/lib/pool-node-colors"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 
 /** Legacy strategy slugs → token symbols (order-independent). */
@@ -76,6 +77,7 @@ export type StrategyCanvasPool = {
   label: string
   pair: string
   allocationAmount: number
+  color: string
 }
 
 /** Strategy pools accepted in setup — one canvas node per entry. */
@@ -84,13 +86,14 @@ export function resolveStrategyCanvasPools(
   pools: readonly QuickSwapPool[],
 ): StrategyCanvasPool[] {
   return activeResolvablePoolEntries(poolAllocations, pools).map(
-    ([allocationId, allocationAmount]) => {
+    ([allocationId, allocationAmount], index) => {
       const pool = resolvePoolById(allocationId, pools)!
       return {
         poolId: pool.id,
         label: pool.label || POOL_LABELS[allocationId] || poolPairLabel(pool),
         pair: poolPairLabel(pool),
         allocationAmount,
+        color: poolNodePaletteColor(index),
       }
     },
   )

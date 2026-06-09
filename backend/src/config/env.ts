@@ -229,6 +229,9 @@ export function getTradingExecutionEnv() {
     customCycleIntervalMinutes: Number(
       optional("TRADING_CUSTOM_CYCLE_INTERVAL_MINUTES", "15"),
     ),
+    demoCycleIntervalMinutes: Number(
+      optional("TRADING_DEMO_CYCLE_INTERVAL_MINUTES", "5"),
+    ),
     depositDetectionEnabled:
       optional("TRADING_DEPOSIT_DETECTION_ENABLED", "true") === "true",
     somniaAttestationEnabled:

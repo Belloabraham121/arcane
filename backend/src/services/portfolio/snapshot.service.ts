@@ -93,10 +93,12 @@ export async function findSnapshotNearTime(
 export async function findSnapshotBefore(
   userId: string,
   before: Date,
+  accountMode?: AccountMode,
 ): Promise<{ totalValueUsd: number; capturedAt: Date } | null> {
   const row = await prisma.portfolioSnapshot.findFirst({
     where: {
       userId,
+      ...(accountMode ? { accountMode } : {}),
       capturedAt: { lte: before },
     },
     orderBy: { capturedAt: "desc" },
@@ -114,9 +116,13 @@ export async function findSnapshotBefore(
 
 export async function findFirstSnapshot(
   userId: string,
+  accountMode?: AccountMode,
 ): Promise<{ totalValueUsd: number; capturedAt: Date } | null> {
   const row = await prisma.portfolioSnapshot.findFirst({
-    where: { userId },
+    where: {
+      userId,
+      ...(accountMode ? { accountMode } : {}),
+    },
     orderBy: { capturedAt: "asc" },
   });
 

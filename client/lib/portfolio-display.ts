@@ -21,6 +21,10 @@ export function formatAprLine(
 }
 
 export function baselineDepositHint(summary: PortfolioSummary): string {
+  if (summary.accountMode === "demo") {
+    return `Demo baseline from fork wallet value (CoinGecko-priced) — $${formatUsd(summary.baselineUsd)}`
+  }
+
   const manual = `$${formatUsd(summary.manualDepositUsd)} manual`
   if (summary.detectedDepositUsd == null || summary.detectedDepositUsd <= 0) {
     return manual

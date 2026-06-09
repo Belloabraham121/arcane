@@ -1,7 +1,7 @@
 import { formatUnits } from "viem";
 import { getDemoEnv } from "../../config/env";
 import { getQuickSwapBundle } from "../../config/quickswap";
-import { DEFAULT_DEPOSIT_AMOUNT } from "../agents/strategy.types";
+import { DEFAULT_DEMO_DEPOSIT_USD } from "../agents/strategy.types";
 import { defaultForkTransfers } from "../dev/anvil-fork.service";
 
 export type DemoPreviewBalance = {
@@ -32,7 +32,7 @@ function formatTransferAmount(symbol: string, amount: bigint): string {
 
 /** Static preview of demo fork seed balances (whale impersonation / anvil_deal). */
 export function getDemoPreview(
-  depositAmountUsd = DEFAULT_DEPOSIT_AMOUNT,
+  depositAmountUsd = DEFAULT_DEMO_DEPOSIT_USD,
 ): DemoPreview {
   const demoEnv = getDemoEnv();
   const transfers = defaultForkTransfers(depositAmountUsd);

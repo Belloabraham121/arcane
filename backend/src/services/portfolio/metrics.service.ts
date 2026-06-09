@@ -6,7 +6,10 @@ import {
   assertTradingRpcHealthy,
   TradingDemoDisabledError,
 } from "../agents/trading-wallet-context.service";
-import { getDepositBaseline } from "./baseline.service";
+import {
+  getDepositBaseline,
+  reconcileDemoBaselineIfNeeded,
+} from "./baseline.service";
 import { findSnapshotBefore } from "./snapshot.service";
 import { valueWallet } from "./valuation.service";
 import {
@@ -126,16 +129,38 @@ export async function getPortfolioSummary(
     resolved.rpcMode,
   );
 
-  const baseline = await getDepositBaseline(userId, strategy.depositAmount, {
-    detectedDepositUsd: strategy.detectedDepositUsd,
-    baselineUsd: strategy.baselineUsd,
-    baselineSetAt: strategy.baselineSetAt,
+  let baseline = await getDepositBaseline(
+    userId,
+    strategy.depositAmount,
+    {
+      detectedDepositUsd: strategy.detectedDepositUsd,
+      baselineUsd: strategy.baselineUsd,
+      baselineSetAt: strategy.baselineSetAt,
+    },
+    accountMode,
+  );
+
+  const healed = await reconcileDemoBaselineIfNeeded({
+    userId,
+    strategyId: strategy.id,
+    accountMode,
+    manualDepositUsd: strategy.depositAmount,
+    storedBaselineUsd: strategy.baselineUsd,
+    storedDetectedUsd: strategy.detectedDepositUsd,
+    currentValueUsd: valuation.totalValueUsd,
   });
+  if (healed) {
+    baseline = healed;
+  }
 
   const netEarnedUsd = valuation.totalValueUsd - baseline.baselineUsd;
 
   const twentyFourHoursAgo = new Date(Date.now() - 24 * MS_PER_DAY);
-  const snapshot24h = await findSnapshotBefore(userId, twentyFourHoursAgo);
+  const snapshot24h = await findSnapshotBefore(
+    userId,
+    twentyFourHoursAgo,
+    accountMode,
+  );
 
   return {
     currentValueUsd: valuation.totalValueUsd,

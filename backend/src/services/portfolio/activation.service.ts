@@ -41,6 +41,7 @@ export async function handleStrategyActivation(input: {
       strategyId: input.strategyId,
       manualDepositUsd: input.manualDepositUsd,
       detectedDepositUsd: snapshot.totalValueUsd,
+      accountMode: user.accountMode,
     });
   } catch (err) {
     log.warn("Strategy activation portfolio capture failed", {

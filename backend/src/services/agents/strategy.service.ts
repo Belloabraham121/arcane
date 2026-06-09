@@ -1,4 +1,5 @@
 import { createLogger } from "../../shared/logger";
+import { findUserById } from "../auth/user.repository";
 import { handleStrategyActivation } from "../portfolio/activation.service";
 import {
   scheduleTradingCycle,
@@ -9,6 +10,7 @@ import { isKnownPoolId } from "../defi/quickswap/pool-registry";
 import {
   DEFAULT_AUTO_SUB_AGENTS,
   DEFAULT_CUSTOM_SUB_AGENTS,
+  DEFAULT_DEMO_DEPOSIT_USD,
   DEFAULT_DEPOSIT_AMOUNT,
   DEFAULT_POOL_ALLOCATIONS,
   type AgentStrategyResponse,
@@ -315,8 +317,19 @@ export async function upsertUserStrategy(
   },
 ): Promise<AgentStrategyResponse> {
   const status = input.status ?? "draft";
-  const depositAmount =
+  const user = await findUserById(userId);
+  const isDemo = user?.accountMode === "demo";
+
+  let depositAmount =
     input.depositAmount ?? (status === "active" ? DEFAULT_DEPOSIT_AMOUNT : 0);
+
+  if (isDemo) {
+    depositAmount =
+      input.depositAmount ?? (status === "active" ? DEFAULT_DEMO_DEPOSIT_USD : 0);
+    if (depositAmount >= 100_000) {
+      depositAmount = DEFAULT_DEMO_DEPOSIT_USD;
+    }
+  }
 
   if (!Number.isFinite(depositAmount) || depositAmount < 0) {
     throw new StrategyError(

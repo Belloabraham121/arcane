@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import type { AccountMode } from "@/lib/api/auth"
 import { fetchDemoPreview } from "@/lib/api/account-mode"
-import { DEFAULT_DEPOSIT_AMOUNT } from "@/lib/api/strategy-types"
+import { DEFAULT_DEMO_DEPOSIT_AMOUNT } from "@/lib/api/strategy-types"
 
 /** Pre-fill read-only demo deposit from preview API; live keeps manual entry. */
 export function useSetupDeposit(
@@ -30,7 +30,7 @@ export function useSetupDeposit(
       const amount =
         result.success && result.data
           ? result.data.depositAmountUsd
-          : DEFAULT_DEPOSIT_AMOUNT
+          : DEFAULT_DEMO_DEPOSIT_AMOUNT
       setDepositInput(String(amount))
     })
 

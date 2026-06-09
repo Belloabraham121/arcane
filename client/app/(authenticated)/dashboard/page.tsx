@@ -418,7 +418,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
               <div>
                 <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  Total deposited
+                  {isDemoView ? "P&L baseline" : "Total deposited"}
                 </p>
                 <p
                   className="text-lg font-mono font-bold"

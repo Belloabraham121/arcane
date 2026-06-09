@@ -41,3 +41,6 @@ export const DEFAULT_POOL_ALLOCATIONS: PoolAllocations = {
 };
 
 export const DEFAULT_DEPOSIT_AMOUNT = 500_000;
+
+/** Demo simulation baseline label (not a real deposit). */
+export const DEFAULT_DEMO_DEPOSIT_AMOUNT = 1_000;

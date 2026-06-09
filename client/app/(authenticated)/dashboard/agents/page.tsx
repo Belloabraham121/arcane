@@ -18,6 +18,10 @@ import {
 } from "@/lib/api/strategy-types";
 import { POOL_LABELS } from "@/lib/strategy-presets";
 import { activePoolIds } from "@/lib/pool-network-layout";
+import {
+  idleRouteForPool,
+  largestAllocationPoolId,
+} from "@/lib/trading-feed-helpers";
 import { APP_ROUTES } from "@/lib/routing/app-routes";
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth";
 import {
@@ -41,10 +45,18 @@ export default function AgentsPage() {
 
   const poolIds = useMemo(() => activePoolIds(poolAmounts), [poolAmounts]);
 
+  const idlePoolRoute = useMemo(() => {
+    const poolId = largestAllocationPoolId(poolAmounts);
+    return idleRouteForPool(poolId);
+  }, [poolAmounts]);
+
   const { connected, feedItems, routeCommand, cycleActive } = useTradingSocket({
     accountMode: accountMode ?? undefined,
     enabled: !loading && accountMode != null,
+    hydrateFromHistory: true,
   });
+
+  const displayRoute = routeCommand ?? idlePoolRoute;
 
   useEffect(() => {
     if (!sessionReady) {
@@ -133,7 +145,7 @@ export default function AgentsPage() {
           backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
         }}
       >
-        <PoolTradingCanvas poolIds={poolIds} routeCommand={routeCommand} />
+        <PoolTradingCanvas poolIds={poolIds} routeCommand={displayRoute} />
 
         <DraggableGridPanel
           id="nodes-legend"

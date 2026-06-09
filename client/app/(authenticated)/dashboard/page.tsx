@@ -197,6 +197,7 @@ export default function DashboardPage() {
     useTradingSocket({
       accountMode: viewMode,
       enabled: strategy?.status === "active" && viewMode != null,
+      hydrateFromHistory: false,
       onCycleStarted: () => {
         setTradingStatus((prev) =>
           prev ? { ...prev, phase: "analyzing" } : prev,

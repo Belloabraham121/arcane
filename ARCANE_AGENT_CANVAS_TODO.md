@@ -87,16 +87,16 @@ flowchart TB
 ## Phase B — Hydrate canvas on load (not only live socket)
 
 ### B.1 Seed feed from trading history
-- [ ] On agents page mount (and dashboard overview): `fetchTradingHistory(1, 20, accountMode)`
-- [ ] Map recent cycle actions → `TradingFeedItem[]` (reuse `lastTradeFromHistoryDetail` / trading helpers where possible)
-- [ ] Prepend history before socket events; cap at ~50 items
+- [x] On agents page mount: `fetchTradingHistory(1, 20, accountMode)` via `buildFeedFromTradingHistory`
+- [x] Map recent cycle actions → `LiveTradingFeedItem[]` (`client/lib/trading-feed-helpers.ts`)
+- [x] Prepend live socket events before history; cap at ~50 items (`useTradingSocket`)
 
 ### B.2 Optional last-route animation
-- [ ] From most recent swap/rebalance in history, set initial `routeCommand` once (no repeat loop)
-- [ ] Idle agent position: largest allocation pool or last `poolTo`
+- [x] From most recent swap/rebalance in history, set initial `routeCommand` with `replay: false` (agent rests at pool)
+- [x] Idle fallback: largest allocation pool when no history route (`idleRouteForPool`)
 
 ### B.3 Refresh after cycle
-- [ ] Keep existing dashboard behavior: on `cycleCompleted` → reload portfolio + trading status (already partial)
+- [x] Dashboard: on `cycleCompleted` / `actionExecuted` → reload portfolio + trading status + balances
 
 ---
 

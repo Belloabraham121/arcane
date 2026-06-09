@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
 import { OrbitControls, PerspectiveCamera } from "@react-three/drei"
 import * as THREE from "three"
-import type { PoolRouteCommand } from "@/hooks/use-trading-socket"
+import type { PoolRouteCommand } from "@/lib/trading-feed-helpers"
 import {
   buildPoolNetworkNodes,
   poolNodeIndex,
@@ -140,9 +140,24 @@ function PoolTradingScene({
       return
     }
 
+    const resolvedTarget =
+      targetIndex >= 0 ? targetIndex : sourceIndex >= 0 ? sourceIndex : 0
+    const resolvedSource =
+      sourceIndex >= 0 ? sourceIndex : resolvedTarget
+
+    if (routeCommand.replay === false) {
+      setTrip({
+        sourceIndex: resolvedTarget,
+        targetIndex: resolvedTarget,
+        progress: 1,
+        speed: 0,
+      })
+      return
+    }
+
     setTrip({
-      sourceIndex: sourceIndex >= 0 ? sourceIndex : 0,
-      targetIndex: targetIndex >= 0 ? targetIndex : sourceIndex >= 0 ? sourceIndex : 0,
+      sourceIndex: resolvedSource,
+      targetIndex: resolvedTarget,
       progress: 0,
       speed: 0.55,
     })

@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AccountMode {
+  demo
+  live
+}
+
 enum StrategyType {
   auto
   custom
@@ -45,6 +50,8 @@ model User {
   encryptedPrivateKey  String         @map("encrypted_private_key") @db.Text
   encryptionIv         String         @map("encryption_iv") @db.Text
   encryptionAuthTag    String         @map("encryption_auth_tag") @db.Text
+  /// Demo = shared Anvil paper wallet; live = per-user custodial agent wallet.
+  accountMode          AccountMode    @default(live) @map("account_mode")
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
   agentStrategy        AgentStrategy?

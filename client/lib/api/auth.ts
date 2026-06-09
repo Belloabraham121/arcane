@@ -1,9 +1,12 @@
 import { apiRequest, type ApiEnvelope } from "./client";
 
+export type AccountMode = "demo" | "live";
+
 export type AuthUser = {
   id: string;
   email: string;
   walletAddress: string;
+  accountMode: AccountMode;
   createdAt: string;
 };
 

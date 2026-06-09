@@ -166,6 +166,35 @@ export function getQuickSwapEnv(): QuickSwapEnv {
   };
 }
 
+/** Shared demo wallet on Anvil fork (paper trading). */
+export const DEFAULT_DEMO_AGENT_WALLET =
+  "0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e" as Address;
+
+/** Token-rich address for Anvil impersonation when seeding the demo wallet. */
+export const DEFAULT_DEMO_FORK_WHALE =
+  "0xd1f1f7b4354bd07e2035d95c12e3192017928054" as Address;
+
+export type DemoEnv = {
+  agentWallet: Address;
+  forkWhale: Address;
+  anvilRpcUrl: string;
+  /** When false, backend refuses demo trading cycles (e.g. Anvil unhealthy). */
+  tradingEnabled: boolean;
+};
+
+/**
+ * Demo / Anvil fork configuration.
+ * Demo trading paths override `QUICKSWAP_RPC_HTTP` with `anvilRpcUrl` (see anvil-fork.service).
+ */
+export function getDemoEnv(): DemoEnv {
+  return {
+    agentWallet: optionalAddress("DEMO_AGENT_WALLET", DEFAULT_DEMO_AGENT_WALLET),
+    forkWhale: optionalAddress("DEMO_FORK_WHALE", DEFAULT_DEMO_FORK_WHALE),
+    anvilRpcUrl: optional("ANVIL_RPC_URL", "http://127.0.0.1:8545"),
+    tradingEnabled: optional("DEMO_TRADING_ENABLED", "true") === "true",
+  };
+}
+
 /** Drift rebalance + auto-execution guards (Phase 3.4). */
 export function getTradingExecutionEnv() {
   return {

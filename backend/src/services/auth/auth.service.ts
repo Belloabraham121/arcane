@@ -58,6 +58,7 @@ export async function login(email: string, password: string) {
     id: user.id,
     email: user.email,
     walletAddress: user.walletAddress,
+    accountMode: user.accountMode,
     createdAt: user.createdAt,
   };
 }
@@ -72,6 +73,7 @@ export async function getCurrentUser(userId: string) {
     id: user.id,
     email: user.email,
     walletAddress: user.walletAddress,
+    accountMode: user.accountMode,
     createdAt: user.createdAt,
   };
 }

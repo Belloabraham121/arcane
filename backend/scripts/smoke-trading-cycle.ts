@@ -14,6 +14,7 @@
 import "dotenv/config";
 import type { Address } from "viem";
 import { isAddress } from "viem";
+import { getDemoEnv } from "../src/config/env";
 import { prisma } from "../src/infrastructure/postgres/client";
 import { findUserByEmail } from "../src/services/auth/user.repository";
 import { runTradingCycle } from "../src/services/agents/trading-runner.service";
@@ -167,10 +168,8 @@ async function main() {
   console.log("  mode:      ", modeLabel);
 
   if (fork) {
-    const anvilRpc =
-      parseArg("--rpc") ??
-      process.env.ANVIL_RPC_URL ??
-      "http://127.0.0.1:8545";
+    const demoEnv = getDemoEnv();
+    const anvilRpc = parseArg("--rpc") ?? demoEnv.anvilRpcUrl;
 
     try {
       await assertAnvilForkHealthy(anvilRpc);
@@ -178,7 +177,10 @@ async function main() {
       throw err instanceof Error ? err : new Error(String(err));
     }
 
-    const whaleArg = parseArg("--whale") ?? process.env.ANVIL_WHALE_ADDRESS;
+    const whaleArg =
+      parseArg("--whale") ??
+      process.env.ANVIL_WHALE_ADDRESS ??
+      demoEnv.forkWhale;
     if (whaleArg && !isAddress(whaleArg)) {
       throw new Error(`Invalid --whale address: ${whaleArg}`);
     }

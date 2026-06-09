@@ -1,3 +1,4 @@
+import type { AccountMode } from "@prisma/client";
 import type { Address } from "viem";
 import { prisma } from "../../infrastructure/postgres/client";
 import type { EncryptedPrivateKey } from "../../utils/wallet-crypto";
@@ -13,6 +14,7 @@ export type PublicUser = {
   id: string;
   email: string;
   walletAddress: string;
+  accountMode: AccountMode;
   createdAt: Date;
 };
 
@@ -20,12 +22,14 @@ function toPublic(user: {
   id: string;
   email: string;
   walletAddress: string;
+  accountMode: AccountMode;
   createdAt: Date;
 }): PublicUser {
   return {
     id: user.id,
     email: user.email,
     walletAddress: user.walletAddress,
+    accountMode: user.accountMode,
     createdAt: user.createdAt,
   };
 }

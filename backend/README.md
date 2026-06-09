@@ -168,6 +168,23 @@ OPENAI_API_KEY=sk-... npm run smoke:trading:cycle -- \
 
 Without `--whale`, the script falls back to `anvil_deal` (Foundry cheat) on the fork.
 
+### Demo vs Live configuration (Phase 0)
+
+| Variable | Default | Role |
+| -------- | ------- | ---- |
+| `DEMO_AGENT_WALLET` | `0xA4B8…e46e` | Shared paper-trading wallet for all demo users |
+| `DEMO_FORK_WHALE` | `0xd1f1…8054` | Whale impersonated on Anvil to fund demo balances |
+| `ANVIL_RPC_URL` | `http://127.0.0.1:8545` | Fork RPC; demo trading overrides `QUICKSWAP_RPC_HTTP` |
+| `DEMO_TRADING_ENABLED` | `true` | When `false`, backend refuses demo trading cycles |
+
+Each user has `account_mode` (`demo` \| `live`) on the `user` table (default `live`). After schema changes:
+
+```bash
+npm run db:migrate-account-mode
+npm run db:push
+npm run db:generate
+```
+
 Impersonation flow (same as Hardhat `impersonateAccount`):
 
 1. `anvil_impersonateAccount(whale)`

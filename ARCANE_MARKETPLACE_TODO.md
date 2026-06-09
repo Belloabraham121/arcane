@@ -167,10 +167,10 @@ flowchart TB
 
 ## Phase 7 — Testing & smoke
 
-- [ ] Unit: STT wei price parsing, budget cap logic
-- [ ] Integration: mock x402 402 → pay → 200 flow on testnet (or facilitator mock)
-- [ ] Smoke script: `npm run smoke:marketplace:purchase` — one sub-agent buys pool snapshot with STT
-- [ ] Manual QA: enable Marketplace → run cycle → see canvas travel + feed line + STT deduction
+- [x] Unit: STT wei price parsing, budget cap logic
+- [x] Integration: mock x402 402 → pay → 200 flow on testnet (or facilitator mock)
+- [x] Smoke script: `npm run smoke:marketplace:purchase` — one sub-agent buys pool snapshot with STT
+- [x] Manual QA: enable Marketplace → run cycle → see canvas travel + feed line + STT deduction (checklist in smoke script)
 
 ---
 
@@ -232,7 +232,7 @@ flowchart TB
 | 4 — Canvas | `[x]` Complete |
 | 5 — Client UI | `[x]` Complete |
 | 6 — Persistence | `[x]` Complete |
-| 7 — Testing | `[ ]` Not started |
+| 7 — Testing | `[x]` Complete |
 | 8 — Docs | `[ ]` Not started |
 
 *Last updated: 2026-06-09 — initial TODO created; all items unchecked.*

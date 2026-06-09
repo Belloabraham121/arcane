@@ -133,12 +133,19 @@ type PaymentRequiredBody = {
   };
 };
 
+export type MarketplacePaymentSender = (input: {
+  userId: string;
+  sellerAddress: Address;
+  amountWei: bigint;
+}) => Promise<{ txHash: Hash; payer: Address }>;
+
 async function fetchMarketplaceProductHttp(input: {
   userId: string;
   productId: MarketplaceProductId;
   accountMode: AccountMode;
   payment?: MarketplaceSttPayment;
   fetchImpl?: typeof fetch;
+  paymentSender?: MarketplacePaymentSender;
 }): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
   const baseUrl = marketplaceBuyerBaseUrl();
   if (!baseUrl) {
@@ -177,7 +184,15 @@ async function fetchMarketplaceProductHttp(input: {
       body?.meta?.payment_required?.accepts?.[0]?.amount ?? priceWei.toString();
     const amountWei = BigInt(amountRaw);
 
-    const { txHash, payer } = await sendNativeSttPayment({
+    const sendPayment =
+      input.paymentSender ??
+      (async (paymentInput: {
+        userId: string;
+        sellerAddress: Address;
+        amountWei: bigint;
+      }) => sendNativeSttPayment(paymentInput));
+
+    const { txHash, payer } = await sendPayment({
       userId: input.userId,
       sellerAddress: payTo as Address,
       amountWei,
@@ -312,6 +327,7 @@ export async function purchaseMarketplaceProduct(input: {
   buyer?: MarketplacePurchaseBuyerContext;
   useHttp?: boolean;
   fetchImpl?: typeof fetch;
+  paymentSender?: MarketplacePaymentSender;
 }): Promise<MarketplacePurchaseResult> {
   const env = getMarketplaceEnv();
   if (!env.enabled) {
@@ -384,6 +400,7 @@ export async function purchaseMarketplaceProduct(input: {
         productId: input.productId,
         accountMode: input.accountMode,
         fetchImpl: input.fetchImpl,
+        paymentSender: input.paymentSender,
       });
       if (!httpResult.ok) {
         return {

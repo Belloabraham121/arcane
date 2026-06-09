@@ -7,6 +7,7 @@ import {
   verifyNativeSttPayment,
 } from "../../src/services/marketplace/stt-paywall.js";
 import { MARKETPLACE_STT_SCHEME, MARKETPLACE_X402_NETWORK } from "../../src/services/marketplace/constants.js";
+import { encodeNativeSttPaymentSignature } from "../../src/services/marketplace/stt-payment.js";
 
 const originalEnv = { ...process.env };
 
@@ -167,5 +168,67 @@ describe("createSttPaywallMiddleware", () => {
     });
 
     assert.equal((payment as { devBypass?: boolean })?.devBypass, true);
+  });
+
+  it("accepts request after valid PAYMENT-SIGNATURE (402 → pay → 200 path)", async () => {
+    process.env.MARKETPLACE_ENABLED = "true";
+    process.env.MARKETPLACE_SELLER_ADDRESS =
+      "0x3333333333333333333333333333333333333333";
+    delete process.env.MARKETPLACE_X402_DEV_BYPASS;
+
+    const seller = "0x3333333333333333333333333333333333333333" as Address;
+    const payer = "0x4444444444444444444444444444444444444444" as Address;
+    const txHash =
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" as Hash;
+
+    const mockClient = {
+      async getTransactionReceipt() {
+        return { status: "success" };
+      },
+      async getTransaction() {
+        return {
+          from: payer,
+          to: seller,
+          value: 3_000_000_000_000_000n,
+        };
+      },
+    };
+
+    const middleware = createSttPaywallMiddleware(
+      "signals/spread",
+      () => mockClient as never,
+    );
+
+    const paymentHeader = encodeNativeSttPaymentSignature({ txHash, payer });
+    const req = {
+      correlationId: "corr-pay-1",
+      protocol: "http",
+      get: () => "localhost:4000",
+      header: (name: string) =>
+        name.toLowerCase() === "payment-signature" ? paymentHeader : undefined,
+      originalUrl: "/api/v1/marketplace/signals/spread",
+    };
+    const res = {
+      status() {
+        return this;
+      },
+      setHeader() {
+        return this;
+      },
+      json() {
+        return this;
+      },
+    };
+    let nextCalled = false;
+    let payment: unknown;
+
+    await middleware(req as never, res as never, () => {
+      nextCalled = true;
+      payment = (req as { marketplacePayment?: unknown }).marketplacePayment;
+    });
+
+    assert.equal(nextCalled, true);
+    assert.equal((payment as { txHash?: string })?.txHash, txHash);
+    assert.equal((payment as { devBypass?: boolean })?.devBypass, false);
   });
 });

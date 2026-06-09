@@ -15,6 +15,7 @@
     "smoke:quickswap:route-planner": "tsx scripts/smoke-quickswap-route-planner.ts",
     "smoke:quickswap:liquidity-build": "tsx scripts/smoke-quickswap-liquidity-build.ts",
     "smoke:trading:cycle": "tsx scripts/smoke-trading-cycle.ts",
+    "smoke:marketplace:purchase": "tsx scripts/smoke-marketplace-purchase.ts",
     "fork:anvil": "bash scripts/start-anvil-fork.sh",
     "fork:reset": "bash scripts/reset-anvil-fork.sh",
     "fork:find-whale": "tsx scripts/find-fork-whale.ts",

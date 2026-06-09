@@ -110,11 +110,20 @@ export function resetTradingRunnerStateForTests(): void {
 }
 
 export function resolveAccountModeForCycle(
-  storedMode: AccountMode,
+  storedMode: AccountMode | null,
   override?: AccountMode,
 ): AccountMode {
-  if (!override || override === storedMode) {
-    return storedMode;
+  if (!storedMode && !override) {
+    throw new TradingError(
+      "ACCOUNT_MODE_REQUIRED",
+      "Choose demo or live account mode before trading",
+      400,
+    );
+  }
+
+  const effective = storedMode ?? override!;
+  if (!override || override === effective) {
+    return effective;
   }
 
   const { nodeEnv } = getServerEnv();

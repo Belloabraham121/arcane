@@ -148,15 +148,15 @@ flowchart TB
 ## Phase 3 — Signup & onboarding (client)
 
 ### 3.1 Account mode selection (new step after signup)
-- [ ] New page: `/onboarding/account-mode` (before or after strategy type)
-- [ ] **Demo card:**
+- [x] New page: `/onboarding/account-mode` (before or after strategy type)
+- [x] **Demo card:**
   - Shared address `0xA4B8…` (read-only copy)
   - Explains: pre-funded paper portfolio on Anvil, no real money, same agent behavior
   - Shows approximate seeded balances (from env or API `GET /api/v1/demo/preview`)
-- [ ] **Live card:**
+- [x] **Live card:**
   - User’s own agent wallet (from `GET /api/v1/auth/me` after signup)
   - Explains: deposit real tokens to this address on Somnia mainnet
-- [ ] `PATCH /api/v1/users/account-mode` or include in first strategy upsert
+- [x] `PATCH /api/v1/users/account-mode` or include in first strategy upsert
 
 ### 3.2 Routing
 - [ ] Update `resolve-post-auth.ts`:

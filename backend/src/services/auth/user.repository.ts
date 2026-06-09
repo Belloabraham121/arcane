@@ -14,7 +14,7 @@ export type PublicUser = {
   id: string;
   email: string;
   walletAddress: string;
-  accountMode: AccountMode;
+  accountMode: AccountMode | null;
   createdAt: Date;
 };
 
@@ -22,7 +22,7 @@ function toPublic(user: {
   id: string;
   email: string;
   walletAddress: string;
-  accountMode: AccountMode;
+  accountMode: AccountMode | null;
   createdAt: Date;
 }): PublicUser {
   return {
@@ -79,6 +79,17 @@ export async function createUser(input: CreateUserInput): Promise<PublicUser> {
       encryptionIv: input.wallet.encryptedPrivateKey.iv,
       encryptionAuthTag: input.wallet.encryptedPrivateKey.authTag,
     },
+  });
+  return toPublic(user);
+}
+
+export async function updateUserAccountMode(
+  userId: string,
+  accountMode: AccountMode,
+) {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { accountMode },
   });
   return toPublic(user);
 }

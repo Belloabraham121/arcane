@@ -31,10 +31,13 @@ export function resolveTradingRpc(accountMode: AccountMode): TradingRpcMode {
 
 /** demo → `DEMO_AGENT_WALLET`; live → user's custodial agent wallet. */
 export function resolveTradingWallet(
-  user: { accountMode: AccountMode; walletAddress: string },
+  user: { accountMode: AccountMode | null; walletAddress: string },
   modeOverride?: AccountMode,
 ): ResolvedTradingWallet {
   const accountMode = modeOverride ?? user.accountMode;
+  if (!accountMode) {
+    throw new Error("Account mode not set — complete onboarding first");
+  }
   return resolvePortfolioWallet(accountMode, user.walletAddress as Address);
 }
 

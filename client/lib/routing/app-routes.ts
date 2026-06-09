@@ -1,5 +1,6 @@
 export const APP_ROUTES = {
   signIn: "/auth/signin",
+  accountModeOnboarding: "/onboarding/account-mode",
   strategyOnboarding: "/onboarding/strategy",
   setupAuto: "/setup/auto",
   setupCustom: "/setup/custom",

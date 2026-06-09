@@ -89,6 +89,11 @@ export async function createActiveStrategyFixture(): Promise<TestUserFixture> {
     wallet,
   });
 
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { accountMode: "live" },
+  });
+
   const poolId = "0xd1f1f7b4354bd07e2035d95c12e3192017928054";
   const strategy = await upsertStrategy(user.id, {
     strategyType: "custom",

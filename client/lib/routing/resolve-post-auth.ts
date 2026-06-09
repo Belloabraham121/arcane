@@ -8,6 +8,10 @@ export async function resolvePostAuthRoute(): Promise<string> {
     return APP_ROUTES.signIn
   }
 
+  if (meResult.data.user.accountMode == null) {
+    return APP_ROUTES.accountModeOnboarding
+  }
+
   const strategyResult = await getAgentStrategy()
   if (!strategyResult.success || !strategyResult.data?.strategy) {
     return APP_ROUTES.strategyOnboarding

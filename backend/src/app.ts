@@ -9,7 +9,9 @@ import { authRouter } from "./api/routes/v1/auth";
 import { agentStrategyRouter } from "./api/routes/v1/agents/strategy";
 import { agentTradingRouter } from "./api/routes/v1/agents/trading";
 import { quickswapPoolsRouter } from "./api/routes/v1/quickswap/pools";
+import { demoPreviewRouter } from "./api/routes/v1/demo/preview";
 import { tradingCyclesRouter } from "./api/routes/v1/trading/cycles";
+import { userAccountModeRouter } from "./api/routes/v1/users/account-mode";
 import { portfolioSummaryRouter } from "./api/routes/v1/portfolio/summary";
 import { walletBalancesRouter } from "./api/routes/v1/wallets/balances";
 import { createCorsOptions } from "./config/cors";
@@ -28,6 +30,8 @@ export function createApp() {
   app.use(agentStrategyRouter);
   app.use(agentTradingRouter);
   app.use(tradingCyclesRouter);
+  app.use(demoPreviewRouter);
+  app.use(userAccountModeRouter);
   app.use(quickswapPoolsRouter);
   app.use(portfolioSummaryRouter);
   app.use(walletBalancesRouter);

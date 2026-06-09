@@ -49,6 +49,8 @@ async function start() {
         "POST /api/v1/auth/login",
         "POST /api/v1/auth/logout",
         "GET /api/v1/auth/me",
+        "PATCH /api/v1/users/account-mode",
+        "GET /api/v1/demo/preview",
         "GET /api/v1/agents/strategy",
         "PUT /api/v1/agents/strategy",
         "PATCH /api/v1/agents/strategy/pool-allocations",

@@ -30,6 +30,17 @@ export default function StrategyOnboardingPage() {
 
     async function load() {
       try {
+        const { getMe } = await import("@/lib/api/auth");
+        const meResult = await getMe();
+        if (!meResult.success || !meResult.data?.user) {
+          router.replace(APP_ROUTES.signIn);
+          return;
+        }
+        if (meResult.data.user.accountMode == null) {
+          router.replace(APP_ROUTES.accountModeOnboarding);
+          return;
+        }
+
         const strategyResult = await getAgentStrategy();
         if (strategyResult.success && strategyResult.data?.strategy) {
           const { strategy } = strategyResult.data;

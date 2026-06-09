@@ -6,7 +6,9 @@ export type AuthUser = {
   id: string;
   email: string;
   walletAddress: string;
-  accountMode: AccountMode;
+  accountMode: AccountMode | null;
+  demoWalletAddress: string;
+  liveWalletAddress: string;
   createdAt: string;
 };
 

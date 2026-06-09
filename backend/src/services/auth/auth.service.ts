@@ -2,6 +2,7 @@ import { normalizeEmail } from "../../utils/email";
 import { createLogger } from "../../shared/logger";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { emailWalletService } from "./email-wallet.service";
+import { toAuthUserProfile, type AuthUserProfile } from "./user-account.service";
 import * as userRepo from "./user.repository";
 
 const log = createLogger("auth");
@@ -26,16 +27,20 @@ export async function register(email: string, password: string) {
 
   const passwordHash = await hashPassword(password);
   const walletRecord = emailWalletService.createWalletRecord(normalizedEmail);
-  const user = await userRepo.createUser({
+  const created = await userRepo.createUser({
     email: walletRecord.email,
     passwordHash,
     wallet: walletRecord,
   });
+  const user = await userRepo.findUserById(created.id);
+  if (!user) {
+    throw new AuthError("USER_NOT_FOUND", "User not found after registration", 500);
+  }
 
   log.info("User registered", { userId: user.id, email: user.email, walletAddress: user.walletAddress });
 
   return {
-    user,
+    user: toAuthUserProfile(user),
     wallet: emailWalletService.toPublic(walletRecord),
   };
 }
@@ -54,26 +59,14 @@ export async function login(email: string, password: string) {
 
   log.info("User signed in", { userId: user.id, email: user.email });
 
-  return {
-    id: user.id,
-    email: user.email,
-    walletAddress: user.walletAddress,
-    accountMode: user.accountMode,
-    createdAt: user.createdAt,
-  };
+  return toAuthUserProfile(user);
 }
 
-export async function getCurrentUser(userId: string) {
+export async function getCurrentUser(userId: string): Promise<AuthUserProfile> {
   const user = await userRepo.findUserById(userId);
   if (!user) {
     throw new AuthError("USER_NOT_FOUND", "User not found", 404);
   }
 
-  return {
-    id: user.id,
-    email: user.email,
-    walletAddress: user.walletAddress,
-    accountMode: user.accountMode,
-    createdAt: user.createdAt,
-  };
+  return toAuthUserProfile(user);
 }

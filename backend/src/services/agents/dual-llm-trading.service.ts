@@ -27,12 +27,17 @@ import {
   runSubAgentPhase,
   type SubAgentOutput,
 } from "./sub-agent-orchestrator";
+import {
+  runMarketplaceSttPreflight,
+  type MarketplacePreflightResult,
+} from "../marketplace/preflight.js";
 
 const log = createLogger("dual-llm-trading");
 
 export type DualLlmTradingCycleResult = OpenAiTradingCycleResult & {
   somniaAttestation: SomniaAttestation;
   subAgentOutputs: SubAgentOutput[];
+  marketplacePreflight: MarketplacePreflightResult;
 };
 
 export async function runDualLlmTradingCycle(input: {
@@ -48,6 +53,7 @@ export async function runDualLlmTradingCycle(input: {
   pools: QuickSwapPool[];
   balances: WalletBalancesResult;
   subAgents: SubAgentConfigItem[];
+  subAgentX402BudgetSttWei?: bigint | null;
   activePoolIds: readonly string[];
   riskLimits: EffectiveRiskLimits;
   onToolExecuted?: (outcome: ToolExecutionOutcome) => void;
@@ -83,6 +89,28 @@ export async function runDualLlmTradingCycle(input: {
   });
 
   log.info("Starting dual-LLM trading cycle", { userId: input.userId });
+
+  const marketplacePreflight = await runMarketplaceSttPreflight({
+    userId: input.userId,
+    subAgents: input.subAgents,
+    strategyBudgetSttWei: input.subAgentX402BudgetSttWei,
+  });
+
+  if (!marketplacePreflight.ok) {
+    log.warn("Marketplace STT preflight failed — sub-agents will skip x402 purchases", {
+      userId: input.userId,
+      code: marketplacePreflight.code,
+      balanceSttWei: marketplacePreflight.balanceSttWei.toString(),
+      requiredSttWei: marketplacePreflight.requiredSttWei.toString(),
+    });
+  } else if (!marketplacePreflight.skipped) {
+    log.info("Marketplace STT preflight passed", {
+      userId: input.userId,
+      walletAddress: marketplacePreflight.walletAddress,
+      balanceSttWei: marketplacePreflight.balanceSttWei?.toString(),
+      requiredSttWei: marketplacePreflight.requiredSttWei?.toString(),
+    });
+  }
 
   const subAgentPhase = await runSubAgentPhase(
     input.subAgents,
@@ -121,5 +149,6 @@ export async function runDualLlmTradingCycle(input: {
     ...openAi,
     somniaAttestation,
     subAgentOutputs: subAgentPhase.outputs,
+    marketplacePreflight,
   };
 }

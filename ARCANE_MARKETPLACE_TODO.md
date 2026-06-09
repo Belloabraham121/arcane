@@ -80,9 +80,9 @@ flowchart TB
 - [x] Expose Marketplace budget + spend summary on agent strategy API (read-only for UI)
 
 ### 1.2 Wallet & balance checks
-- [ ] Reuse agent custodial wallet (`wallet-executor.ts`) as x402 buyer signer on testnet
-- [ ] Pre-flight: ensure agent wallet has enough STT for gas + micropayment before sub-agent buy phase
-- [ ] Clear error when STT insufficient — link to [testnet faucet](https://testnet.somnia.network)
+- [x] Reuse agent custodial wallet (`wallet-executor.ts`) as x402 buyer signer on testnet
+- [x] Pre-flight: ensure agent wallet has enough STT for gas + micropayment before sub-agent buy phase
+- [x] Clear error when STT insufficient — link to [testnet faucet](https://testnet.somnia.network)
 
 ---
 
@@ -226,7 +226,7 @@ flowchart TB
 
 | Phase | Status |
 |-------|--------|
-| 1 — Config & STT policy | `[~]` 1.1 done · 1.2 pending |
+| 1 — Config & STT policy | `[x]` Complete |
 | 2 — Seller API | `[ ]` Not started |
 | 3 — Buyer + orchestrator | `[ ]` Not started |
 | 4 — Canvas | `[ ]` Not started |

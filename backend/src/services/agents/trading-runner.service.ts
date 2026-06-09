@@ -629,6 +629,7 @@ export async function runTradingCycle(
           pools,
           balances,
           subAgents,
+          subAgentX402BudgetSttWei: strategy.subAgentX402BudgetSttWei,
           activePoolIds: [...activePoolIds],
           riskLimits,
           dryRunTrades: overrides?.simulation?.dryRunTrades,
@@ -676,6 +677,14 @@ export async function runTradingCycle(
           message: llm.somniaAttestation.message,
         };
         executionMessage = llm.message;
+        if (
+          llm.marketplacePreflight &&
+          !llm.marketplacePreflight.ok
+        ) {
+          executionMessage = executionMessage
+            ? `${executionMessage} ${llm.marketplacePreflight.message}`
+            : llm.marketplacePreflight.message;
+        }
         subAgentOutputs = llm.subAgentOutputs?.map((o: { agentId: string; agentName: string; summary: string; data: Record<string, unknown>; durationMs: number }) => ({
           agentId: o.agentId,
           agentName: o.agentName,

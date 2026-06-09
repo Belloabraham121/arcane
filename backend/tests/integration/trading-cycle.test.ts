@@ -63,6 +63,12 @@ describeIntegration("runTradingCycle with mocked LLM", () => {
         onChainResponse: null,
         message: "Mock Somnia attestation",
       },
+      subAgentOutputs: [],
+      marketplacePreflight: {
+        ok: true,
+        skipped: true,
+        skippedReason: "marketplace_disabled",
+      },
     };
 
     const summary = await runTradingCycle(fixture.userId, "manual", {

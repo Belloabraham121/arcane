@@ -1,5 +1,9 @@
 /** Legacy seed slugs kept for default allocations and existing saved strategies. */
-export const LEGACY_POOL_IDS = ["usdce-wsomi", "usdce-weth", "wsomi-weth"] as const;
+export const LEGACY_POOL_IDS = [
+  "usdce-wsomi",
+  "usdce-weth",
+  "wsomi-weth",
+] as const;
 
 /** @deprecated Use dynamic pool ids from GET /api/v1/quickswap/pools (subgraph addresses). */
 export const POOL_IDS = LEGACY_POOL_IDS;
@@ -58,7 +62,8 @@ export const DEFAULT_AUTO_SUB_AGENTS: SubAgentConfigItem[] = [
     id: "signal-scout",
     name: "Signal Scout",
     model: "gpt-4o-mini",
-    systemPrompt: "Monitors APR shifts and publishes buy/sell signals to the agent marketplace.",
+    systemPrompt:
+      "Monitors APR shifts and publishes buy/sell signals to the agent marketplace.",
     enabled: true,
   },
   {

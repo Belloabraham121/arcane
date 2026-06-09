@@ -1,9 +1,11 @@
 "use client"
 
+import { PoolStatsBadges } from "@/components/pool-stats-badges"
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
+import { poolDisplayStats } from "@/lib/pool-display"
 import { POOL_MARKET_COLORS } from "@/lib/pool-allocations"
-import { POOL_LABELS } from "@/lib/strategy-presets"
+import { activeResolvablePoolEntries, resolvePoolById } from "@/lib/pool-resolve"
 
 type PoolMetricsStripProps = {
   poolAllocations: PoolAllocations
@@ -16,49 +18,58 @@ export function PoolMetricsStrip({
   pools,
   loading = false,
 }: PoolMetricsStripProps) {
-  const poolById = Object.fromEntries(pools.map((pool) => [pool.id, pool]))
-  const activeIds = Object.entries(poolAllocations)
-    .filter(([, amount]) => amount > 0)
-    .map(([id]) => id)
+  const activeEntries = activeResolvablePoolEntries(poolAllocations, pools)
 
-  if (activeIds.length === 0) {
+  if (activeEntries.length === 0) {
     return null
   }
 
   return (
     <div className="border border-border">
       <p className="border-b border-border px-4 py-3 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-        Live pool prices
+        Live pool metrics
       </p>
       <div className="flex gap-px overflow-x-auto bg-border">
-        {activeIds.map((poolId) => {
-          const pool = poolById[poolId]
-          const label = POOL_LABELS[poolId] ?? pool?.label ?? poolId
+        {activeEntries.map(([poolId]) => {
+          const pool = resolvePoolById(poolId, pools)
+          const stats = pool ? poolDisplayStats(pool) : null
+
           return (
             <div
               key={poolId}
-              className="min-w-[200px] flex-1 bg-background px-4 py-4"
+              className="min-w-[220px] flex-1 bg-background px-4 py-4"
             >
-              <div className="mb-2 flex items-center gap-2">
+              <div className="mb-1 flex items-center gap-2">
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${POOL_MARKET_COLORS[poolId] ?? "bg-muted-foreground"}`}
                 />
-                <span className="font-mono text-xs text-foreground">{label}</span>
+                <span className="font-mono text-xs text-foreground">
+                  {pool?.label ?? poolId}
+                </span>
               </div>
-              {loading && !pool ? (
+              {stats && (
+                <p className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {stats.pair}
+                </p>
+              )}
+              {loading && !stats ? (
                 <p className="font-mono text-[10px] text-muted-foreground">Loading…</p>
-              ) : pool?.metrics.priceLabel ? (
-                <p className="font-mono text-sm text-foreground">
-                  {pool.metrics.priceLabel}
-                </p>
-              ) : (
-                <p className="font-mono text-[10px] text-muted-foreground">—</p>
-              )}
-              {pool?.metrics.feeApr != null && (
-                <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  est. APR {pool.metrics.feeApr.toFixed(2)}%
-                </p>
-              )}
+              ) : stats ? (
+                <>
+                  <PoolStatsBadges
+                    tvlUsd={stats.tvlUsd}
+                    volumeUsd={stats.volumeUsd}
+                    liquidity={stats.liquidity}
+                    apy={stats.apy}
+                    layout="stacked"
+                  />
+                  {stats.priceHint && (
+                    <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                      {stats.priceHint}
+                    </p>
+                  )}
+                </>
+              ) : null}
             </div>
           )
         })}

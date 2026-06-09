@@ -4,10 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { AppNavBar } from "@/components/auth/app-nav-bar"
-import { getMe } from "@/lib/api/auth"
-import { fetchPools } from "@/lib/api/quickswap"
-import type { QuickSwapPool } from "@/lib/api/quickswap-types"
+import { PageSubBar } from "@/components/layout/page-sub-bar"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import {
   fetchTradingCycleDetail,
@@ -23,8 +20,17 @@ import { ActivePoolsPanel } from "@/components/dashboard/active-pools-panel"
 import { AgentStatusBadge } from "@/components/dashboard/agent-status-badge"
 import { LastTradeCard } from "@/components/dashboard/last-trade-card"
 import { PoolMetricsStrip } from "@/components/dashboard/pool-metrics-strip"
+import {
+  ActivePoolsPanelSkeleton,
+  DashboardHeroSkeleton,
+  MarketsTableSkeleton,
+  PoolMetricsStripSkeleton,
+} from "@/components/skeletons/content-skeletons"
 import { useWalletBalances } from "@/hooks/use-wallet-balances"
 import { useTradingSocket } from "@/hooks/use-trading-socket"
+import { useSession } from "@/providers/session-provider"
+import { fetchPools } from "@/lib/api/quickswap"
+import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import { buildPoolMarketRows } from "@/lib/pool-allocations"
 import { allocatedPoolIds } from "@/lib/supported-tokens"
 import {
@@ -39,46 +45,68 @@ const ease = [0.22, 1, 0.36, 1] as const
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { sessionReady } = useSession()
   const [strategy, setStrategy] = useState<AgentStrategy | null>(null)
   const [pools, setPools] = useState<QuickSwapPool[]>([])
   const [poolsError, setPoolsError] = useState<string | null>(null)
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"overview" | "markets" | "agents">("overview")
-  const [loading, setLoading] = useState(true)
+  const [strategyLoading, setStrategyLoading] = useState(true)
+  const [poolsLoading, setPoolsLoading] = useState(true)
   const [tradingStatus, setTradingStatus] = useState<TradingStatus | null>(null)
   const [lastTrade, setLastTrade] = useState<LastTradeInfo | null>(null)
 
   useEffect(() => {
-    async function load() {
+    if (!sessionReady) {
+      return
+    }
+
+    let cancelled = false
+
+    async function loadStrategy() {
       const route = await resolvePostAuthRoute()
+      if (cancelled) {
+        return
+      }
       if (route !== APP_ROUTES.dashboard) {
         router.replace(route)
         return
       }
 
-      const [meResult, strategyResult, poolsResult] = await Promise.all([
-        getMe(),
-        getAgentStrategy(),
-        fetchPools(),
-      ])
-
-      if (meResult.success && meResult.data?.user.walletAddress) {
-        setWalletAddress(meResult.data.user.walletAddress)
+      const strategyResult = await getAgentStrategy()
+      if (cancelled) {
+        return
       }
       if (strategyResult.success && strategyResult.data?.strategy) {
         setStrategy(strategyResult.data.strategy)
+      }
+      setStrategyLoading(false)
+    }
+
+    void loadStrategy()
+  }, [router, sessionReady])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPools() {
+      const poolsResult = await fetchPools()
+      if (cancelled) {
+        return
       }
       if (poolsResult.success && poolsResult.data) {
         setPools(poolsResult.data.pools)
       } else {
         setPoolsError(poolsResult.error?.message ?? "Failed to load QuickSwap pools")
       }
-
-      setLoading(false)
+      setPoolsLoading(false)
     }
 
-    load()
-  }, [router])
+    void loadPools()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const refreshTradingData = useCallback(async () => {
     const [statusResult, historyResult] = await Promise.all([
@@ -166,46 +194,44 @@ export default function DashboardPage() {
     balances,
     loading: balancesLoading,
     error: balancesError,
-  } = useWalletBalances(activePoolIds)
+  } = useWalletBalances(strategy ? activePoolIds : [])
 
-  if (loading || !strategy) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background dot-grid-bg">
-        <p className="font-mono text-xs text-muted-foreground">Loading dashboard…</p>
-      </div>
-    )
-  }
-
-  const isAuto = strategy.strategyType === "auto"
-  const depositedAmount = strategy.depositAmount
+  const isAuto = strategy?.strategyType === "auto"
+  const depositedAmount = strategy?.depositAmount ?? 0
   const currentValue = depositedAmount * 1.0006
   const netEarned = depositedAmount * 0.0006
   const totalAPR = 16.43
-  const enabledSubAgents = strategy.subAgents.filter((agent) => agent.enabled)
+  const enabledSubAgents = strategy?.subAgents.filter((agent) => agent.enabled) ?? []
   const agentDisplayStatus = socketCycleActive
     ? tradingStatus?.lastCycle?.executedTransactions?.length
       ? "executing"
       : "analyzing"
-    : deriveAgentDisplayStatus({
-        strategyActive: strategy.status === "active",
-        tradingStatus,
-        walletBalances: balances,
-      })
-  const activePoolRows = buildActivePoolRows(
-    strategy.poolAllocations,
-    tradingStatus?.lastCycle?.poolDrift,
-  )
+    : strategy
+      ? deriveAgentDisplayStatus({
+          strategyActive: strategy.status === "active",
+          tradingStatus,
+          walletBalances: balances,
+        })
+      : "idle"
+  const activePoolRows =
+    strategy != null
+      ? buildActivePoolRows(
+          strategy.poolAllocations,
+          tradingStatus?.lastCycle?.poolDrift,
+          pools,
+        )
+      : []
 
   return (
-    <div className="min-h-screen bg-background dot-grid-bg">
-      <AppNavBar walletAddress={walletAddress} />
-
-      <div className="border-b border-border bg-background/50 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-6 py-4 lg:px-12">
-          <div className="flex items-center justify-between">
-            <div className="font-mono text-xs text-muted-foreground">
-              Dashboard — {isAuto ? "Auto yield" : "Custom strategy"} (active)
-            </div>
+    <>
+      <PageSubBar
+        title={
+          strategyLoading
+            ? "Dashboard"
+            : `Dashboard — ${isAuto ? "Auto yield" : "Custom strategy"} (active)`
+        }
+        action={
+          strategy && !strategyLoading ? (
             <button
               type="button"
               onClick={() =>
@@ -215,49 +241,53 @@ export default function DashboardPage() {
             >
               Edit setup
             </button>
-          </div>
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       <main className="mx-auto max-w-7xl space-y-10 px-6 py-12 lg:px-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease }}
-          className="space-y-8"
-        >
-          <div>
-            <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-              Current value
-            </p>
-            <h1 className="text-6xl font-bold font-pixel tracking-tight text-foreground lg:text-7xl">
-              ${currentValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </h1>
-          </div>
+        {strategyLoading || !strategy ? (
+          <DashboardHeroSkeleton />
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease }}
+            className="space-y-8"
+          >
+            <div>
+              <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                Current value
+              </p>
+              <h1 className="text-6xl font-bold font-pixel tracking-tight text-foreground lg:text-7xl">
+                ${currentValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </h1>
+            </div>
 
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-            <div>
-              <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                Total deposited
-              </p>
-              <p className="text-lg font-mono font-bold">${depositedAmount.toLocaleString()}</p>
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+              <div>
+                <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                  Total deposited
+                </p>
+                <p className="text-lg font-mono font-bold">${depositedAmount.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                  Net earned
+                </p>
+                <p className="text-lg font-mono font-bold text-[#ea580c]">
+                  ${netEarned.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                  Total APR
+                </p>
+                <p className="text-lg font-mono font-bold">%{totalAPR.toFixed(2)}</p>
+              </div>
             </div>
-            <div>
-              <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                Net earned
-              </p>
-              <p className="text-lg font-mono font-bold text-[#ea580c]">
-                ${netEarned.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                Total APR
-              </p>
-              <p className="text-lg font-mono font-bold">%{totalAPR.toFixed(2)}</p>
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         <div className="border-t border-border pt-8">
           <div className="mb-8 flex gap-8 border-b border-border">
@@ -285,12 +315,20 @@ export default function DashboardPage() {
 
           {activeTab === "overview" && (
             <div className="space-y-6">
+            {strategy && poolsLoading ? (
+              <PoolMetricsStripSkeleton tiles={Object.keys(strategy.poolAllocations).filter((id) => strategy.poolAllocations[id] > 0).length || 3} />
+            ) : strategy ? (
             <PoolMetricsStrip
               poolAllocations={strategy.poolAllocations}
               pools={pools}
-              loading={loading}
+              loading={poolsLoading}
             />
+            ) : null}
 
+            {!strategy || strategyLoading ? (
+              <ActivePoolsPanelSkeleton />
+            ) : (
+            <>
             <div className="flex flex-wrap items-center justify-between gap-4 border border-border px-4 py-4">
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
@@ -380,6 +418,8 @@ export default function DashboardPage() {
                 emptyLabel="No supported tokens in active pools"
               />
             </div>
+            </>
+            )}
             </div>
           )}
 
@@ -393,7 +433,9 @@ export default function DashboardPage() {
                 <p className="font-mono text-xs text-[#ea580c]">{poolsError}</p>
               )}
 
-              {marketRows.length === 0 ? (
+              {poolsLoading || strategyLoading || !strategy ? (
+                <MarketsTableSkeleton rows={4} />
+              ) : marketRows.length === 0 ? (
                 <p className="font-mono text-xs text-muted-foreground">
                   No pool allocations configured. Edit setup to assign capital to QuickSwap pools.
                 </p>
@@ -409,15 +451,27 @@ export default function DashboardPage() {
                     ))}
                   </div>
                   <div className="border border-border">
+                    <div className="hidden border-b border-border bg-muted/20 px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground lg:grid lg:grid-cols-8 lg:gap-4">
+                      <div className="col-span-2">Pool</div>
+                      <div>TVL</div>
+                      <div>Volume</div>
+                      <div>Liquidity</div>
+                      <div>APY</div>
+                      <div>Allocated</div>
+                      <div>Value</div>
+                    </div>
                     {marketRows.map((market) => (
                       <div
                         key={market.id}
-                        className="grid grid-cols-2 gap-4 border-b border-border p-4 last:border-b-0 lg:grid-cols-5"
+                        className="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-border p-4 last:border-b-0 lg:grid-cols-8 lg:items-center"
                       >
-                        <div className="col-span-2 flex items-center gap-2 font-mono text-sm">
-                          <div className={`h-3 w-3 shrink-0 rounded-full ${market.color}`} />
+                        <div className="col-span-2 flex items-start gap-2 font-mono text-sm">
+                          <div className={`mt-1 h-3 w-3 shrink-0 rounded-full ${market.color}`} />
                           <div>
-                            <p>{market.name}</p>
+                            <p className="text-foreground">{market.name}</p>
+                            <p className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              {market.pair}
+                            </p>
                             {market.priceHint && (
                               <p className="mt-0.5 text-[10px] text-muted-foreground">
                                 {market.priceHint}
@@ -425,25 +479,32 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
-                        <div className="font-mono text-sm">
+                        <div className="font-mono text-sm text-foreground">
+                          <span className="text-muted-foreground lg:hidden">TVL </span>
+                          {market.tvlUsd}
+                        </div>
+                        <div className="font-mono text-sm text-foreground">
+                          <span className="text-muted-foreground lg:hidden">Volume </span>
+                          {market.volumeUsd}
+                        </div>
+                        <div className="font-mono text-sm text-foreground">
+                          <span className="text-muted-foreground lg:hidden">Liquidity </span>
+                          {market.liquidity}
+                        </div>
+                        <div className="font-mono text-sm text-foreground">
+                          <span className="text-muted-foreground lg:hidden">APY </span>
+                          {market.apy}
+                        </div>
+                        <div className="font-mono text-sm text-foreground">
                           <span className="text-muted-foreground lg:hidden">Allocated </span>
                           {market.allocated.toFixed(1)}%
                         </div>
-                        <div className="font-mono text-sm">
+                        <div className="font-mono text-sm text-foreground">
                           <span className="text-muted-foreground lg:hidden">Value </span>$
                           {market.value.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
-                        </div>
-                        <div className="font-mono text-sm">
-                          <span className="text-muted-foreground lg:hidden">Fee </span>
-                          {market.feePercent != null
-                            ? `${market.feePercent}% swap`
-                            : "—"}
-                          <span className="block text-[10px] text-muted-foreground">
-                            Liq {market.liquidity}
-                          </span>
                         </div>
                       </div>
                     ))}
@@ -480,6 +541,6 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
-    </div>
+    </>
   )
 }

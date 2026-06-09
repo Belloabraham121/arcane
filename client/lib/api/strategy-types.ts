@@ -2,7 +2,8 @@ export type PoolId = string;
 
 export type StrategyType = "auto" | "custom";
 
-export type PoolAllocations = Partial<Record<PoolId, number>> & Record<string, number>;
+export type PoolAllocations = Partial<Record<PoolId, number>> &
+  Record<string, number>;
 
 export type SubAgentRiskLimits = {
   maxSwapPortfolioPercent?: number;

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { fetchPools } from "@/lib/api/quickswap"
 import type {
   FetchPoolsOptions,
@@ -12,16 +12,23 @@ export function useQuickSwapPools(options?: FetchPoolsOptions) {
   const [pools, setPools] = useState<QuickSwapPool[]>([])
   const [meta, setMeta] = useState<PoolsListMeta | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refetching, setRefetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hasLoadedRef = useRef(false)
 
   const context = options?.context
   const sort = options?.sort
 
   useEffect(() => {
     let cancelled = false
+    const isRefetch = hasLoadedRef.current
 
     async function load() {
-      setLoading(true)
+      if (isRefetch) {
+        setRefetching(true)
+      } else {
+        setLoading(true)
+      }
       setError(null)
 
       const result = await fetchPools({ context, sort })
@@ -32,20 +39,23 @@ export function useQuickSwapPools(options?: FetchPoolsOptions) {
       if (!result.success || !result.data) {
         setError(result.error?.message ?? "Failed to load QuickSwap pools")
         setLoading(false)
+        setRefetching(false)
         return
       }
 
       setPools(result.data.pools)
       setMeta(result.data.meta ?? null)
+      hasLoadedRef.current = true
       setLoading(false)
+      setRefetching(false)
     }
 
-    load()
+    void load()
 
     return () => {
       cancelled = true
     }
   }, [context, sort])
 
-  return { pools, meta, loading, error }
+  return { pools, meta, loading, refetching, error }
 }

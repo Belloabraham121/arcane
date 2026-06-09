@@ -1,134 +1,119 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { AppNavBar } from "@/components/auth/app-nav-bar"
-import { DraggableGridPanel } from "@/components/draggable-grid-panel"
-import { LiveTradingFeed } from "@/components/live-trading-feed"
-import { PoolNodesLegend } from "@/components/pool-nodes-legend"
-import { PoolTradingCanvas } from "@/components/pool-trading-canvas"
-import { useTradingSocket } from "@/hooks/use-trading-socket"
-import { getMe } from "@/lib/api/auth"
-import { getAgentStrategy } from "@/lib/api/strategy"
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { PageSubBar } from "@/components/layout/page-sub-bar";
+import { AgentsCanvasSkeleton } from "@/components/skeletons/content-skeletons";
+import { DraggableGridPanel } from "@/components/draggable-grid-panel";
+import { LiveTradingFeed } from "@/components/live-trading-feed";
+import { PoolNodesLegend } from "@/components/pool-nodes-legend";
+import { PoolTradingCanvas } from "@/components/pool-trading-canvas";
+import { useTradingSocket } from "@/hooks/use-trading-socket";
+import { getAgentStrategy } from "@/lib/api/strategy";
+import { useSession } from "@/providers/session-provider";
 import {
   DEFAULT_POOL_ALLOCATIONS,
   type PoolAllocations,
-} from "@/lib/api/strategy-types"
-import { POOL_LABELS } from "@/lib/strategy-presets"
-import { activePoolIds } from "@/lib/pool-network-layout"
-import { APP_ROUTES } from "@/lib/routing/app-routes"
-import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
+} from "@/lib/api/strategy-types";
+import { POOL_LABELS } from "@/lib/strategy-presets";
+import { activePoolIds } from "@/lib/pool-network-layout";
+import { APP_ROUTES } from "@/lib/routing/app-routes";
+import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth";
 import {
   GRID_SIZE,
   snapToGrid,
   usePanelLayout,
   type PanelId,
-} from "@/hooks/use-panel-layout"
+} from "@/hooks/use-panel-layout";
 
 export default function AgentsPage() {
-  const router = useRouter()
-  const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>(DEFAULT_POOL_ALLOCATIONS)
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const workspaceRef = useRef<HTMLDivElement>(null)
-  const { layouts, updatePanel, toggleCollapsed, hydrated } = usePanelLayout()
-  const [defaultsApplied, setDefaultsApplied] = useState(false)
+  const router = useRouter();
+  const { sessionReady } = useSession();
+  const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>(
+    DEFAULT_POOL_ALLOCATIONS,
+  );
+  const [loading, setLoading] = useState(true);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const { layouts, updatePanel, toggleCollapsed, hydrated } = usePanelLayout();
+  const [defaultsApplied, setDefaultsApplied] = useState(false);
 
-  const poolIds = useMemo(() => activePoolIds(poolAmounts), [poolAmounts])
+  const poolIds = useMemo(() => activePoolIds(poolAmounts), [poolAmounts]);
 
   const { connected, feedItems, routeCommand, cycleActive } = useTradingSocket({
     enabled: !loading,
-  })
+  });
 
   useEffect(() => {
-    async function load() {
-      const route = await resolvePostAuthRoute()
-      if (route !== APP_ROUTES.dashboard) {
-        router.replace(route)
-        return
-      }
-
-      const [meResult, strategyResult] = await Promise.all([
-        getMe(),
-        getAgentStrategy(),
-      ])
-
-      if (meResult.success && meResult.data?.user.walletAddress) {
-        setWalletAddress(meResult.data.user.walletAddress)
-      }
-
-      if (strategyResult.success && strategyResult.data?.strategy) {
-        setPoolAmounts(strategyResult.data.strategy.poolAllocations)
-      }
-
-      setLoading(false)
+    if (!sessionReady) {
+      return;
     }
 
-    load()
-  }, [router])
+    async function load() {
+      const route = await resolvePostAuthRoute();
+      if (route !== APP_ROUTES.dashboard) {
+        router.replace(route);
+        return;
+      }
+
+      const strategyResult = await getAgentStrategy();
+
+      if (strategyResult.success && strategyResult.data?.strategy) {
+        setPoolAmounts(strategyResult.data.strategy.poolAllocations);
+      }
+
+      setLoading(false);
+    }
+
+    void load();
+  }, [router, sessionReady]);
 
   useEffect(() => {
-    if (!hydrated || defaultsApplied || !workspaceRef.current) return
+    if (!hydrated || defaultsApplied || !workspaceRef.current) return;
     const hasStoredLayout =
       typeof window !== "undefined" &&
-      !!localStorage.getItem("arcane-agents-panel-layout")
+      !!localStorage.getItem("arcane-agents-panel-layout");
     if (!hasStoredLayout) {
-      const h = workspaceRef.current.clientHeight
+      const h = workspaceRef.current.clientHeight;
       updatePanel("protocol-allocation", {
         x: snapToGrid(24),
         y: snapToGrid(Math.max(24, h - 280)),
-      })
+      });
       updatePanel("legend", {
         x: snapToGrid(24),
         y: snapToGrid(Math.max(24, h - 200)),
-      })
+      });
       updatePanel("viz-info", {
         x: snapToGrid(24),
         y: snapToGrid(Math.max(24, h - 120)),
-      })
+      });
     }
-    setDefaultsApplied(true)
-  }, [hydrated, defaultsApplied, updatePanel])
+    setDefaultsApplied(true);
+  }, [hydrated, defaultsApplied, updatePanel]);
 
   const setPosition = (id: PanelId) => (x: number, y: number) => {
-    updatePanel(id, { x, y })
-  }
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background dot-grid-bg">
-        <p className="font-mono text-xs text-muted-foreground">Loading agent network…</p>
-      </div>
-    )
-  }
+    updatePanel(id, { x, y });
+  };
 
   return (
-    <div className="min-h-screen bg-background dot-grid-bg">
-      <AppNavBar walletAddress={walletAddress} />
+    <>
+      <PageSubBar
+        title={
+          cycleActive
+            ? "QuickSwap Agent Network · cycle active"
+            : "QuickSwap Agent Network"
+        }
+        action={
+          connected ? (
+            <span className="font-mono text-[10px] text-[#16a34a]">live</span>
+          ) : undefined
+        }
+        backHref={APP_ROUTES.dashboard}
+        backLabel="Back to dashboard"
+      />
 
-      <div className="border-b border-border bg-background/50 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-6 py-4 lg:px-12">
-          <div className="flex items-center justify-between">
-            <div className="font-mono text-xs text-muted-foreground">
-              QuickSwap Agent Network
-              {cycleActive && (
-                <span className="ml-2 text-[#ea580c]">· cycle active</span>
-              )}
-              {connected && (
-                <span className="ml-2 text-[#16a34a]">· live</span>
-              )}
-            </div>
-            <Link
-              href={APP_ROUTES.dashboard}
-              className="font-mono text-xs uppercase tracking-widest transition-colors hover:text-foreground"
-            >
-              Back to dashboard
-            </Link>
-          </div>
-        </div>
-      </div>
-
+      {loading ? (
+        <AgentsCanvasSkeleton />
+      ) : (
       <div
         ref={workspaceRef}
         className="relative h-[calc(100vh-120px)] w-full overflow-hidden"
@@ -190,7 +175,10 @@ export default function AgentsPage() {
             {Object.entries(poolAmounts)
               .filter(([, amount]) => amount > 0)
               .map(([key, amount]) => (
-                <div key={key} className="flex items-center justify-between gap-3">
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-3"
+                >
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     {POOL_LABELS[key] ?? key}
                   </span>
@@ -222,6 +210,7 @@ export default function AgentsPage() {
           </div>
         </DraggableGridPanel>
       </div>
-    </div>
-  )
+      )}
+    </>
+  );
 }

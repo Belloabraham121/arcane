@@ -2,6 +2,7 @@ import { getQuickSwapEnv } from "../../../config/env";
 import { listPoolsWithMetrics } from "./pool-metrics.service";
 import {
   buildLiquidityWeightedAllocations,
+  filterPoolsWithCompleteMetrics,
   rankPools,
   selectAutoPools,
   sortRankedPools,
@@ -42,7 +43,7 @@ export async function listPoolsForContext(input?: {
 }): Promise<PoolsListResult> {
   const context = input?.context ?? "all";
   const sort = input?.sort ?? (context === "custom" ? "liquidity" : "score");
-  const allPools = await listPoolsWithMetrics();
+  const allPools = filterPoolsWithCompleteMetrics(await listPoolsWithMetrics());
   const ranked = rankPools(allPools);
 
   if (context === "auto") {

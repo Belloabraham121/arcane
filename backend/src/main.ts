@@ -1,38 +1,12 @@
 import { createServer } from "node:http";
-import cookieParser from "cookie-parser";
-import cors from "cors";
-import express from "express";
-import { correlationIdMiddleware } from "./api/middleware/correlation-id";
-import { errorHandlerMiddleware } from "./api/middleware/error-handler";
-import { requestLoggerMiddleware } from "./api/middleware/request-logger";
-import { healthRouter } from "./api/routes/health";
-import { authRouter } from "./api/routes/v1/auth";
-import { agentStrategyRouter } from "./api/routes/v1/agents/strategy";
-import { agentTradingRouter } from "./api/routes/v1/agents/trading";
-import { quickswapPoolsRouter } from "./api/routes/v1/quickswap/pools";
-import { walletBalancesRouter } from "./api/routes/v1/wallets/balances";
+import { createApp } from "./app";
 import { getAuthEnv, getServerEnv } from "./config/env";
-import { createCorsOptions } from "./config/cors";
 import { prisma } from "./infrastructure/postgres/client";
 import { logger } from "./shared/logger";
 import { startTradingCycleWorker } from "./workers/trading-cycle.worker";
 import { initTradingSocketServer } from "./websocket/socket-server";
 
-const app = express();
-
-app.use(cors(createCorsOptions()));
-app.use(express.json());
-app.use(cookieParser());
-app.use(correlationIdMiddleware);
-app.use(requestLoggerMiddleware);
-app.use(healthRouter);
-app.use(authRouter);
-app.use(agentStrategyRouter);
-app.use(agentTradingRouter);
-app.use(quickswapPoolsRouter);
-app.use(walletBalancesRouter);
-
-app.use(errorHandlerMiddleware);
+const app = createApp();
 
 const { port, nodeEnv } = getServerEnv();
 

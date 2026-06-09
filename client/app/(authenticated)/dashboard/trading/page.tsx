@@ -3,8 +3,9 @@
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AppNavBar } from "@/components/auth/app-nav-bar"
-import { getMe } from "@/lib/api/auth"
+import { PageSubBar } from "@/components/layout/page-sub-bar"
+import { TradingHistoryTableSkeleton } from "@/components/skeletons/content-skeletons"
+import { useSession } from "@/providers/session-provider"
 import {
   fetchTradingCycleDetail,
   fetchTradingHistory,
@@ -137,7 +138,7 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
 
 export default function TradingHistoryPage() {
   const router = useRouter()
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
+  const { sessionReady } = useSession()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<TradingHistoryListItem[]>([])
   const [pagination, setPagination] = useState<TradingHistoryPagination | null>(
@@ -164,6 +165,10 @@ export default function TradingHistoryPage() {
   }, [])
 
   useEffect(() => {
+    if (!sessionReady) {
+      return
+    }
+
     async function init() {
       const route = await resolvePostAuthRoute()
       if (route !== APP_ROUTES.dashboard) {
@@ -171,17 +176,12 @@ export default function TradingHistoryPage() {
         return
       }
 
-      const meResult = await getMe()
-      if (meResult.success && meResult.data?.user.walletAddress) {
-        setWalletAddress(meResult.data.user.walletAddress)
-      }
-
       await loadPage(1)
       setLoading(false)
     }
 
-    init()
-  }, [router, loadPage])
+    void init()
+  }, [router, loadPage, sessionReady])
 
   async function toggleExpand(cycleId: string) {
     if (expandedId === cycleId) {
@@ -204,49 +204,25 @@ export default function TradingHistoryPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background dot-grid-bg">
-        <p className="font-mono text-xs text-muted-foreground">
-          Loading trading history…
-        </p>
-      </div>
-    )
-  }
-
   const totalPages = pagination?.totalPages ?? 1
 
   return (
-    <div className="min-h-screen bg-background dot-grid-bg">
-      <AppNavBar walletAddress={walletAddress} />
-
-      <div className="border-b border-border bg-background/50 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-6 py-4 lg:px-12">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-mono text-xs text-muted-foreground">
-                Trading history
-              </p>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Cycles, LLM reasoning, and on-chain actions on Somnia mainnet
-              </p>
-            </div>
-            <Link
-              href={APP_ROUTES.dashboard}
-              className="font-mono text-xs uppercase tracking-widest text-[#ea580c] hover:text-[#ff7a2a]"
-            >
-              Back to dashboard
-            </Link>
-          </div>
-        </div>
-      </div>
+    <>
+      <PageSubBar
+        title="Trading history"
+        subtitle="Cycles, LLM reasoning, and on-chain actions on Somnia mainnet"
+        backHref={APP_ROUTES.dashboard}
+        backLabel="Back to dashboard"
+      />
 
       <main className="mx-auto max-w-7xl px-6 py-10 lg:px-12">
         {error && (
           <p className="mb-6 font-mono text-xs text-[#ea580c]">{error}</p>
         )}
 
-        {items.length === 0 ? (
+        {loading ? (
+          <TradingHistoryTableSkeleton rows={8} />
+        ) : items.length === 0 ? (
           <div className="border border-border p-8 text-center">
             <p className="font-mono text-sm text-muted-foreground">
               No trading cycles recorded yet.
@@ -348,6 +324,6 @@ export default function TradingHistoryPage() {
           </div>
         )}
       </main>
-    </div>
+    </>
   )
 }

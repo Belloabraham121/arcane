@@ -1,20 +1,20 @@
-import { DEFAULT_POOL_ALLOCATIONS } from "@/lib/api/strategy-types"
+import { DEFAULT_POOL_ALLOCATIONS } from "@/lib/api/strategy-types";
 
 export type PresetSubAgent = {
-  id: string
-  name: string
-  model: string
-  role: string
-}
+  id: string;
+  name: string;
+  model: string;
+  role: string;
+};
 
 export type CustomSubAgent = {
-  id: string
-  name: string
-  role: string
-  enabled: boolean
-}
+  id: string;
+  name: string;
+  role: string;
+  enabled: boolean;
+};
 
-export const AUTO_PRESET_POOLS = DEFAULT_POOL_ALLOCATIONS
+export const AUTO_PRESET_POOLS = DEFAULT_POOL_ALLOCATIONS;
 
 export const AUTO_PRESET_SUB_AGENTS: PresetSubAgent[] = [
   {
@@ -41,7 +41,7 @@ export const AUTO_PRESET_SUB_AGENTS: PresetSubAgent[] = [
     model: "GPT-4o-mini",
     role: "Caps exposure per QuickSwap pool and pauses risky routes",
   },
-]
+];
 
 export const DEFAULT_CUSTOM_SUB_AGENTS: CustomSubAgent[] = [
   {
@@ -68,13 +68,13 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: CustomSubAgent[] = [
     role: "Find and evaluate cross-chain opportunities",
     enabled: false,
   },
-]
+];
 
 export const POOL_LABELS: Record<string, string> = {
   "usdce-wsomi": "USDCe/WSOMI",
   "usdce-weth": "USDCe/WETH",
   "wsomi-weth": "WSOMI/WETH",
-}
+};
 
 /** @deprecated Use POOL_LABELS */
-export const PROTOCOL_LABELS = POOL_LABELS
+export const PROTOCOL_LABELS = POOL_LABELS;

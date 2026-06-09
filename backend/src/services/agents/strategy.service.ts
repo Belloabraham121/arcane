@@ -36,13 +36,19 @@ export async function parsePoolAllocations(
     return undefined;
   }
   if (typeof input !== "object") {
-    throw new StrategyError("VALIDATION_ERROR", "poolAllocations must be an object");
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "poolAllocations must be an object",
+    );
   }
 
   const record = input as Record<string, unknown>;
   const keys = Object.keys(record);
   if (keys.length === 0) {
-    throw new StrategyError("VALIDATION_ERROR", "At least one pool allocation is required");
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "At least one pool allocation is required",
+    );
   }
 
   const result = {} as PoolAllocations;
@@ -75,7 +81,9 @@ export async function parsePoolAllocations(
   return result;
 }
 
-export function parseSubAgents(input: unknown): SubAgentConfigItem[] | undefined {
+export function parseSubAgents(
+  input: unknown,
+): SubAgentConfigItem[] | undefined {
   if (input == null) {
     return undefined;
   }
@@ -83,12 +91,18 @@ export function parseSubAgents(input: unknown): SubAgentConfigItem[] | undefined
     throw new StrategyError("VALIDATION_ERROR", "subAgents must be an array");
   }
   if (input.length === 0) {
-    throw new StrategyError("VALIDATION_ERROR", "At least one sub-agent is required");
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "At least one sub-agent is required",
+    );
   }
 
   return input.map((item, index) => {
     if (typeof item !== "object" || item == null) {
-      throw new StrategyError("VALIDATION_ERROR", `Invalid sub-agent at index ${index}`);
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        `Invalid sub-agent at index ${index}`,
+      );
     }
     const record = item as Record<string, unknown>;
     const id = record.id;
@@ -98,19 +112,34 @@ export function parseSubAgents(input: unknown): SubAgentConfigItem[] | undefined
     const enabled = record.enabled;
 
     if (typeof id !== "string" || id.trim().length === 0) {
-      throw new StrategyError("VALIDATION_ERROR", `subAgents[${index}].id is required`);
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        `subAgents[${index}].id is required`,
+      );
     }
     if (typeof name !== "string" || name.trim().length === 0) {
-      throw new StrategyError("VALIDATION_ERROR", `subAgents[${index}].name is required`);
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        `subAgents[${index}].name is required`,
+      );
     }
     if (typeof model !== "string" || model.trim().length === 0) {
-      throw new StrategyError("VALIDATION_ERROR", `subAgents[${index}].model is required`);
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        `subAgents[${index}].model is required`,
+      );
     }
     if (typeof systemPrompt !== "string" || systemPrompt.trim().length === 0) {
-      throw new StrategyError("VALIDATION_ERROR", `subAgents[${index}].systemPrompt is required`);
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        `subAgents[${index}].systemPrompt is required`,
+      );
     }
     if (typeof enabled !== "boolean") {
-      throw new StrategyError("VALIDATION_ERROR", `subAgents[${index}].enabled must be a boolean`);
+      throw new StrategyError(
+        "VALIDATION_ERROR",
+        `subAgents[${index}].enabled must be a boolean`,
+      );
     }
 
     let limits: SubAgentConfigItem["limits"];
@@ -188,7 +217,9 @@ export function parseSubAgents(input: unknown): SubAgentConfigItem[] | undefined
   });
 }
 
-function defaultSubAgentsForType(strategyType: StrategyType): SubAgentConfigItem[] {
+function defaultSubAgentsForType(
+  strategyType: StrategyType,
+): SubAgentConfigItem[] {
   return strategyType === "auto"
     ? DEFAULT_AUTO_SUB_AGENTS.map((agent) => ({ ...agent }))
     : DEFAULT_CUSTOM_SUB_AGENTS.map((agent) => ({ ...agent }));
@@ -269,7 +300,9 @@ function toResponse(
   };
 }
 
-export async function getUserStrategy(userId: string): Promise<AgentStrategyResponse | null> {
+export async function getUserStrategy(
+  userId: string,
+): Promise<AgentStrategyResponse | null> {
   const strategy = await repo.findStrategyByUserId(userId);
   if (!strategy) {
     return null;
@@ -293,7 +326,10 @@ export async function upsertUserStrategy(
     input.depositAmount ?? (status === "active" ? DEFAULT_DEPOSIT_AMOUNT : 0);
 
   if (!Number.isFinite(depositAmount) || depositAmount < 0) {
-    throw new StrategyError("VALIDATION_ERROR", "depositAmount must be a non-negative number");
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "depositAmount must be a non-negative number",
+    );
   }
 
   if (status === "active" && depositAmount <= 0) {
@@ -324,12 +360,12 @@ export async function upsertUserStrategy(
 
   const cycleIntervalMinutes =
     input.cycleIntervalMinutes !== undefined
-      ? parseCycleIntervalMinutes(input.strategyType, input.cycleIntervalMinutes)
+      ? parseCycleIntervalMinutes(
+          input.strategyType,
+          input.cycleIntervalMinutes,
+        )
       : undefined;
-  if (
-    input.strategyType === "auto" &&
-    input.cycleIntervalMinutes != null
-  ) {
+  if (input.strategyType === "auto" && input.cycleIntervalMinutes != null) {
     throw new StrategyError(
       "VALIDATION_ERROR",
       "cycleIntervalMinutes applies to custom agents only",
@@ -374,7 +410,11 @@ export async function patchPoolAllocations(
 ): Promise<AgentStrategyResponse> {
   const strategy = await repo.updatePoolAllocations(userId, poolAllocations);
   if (!strategy) {
-    throw new StrategyError("STRATEGY_NOT_FOUND", "No agent strategy found for user", 404);
+    throw new StrategyError(
+      "STRATEGY_NOT_FOUND",
+      "No agent strategy found for user",
+      404,
+    );
   }
 
   log.info("Pool allocations updated", { userId });
@@ -388,12 +428,19 @@ export async function patchSubAgents(
 ): Promise<AgentStrategyResponse> {
   const enabledCount = subAgents.filter((agent) => agent.enabled).length;
   if (enabledCount === 0) {
-    throw new StrategyError("VALIDATION_ERROR", "At least one sub-agent must be enabled");
+    throw new StrategyError(
+      "VALIDATION_ERROR",
+      "At least one sub-agent must be enabled",
+    );
   }
 
   const strategy = await repo.updateSubAgentConfig(userId, subAgents);
   if (!strategy) {
-    throw new StrategyError("STRATEGY_NOT_FOUND", "No agent strategy found for user", 404);
+    throw new StrategyError(
+      "STRATEGY_NOT_FOUND",
+      "No agent strategy found for user",
+      404,
+    );
   }
 
   log.info("Sub-agent config updated", { userId, count: subAgents.length });

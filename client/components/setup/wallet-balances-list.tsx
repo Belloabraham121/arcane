@@ -1,4 +1,5 @@
 import type { WalletTokenBalance } from "@/lib/api/wallet"
+import { WalletBalancesSkeleton } from "@/components/skeletons/content-skeletons"
 
 type WalletBalancesListProps = {
   balances: WalletTokenBalance[]
@@ -18,7 +19,7 @@ export function WalletBalancesList({
   }
 
   if (loading && balances.length === 0) {
-    return <p className="font-mono text-xs text-muted-foreground">Loading balances…</p>
+    return <WalletBalancesSkeleton rows={3} />
   }
 
   if (balances.length === 0) {

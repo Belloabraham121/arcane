@@ -1,9 +1,11 @@
 /**
- * Smoke-test QuoterV2 + pool price metrics (Phase 1.2).
+ * Smoke-test QuoterV2 + enriched pool metrics (Phase 8).
  * Usage: npm run smoke:quickswap:quote
  */
 
+import "dotenv/config";
 import { quoteExactIn } from "../src/services/defi/quickswap/quote.service";
+import { listPoolsForContext } from "../src/services/defi/quickswap/pool-list.service";
 import { getEnrichedPool } from "../src/services/defi/quickswap/pool-metrics.service";
 
 const USDCe = "0x28BEc7E30E6faee657a03e19Bf1128AaD7632A00" as const;
@@ -14,10 +16,32 @@ async function main() {
   console.log("USDCe → WSOMI (1 USDCe):");
   console.log(JSON.stringify(quote, null, 2));
 
-  const enriched = await getEnrichedPool("usdce-wsomi");
+  const { pools } = await listPoolsForContext({ context: "all", sort: "tvl" });
+  const wsomiPool = pools.find(
+    (pool) =>
+      pool.token0.symbol === "WSOMI" ||
+      pool.token1.symbol === "WSOMI",
+  );
+
+  if (!wsomiPool) {
+    throw new Error("No WSOMI pool found in catalog");
+  }
+
+  const enriched = await getEnrichedPool(wsomiPool.id);
   if (enriched) {
-    console.log("\nEnriched pool usdce-wsomi:");
-    console.log(JSON.stringify(enriched, null, 2));
+    console.log(`\nEnriched pool ${wsomiPool.label} (${wsomiPool.id}):`);
+    console.log(
+      JSON.stringify(
+        {
+          id: enriched.id,
+          label: enriched.label,
+          metrics: enriched.metrics,
+          sampleQuotes: enriched.sampleQuotes,
+        },
+        null,
+        2,
+      ),
+    );
   }
 }
 

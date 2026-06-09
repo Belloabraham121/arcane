@@ -1,7 +1,11 @@
 import { useMemo } from "react"
+import { PoolStatsBadges } from "@/components/pool-stats-badges"
+import { PoolAllocationEditorSkeleton } from "@/components/skeletons/content-skeletons"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { PoolSortField, QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
-import { formatLiquidity } from "@/lib/pool-allocations"
+import { poolDisplayStats } from "@/lib/pool-display"
+import { resolvePoolById } from "@/lib/pool-resolve"
 
 const SORT_OPTIONS: Array<{ value: PoolSortField; label: string }> = [
   { value: "liquidity", label: "Liquidity" },
@@ -18,23 +22,12 @@ type PoolAllocationEditorProps = {
   /** When true, shows active pools separately from a browsable add-pool catalog. */
   editMode?: boolean
   loading?: boolean
+  refetching?: boolean
   error?: string | null
   title?: string
   subtitle?: string | null
   sort?: PoolSortField
   onSortChange?: (sort: PoolSortField) => void
-}
-
-function priceHint(pool: QuickSwapPool): string {
-  return pool.metrics.priceLabel ?? "Price unavailable"
-}
-
-function formatApy(pool: QuickSwapPool): string | null {
-  const apy = pool.metrics.feeApr
-  if (apy == null || !Number.isFinite(apy) || apy <= 0) {
-    return null
-  }
-  return `${apy.toFixed(2)}% APR`
 }
 
 function shortPoolId(poolId: string): string {
@@ -81,25 +74,29 @@ function stubPool(poolId: string): QuickSwapPool {
 }
 
 function PoolMetricsLines({ pool }: { pool: QuickSwapPool }) {
-  const apyLabel = formatApy(pool)
+  const stats = poolDisplayStats(pool)
 
   return (
     <>
-      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-        {pool.token0.symbol}/{pool.token1.symbol} ·{" "}
-        {pool.metrics.feeTierPercent != null
-          ? `${pool.metrics.feeTierPercent}% fee`
-          : apyLabel ?? "fee —"}
+      <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+        {stats.pair}
       </p>
-      {apyLabel && pool.metrics.feeTierPercent != null && (
-        <p className="mt-1 font-mono text-[10px] text-muted-foreground">{apyLabel}</p>
+      <div className="mt-1">
+        <PoolStatsBadges
+          tvlUsd={stats.tvlUsd}
+          volumeUsd={stats.volumeUsd}
+          liquidity={stats.liquidity}
+          apy={stats.apy}
+        />
+      </div>
+      {stats.priceHint && (
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground">{stats.priceHint}</p>
       )}
-      <p className="mt-1 font-mono text-[10px] text-muted-foreground">{priceHint(pool)}</p>
-      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-        {pool.metrics.totalValueLockedUsd != null
-          ? `TVL $${Number(pool.metrics.totalValueLockedUsd).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
-          : `Liquidity ${formatLiquidity(pool.metrics.liquidity)}`}
-      </p>
+      {pool.metrics.feeTierPercent != null && (
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+          Swap fee {pool.metrics.feeTierPercent}%
+        </p>
+      )}
     </>
   )
 }
@@ -111,6 +108,7 @@ export function PoolAllocationEditor({
   mode = "auto",
   editMode = false,
   loading = false,
+  refetching = false,
   error = null,
   title = "QuickSwap pool allocation",
   subtitle = null,
@@ -118,10 +116,6 @@ export function PoolAllocationEditor({
   onSortChange,
 }: PoolAllocationEditorProps) {
   const total = Object.values(values).reduce((sum, value) => sum + value, 0)
-  const poolById = useMemo(
-    () => Object.fromEntries(pools.map((pool) => [pool.id, pool])),
-    [pools],
-  )
 
   const { activePools, catalogPools } = useMemo(() => {
     if (!editMode) {
@@ -132,12 +126,12 @@ export function PoolAllocationEditor({
       .filter(([, amount]) => amount > 0)
       .map(([id]) => id)
 
-    const active = activeIds.map((id) => poolById[id] ?? stubPool(id))
+    const active = activeIds.map((id) => resolvePoolById(id, pools) ?? stubPool(id))
     const activeIdSet = new Set(activeIds)
     const catalog = pools.filter((pool) => !activeIdSet.has(pool.id))
 
     return { activePools: active, catalogPools: catalog }
-  }, [editMode, pools, values, poolById])
+  }, [editMode, pools, values])
 
   function setAmount(poolId: string, amount: number) {
     onChange({ ...values, [poolId]: Math.max(0, amount) })
@@ -205,7 +199,7 @@ export function PoolAllocationEditor({
   }
 
   function renderCatalogPool(pool: QuickSwapPool) {
-    const apyLabel = formatApy(pool)
+    const stats = poolDisplayStats(pool)
 
     return (
       <div
@@ -213,14 +207,16 @@ export function PoolAllocationEditor({
         className="flex items-start justify-between gap-3 border-b border-border py-3 last:border-b-0"
       >
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-xs uppercase tracking-wide text-foreground">{pool.label}</p>
-          <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-            {pool.token0.symbol}/{pool.token1.symbol}
-            {apyLabel ? ` · ${apyLabel}` : ""}
-            {pool.metrics.totalValueLockedUsd != null
-              ? ` · TVL $${Number(pool.metrics.totalValueLockedUsd).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
-              : ""}
-          </p>
+          <p className="font-mono text-xs uppercase tracking-wide text-foreground">{stats.label}</p>
+          <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{stats.pair}</p>
+          <div className="mt-1">
+            <PoolStatsBadges
+              tvlUsd={stats.tvlUsd}
+              volumeUsd={stats.volumeUsd}
+              liquidity={stats.liquidity}
+              apy={stats.apy}
+            />
+          </div>
         </div>
         <button
           type="button"
@@ -283,14 +279,7 @@ export function PoolAllocationEditor({
   }
 
   if (loading) {
-    return (
-      <div className="border border-border p-6">
-        <p className="mb-4 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-          {title}
-        </p>
-        <p className="font-mono text-xs text-muted-foreground">Loading QuickSwap pools…</p>
-      </div>
-    )
+    return <PoolAllocationEditorSkeleton rows={editMode ? 3 : 4} />
   }
 
   if (error) {
@@ -318,7 +307,10 @@ export function PoolAllocationEditor({
   const showSort = editMode ? onSortChange : mode === "custom" && onSortChange
 
   return (
-    <div className="border border-border p-6">
+    <div className="relative border border-border p-6">
+      {refetching && (
+        <div className="pointer-events-none absolute inset-0 z-10 bg-background/60 backdrop-blur-[1px]" />
+      )}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
@@ -335,7 +327,7 @@ export function PoolAllocationEditor({
             Sort
             <select
               value={sort}
-              onChange={(e) => onSortChange(e.target.value as PoolSortField)}
+              onChange={(e) => onSortChange?.(e.target.value as PoolSortField)}
               className="rounded border border-border bg-background px-2 py-1 text-[10px] text-foreground"
             >
               {SORT_OPTIONS.map((option) => (
@@ -349,7 +341,7 @@ export function PoolAllocationEditor({
       </div>
 
       {editMode ? (
-        <div className="space-y-6">
+        <div className={`space-y-6 ${refetching ? "opacity-60" : ""}`}>
           <div>
             <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               Your pools ({activePools.length})
@@ -374,13 +366,33 @@ export function PoolAllocationEditor({
               <p className="font-mono text-[10px] text-muted-foreground">
                 All available pools are already in your strategy.
               </p>
+            ) : refetching ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="space-y-2 border-b border-border py-3 last:border-b-0">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-2 w-40" />
+                    <Skeleton className="h-2 w-52" />
+                  </div>
+                ))}
+              </div>
             ) : (
               <div>{catalogPools.map(renderCatalogPool)}</div>
             )}
           </div>
         </div>
       ) : (
-        <div className="space-y-5">{pools.map(renderSetupPool)}</div>
+        <div className={`space-y-5 ${refetching ? "opacity-60" : ""}`}>
+          {refetching
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="space-y-2 border-b border-border pb-4 last:border-b-0">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-2 w-40" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ))
+            : pools.map(renderSetupPool)}
+        </div>
       )}
     </div>
   )

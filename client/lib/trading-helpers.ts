@@ -7,7 +7,16 @@ import type {
   TradingHistoryDetail,
   TradingStatus,
 } from "@/lib/api/trading"
+import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
+import {
+  formatApyPercent,
+  formatOnChainLiquidity,
+  formatPoolTvlUsd,
+  formatPoolVolumeUsd,
+  poolPairLabel,
+} from "@/lib/pool-display"
+import { activeResolvablePoolEntries, resolvePoolById } from "@/lib/pool-resolve"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 
 export type AgentDisplayStatus =
@@ -81,6 +90,11 @@ export function deriveAgentDisplayStatus(input: {
 export type ActivePoolRow = {
   poolId: string
   label: string
+  pair: string
+  tvlUsd: string
+  volumeUsd: string
+  liquidity: string
+  apy: string
   targetPercent: number
   currentPercent: number | null
   driftPercent: number | null
@@ -89,19 +103,25 @@ export type ActivePoolRow = {
 export function buildActivePoolRows(
   poolAllocations: PoolAllocations,
   poolDrift: PoolAllocationDrift[] | undefined,
+  pools: QuickSwapPool[] = [],
 ): ActivePoolRow[] {
-  const entries = Object.entries(poolAllocations).filter(([, amount]) => amount > 0)
+  const entries = activeResolvablePoolEntries(poolAllocations, pools)
   const total = entries.reduce((sum, [, amount]) => sum + amount, 0)
   const driftById = Object.fromEntries(
     (poolDrift ?? []).map((row) => [row.poolId, row]),
   )
-
   return entries.map(([poolId, amount]) => {
     const drift = driftById[poolId]
+    const pool = resolvePoolById(poolId, pools)!
     const targetPercent = total > 0 ? (amount / total) * 100 : 0
     return {
       poolId,
-      label: drift?.label ?? POOL_LABELS[poolId] ?? poolId,
+      label: drift?.label ?? pool?.label ?? POOL_LABELS[poolId] ?? poolId,
+      pair: pool ? poolPairLabel(pool) : "—",
+      tvlUsd: pool ? formatPoolTvlUsd(pool.metrics.totalValueLockedUsd) : "—",
+      volumeUsd: pool ? formatPoolVolumeUsd(pool.metrics.volumeUsd) : "—",
+      liquidity: pool ? formatOnChainLiquidity(pool.metrics.liquidity) : "—",
+      apy: pool ? formatApyPercent(pool.metrics.feeApr) : "—",
       targetPercent,
       currentPercent: drift?.currentPercent ?? null,
       driftPercent: drift?.driftPercent ?? null,

@@ -24,6 +24,29 @@ export function parseUsdMetric(value: string | null | undefined): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+export function parseOnChainLiquidity(value: string | null | undefined): bigint {
+  try {
+    const raw = BigInt(value ?? "0");
+    return raw > 0n ? raw : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
+/** Pool must have positive TVL, on-chain liquidity, and subgraph volume. */
+export function hasCompletePoolMetrics(pool: QuickSwapPool): boolean {
+  const tvlUsd = parseUsdMetric(pool.metrics.totalValueLockedUsd);
+  const volumeUsd = parseUsdMetric(pool.metrics.volumeUsd);
+  const liquidity = parseOnChainLiquidity(pool.metrics.liquidity);
+  return tvlUsd > 0 && volumeUsd > 0 && liquidity > 0n;
+}
+
+export function filterPoolsWithCompleteMetrics(
+  pools: readonly QuickSwapPool[],
+): QuickSwapPool[] {
+  return pools.filter(hasCompletePoolMetrics);
+}
+
 /** Implied fee APR from subgraph cumulative volume and TVL (ranking metric, not audited on-chain APR). */
 export function computeFeeAprPercent(pool: QuickSwapPool): number {
   const tvl = parseUsdMetric(pool.metrics.totalValueLockedUsd);
@@ -42,12 +65,17 @@ function pairKey(tokenA: string, tokenB: string): string {
 }
 
 /** Keep the highest-scoring pool per unique token pair (avoids four WSOMI/USDCe slots in auto). */
-export function dedupePoolsByTokenPair(pools: readonly RankedPool[]): RankedPool[] {
+export function dedupePoolsByTokenPair(
+  pools: readonly RankedPool[],
+): RankedPool[] {
   const byPair = new Map<string, RankedPool>();
   for (const pool of pools) {
     const key = pairKey(pool.token0.address, pool.token1.address);
     const existing = byPair.get(key);
-    if (!existing || pool.ranking.compositeScore > existing.ranking.compositeScore) {
+    if (
+      !existing ||
+      pool.ranking.compositeScore > existing.ranking.compositeScore
+    ) {
       byPair.set(key, pool);
     }
   }
@@ -166,7 +194,9 @@ export function selectAutoPools(
   const minTvlUsd = options?.minTvlUsd ?? 0.01;
   const candidateLimit = options?.candidateLimit ?? 8;
 
-  const eligible = rankPools(pools).filter((pool) => pool.ranking.tvlUsd >= minTvlUsd);
+  const eligible = rankPools(pools).filter(
+    (pool) => pool.ranking.tvlUsd >= minTvlUsd,
+  );
   const ranked = dedupePoolsByTokenPair(eligible);
   const selectionCount = pickAutoPoolCount(minCount, maxCount);
   const selected = ranked.slice(0, Math.min(selectionCount, ranked.length));

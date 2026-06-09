@@ -15,7 +15,10 @@ import {
   emitTradingCycleStarted,
 } from "../../websocket/trading-events";
 import { SomniaAgentError } from "../somnia/agent-caller";
-import { runLlmTradingCycle } from "../somnia/llm-trading.service";
+import {
+  runLlmTradingCycle,
+  type LlmTradingCycleResult,
+} from "../somnia/llm-trading.service";
 import { resolveSubAgents } from "../somnia/quickswap-llm-tools";
 import type {
   ExecutedTransaction,
@@ -52,6 +55,21 @@ export class TradingError extends Error {
 }
 
 const runningUsers = new Set<string>();
+
+export type TradingCycleOverrides = {
+  runLlmTradingCycle?: (
+    input: Parameters<typeof runLlmTradingCycle>[0],
+  ) => Promise<LlmTradingCycleResult>;
+  listPoolsWithMetrics?: typeof listPoolsWithMetrics;
+  getWalletBalances?: typeof getWalletBalances;
+};
+
+/** Clears in-memory cycle state between integration tests. */
+export function resetTradingRunnerStateForTests(): void {
+  runningUsers.clear();
+  lastCycleByUser.clear();
+  lastErrorByUser.clear();
+}
 
 export function isUserCycleRunning(userId: string): boolean {
   return runningUsers.has(userId);
@@ -358,7 +376,11 @@ export async function getTradingStatusForUser(
 export async function runTradingCycle(
   userId: string,
   reason: TradingCycleSummary["reason"] = "manual",
+  overrides?: TradingCycleOverrides,
 ): Promise<TradingCycleSummary> {
+  const fetchPools = overrides?.listPoolsWithMetrics ?? listPoolsWithMetrics;
+  const fetchBalances = overrides?.getWalletBalances ?? getWalletBalances;
+  const invokeLlm = overrides?.runLlmTradingCycle ?? runLlmTradingCycle;
   if (runningUsers.has(userId)) {
     throw new TradingError(
       "CYCLE_IN_PROGRESS",
@@ -406,8 +428,8 @@ export async function runTradingCycle(
     );
 
     const [pools, balances] = await Promise.all([
-      listPoolsWithMetrics(),
-      getWalletBalances(user.walletAddress as `0x${string}`, [...activePoolIds]),
+      fetchPools(),
+      fetchBalances(user.walletAddress as `0x${string}`, [...activePoolIds]),
     ]);
 
     const weights = balanceWeightsForPools(pools, activePoolIds, balances);
@@ -435,7 +457,7 @@ export async function runTradingCycle(
 
     if (hasBalance) {
       try {
-        const llm = await runLlmTradingCycle({
+        const llm = await invokeLlm({
           userId,
           walletAddress: user.walletAddress as Address,
           strategyType: strategy.strategyType,

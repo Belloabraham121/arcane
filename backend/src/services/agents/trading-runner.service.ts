@@ -13,9 +13,13 @@ import {
 } from "./trading-recommendations";
 import { schedulePortfolioSnapshot } from "../portfolio/snapshot.service";
 import {
-  resolvePortfolioRpcMode,
-  resolvePortfolioWallet,
-} from "../portfolio/wallet-context.service";
+  AnvilForkUnhealthyError,
+  assertTradingRpcHealthy,
+  resolveTradingRpc,
+  resolveTradingWallet,
+  TradingDemoDisabledError,
+  withTradingRpc,
+} from "./trading-wallet-context.service";
 import { getWalletBalances } from "../wallet/token-balance.service";
 import * as repo from "./strategy.repository";
 import { persistTradingCycle } from "./trading.repository";
@@ -457,6 +461,19 @@ export async function runTradingCycle(
       throw new TradingError("USER_NOT_FOUND", "User not found", 404);
     }
 
+    const trading = resolveTradingWallet(user);
+    try {
+      await assertTradingRpcHealthy(trading.rpcMode);
+    } catch (err) {
+      if (err instanceof TradingDemoDisabledError) {
+        throw new TradingError("DEMO_DISABLED", err.message, 503);
+      }
+      if (err instanceof AnvilForkUnhealthyError) {
+        throw new TradingError("ANVIL_UNHEALTHY", err.message, 503);
+      }
+      throw err;
+    }
+
     const poolAllocations = poolAllocationsFromRows(strategy.poolAllocations);
     const activePoolIds = new Set(
       Object.entries(poolAllocations)
@@ -464,9 +481,12 @@ export async function runTradingCycle(
         .map(([id]) => id),
     );
 
+    return await withTradingRpc(trading.rpcMode, async () => {
+    const tradingWalletAddress = trading.walletAddress;
+
     const [pools, balances] = await Promise.all([
       fetchPools(),
-      fetchBalances(user.walletAddress as `0x${string}`, [...activePoolIds]),
+      fetchBalances(tradingWalletAddress, [...activePoolIds]),
     ]);
 
     const weights = balanceWeightsForPools(pools, activePoolIds, balances);
@@ -500,7 +520,7 @@ export async function runTradingCycle(
       try {
         const llm = await invokeLlm({
           userId,
-          walletAddress: user.walletAddress as Address,
+          walletAddress: tradingWalletAddress,
           strategyType: strategy.strategyType,
           depositAmount: strategy.depositAmount,
           lastCycleAt: strategy.lastCycleAt,
@@ -540,7 +560,7 @@ export async function runTradingCycle(
           try {
             const smart = await trySmartRebalance({
               userId,
-              walletAddress: user.walletAddress as Address,
+              walletAddress: tradingWalletAddress,
               poolDrift,
               pools,
               balances,
@@ -582,7 +602,7 @@ export async function runTradingCycle(
         try {
           const rebalance = await tryAutoRebalance({
             userId,
-            walletAddress: user.walletAddress as Address,
+            walletAddress: tradingWalletAddress,
             poolDrift,
             pools,
             balances,
@@ -624,7 +644,7 @@ export async function runTradingCycle(
       startedAt,
       finishedAt,
       phase: "completed",
-      walletAddress: user.walletAddress,
+      walletAddress: tradingWalletAddress,
       depositAmount: strategy.depositAmount,
       poolDrift,
       executedTransactions,
@@ -653,16 +673,12 @@ export async function runTradingCycle(
       });
     }
 
-    const resolvedWallet = resolvePortfolioWallet(
-      user.accountMode,
-      user.walletAddress as Address,
-    );
     schedulePortfolioSnapshot({
       userId,
-      accountMode: user.accountMode,
-      walletAddress: resolvedWallet.walletAddress,
+      accountMode: trading.accountMode,
+      walletAddress: tradingWalletAddress,
       poolIds: [...activePoolIds],
-      rpcMode: resolvePortfolioRpcMode(user.accountMode),
+      rpcMode: resolveTradingRpc(trading.accountMode),
     });
 
     lastCycleByUser.set(userId, summary);
@@ -695,6 +711,7 @@ export async function runTradingCycle(
     });
 
     return summary;
+    });
   } catch (err) {
     if (err instanceof RiskControlError) {
       throw new TradingError(err.code, err.message, err.status);
@@ -726,7 +743,7 @@ export async function runTradingCycle(
         failedSummary.depositAmount = strategy.depositAmount;
         const user = await findUserById(userId);
         if (user) {
-          failedSummary.walletAddress = user.walletAddress;
+          failedSummary.walletAddress = resolveTradingWallet(user).walletAddress;
         }
         await persistTradingCycle(failedSummary);
       }

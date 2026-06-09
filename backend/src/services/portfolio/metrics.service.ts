@@ -2,8 +2,10 @@ import type { AccountMode } from "@prisma/client";
 import type { Address } from "viem";
 import { findUserById } from "../auth/user.repository";
 import { findStrategyByUserId } from "../agents/strategy.repository";
-import { assertAnvilForkHealthy } from "../dev/anvil-fork.service";
-import { getDemoEnv } from "../../config/env";
+import {
+  assertTradingRpcHealthy,
+  TradingDemoDisabledError,
+} from "../agents/trading-wallet-context.service";
 import { getDepositBaseline } from "./baseline.service";
 import { findSnapshotBefore } from "./snapshot.service";
 import { valueWallet } from "./valuation.service";
@@ -62,23 +64,21 @@ function computeApr24h(currentValueUsd: number, value24hAgo: number | null): num
   return capApr(dailyReturn * 365 * 100);
 }
 
-async function assertDemoRpcHealthy(rpcMode: PortfolioRpcMode): Promise<void> {
-  if (rpcMode !== "fork") {
-    return;
-  }
-
-  const demoEnv = getDemoEnv();
-  if (!demoEnv.tradingEnabled) {
-    throw new PortfolioDemoDisabledError();
-  }
-
-  await assertAnvilForkHealthy(demoEnv.anvilRpcUrl);
-}
-
 export class PortfolioDemoDisabledError extends Error {
   constructor() {
     super("Demo portfolio reads are disabled (DEMO_TRADING_ENABLED=false)");
     this.name = "PortfolioDemoDisabledError";
+  }
+}
+
+async function assertDemoRpcHealthy(rpcMode: PortfolioRpcMode): Promise<void> {
+  try {
+    await assertTradingRpcHealthy(rpcMode);
+  } catch (err) {
+    if (err instanceof TradingDemoDisabledError) {
+      throw new PortfolioDemoDisabledError();
+    }
+    throw err;
   }
 }
 

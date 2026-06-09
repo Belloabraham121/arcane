@@ -64,69 +64,69 @@ flowchart TB
 ## Phase 0 — Config & data model
 
 ### 0.1 Environment & constants
-- [ ] Add `DEMO_AGENT_WALLET` (default `0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e`)
-- [ ] Add `DEMO_FORK_WHALE` (default `0xd1f1f7b4354bd07e2035d95c12e3192017928054`)
-- [ ] Add `ANVIL_RPC_URL` / document `QUICKSWAP_RPC_HTTP` override for demo paths
-- [ ] Add `DEMO_TRADING_ENABLED` flag (backend refuses demo cycles if Anvil unhealthy)
-- [ ] Update `backend/.env.example` and `backend/README.md`
+- [x] Add `DEMO_AGENT_WALLET` (default `0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e`)
+- [x] Add `DEMO_FORK_WHALE` (default `0xd1f1f7b4354bd07e2035d95c12e3192017928054`)
+- [x] Add `ANVIL_RPC_URL` / document `QUICKSWAP_RPC_HTTP` override for demo paths
+- [x] Add `DEMO_TRADING_ENABLED` flag (backend refuses demo cycles if Anvil unhealthy)
+- [x] Update `backend/.env.example` and `backend/README.md`
 
 ### 0.2 Database — account mode per user
-- [ ] Add `account_mode` enum: `demo` | `live` on `User` (or `AgentStrategy` if mode is strategy-scoped)
-- [ ] Prisma migration + regenerate client
-- [ ] Default existing users → `live` (or prompt once on next login)
+- [x] Add `account_mode` enum: `demo` | `live` on `User` (or `AgentStrategy` if mode is strategy-scoped)
+- [x] Prisma migration + regenerate client
+- [x] Default existing users → `live` (or prompt once on next login)
 
 ### 0.3 Portfolio snapshots (for APR & auto-deposit detect)
-- [ ] New table `portfolio_snapshot`:
+- [x] New table `portfolio_snapshot`:
   - `user_id`, `account_mode`, `wallet_address`, `total_value_usd`, `balances_json`, `captured_at`
-- [ ] New table `deposit_baseline` (or fields on `AgentStrategy`):
+- [x] New table `deposit_baseline` (or fields on `AgentStrategy`):
   - `manual_deposit_usd`, `detected_deposit_usd`, `baseline_usd`, `baseline_set_at`
-- [ ] Index on `(user_id, captured_at)` for 24h APR queries
+- [x] Index on `(user_id, captured_at)` for 24h APR queries
 
 ---
 
 ## Phase 1 — Portfolio valuation service (backend)
 
 ### 1.1 USD price resolver
-- [ ] `portfolio/price.service.ts` — resolve USD per token:
+- [x] `portfolio/price.service.ts` — resolve USD per token:
   1. USDCe / USDT → `1.0`
   2. Pool `priceLabel` / `token1PerToken0` via active pools
   3. CoinGecko fallback (WSOMI, WETH, SOMI) — cache 60s
-- [ ] Unit tests for price precedence
+- [x] Unit tests for price precedence
 
 ### 1.2 Wallet net worth
-- [ ] `portfolio/valuation.service.ts`:
+- [x] `portfolio/valuation.service.ts`:
   - Input: `walletAddress`, `poolIds`, `rpcMode: 'mainnet' | 'fork'`
   - Output: `{ totalValueUsd, positions: [{ symbol, amount, valueUsd }] }`
-- [ ] Reuse `getWalletBalances()`; switch RPC via existing QuickSwap client reset pattern
+- [x] Reuse `getWalletBalances()`; switch RPC via existing QuickSwap client reset pattern
 
 ### 1.3 Deposited baseline
-- [ ] `portfolio/baseline.service.ts`:
+- [x] `portfolio/baseline.service.ts`:
   - `manualDepositUsd` from `strategy.depositAmount`
   - `detectedDepositUsd` = first snapshot `total_value_usd` after activation (or max of detected inbound)
   - `baselineUsd` = `max(manual, detected)` or user-configurable rule (document: use **higher of manual vs first snapshot**)
-- [ ] Hook: on strategy `status → active`, capture initial snapshot
+- [x] Hook: on strategy `status → active`, capture initial snapshot
 
 ### 1.4 P&L & APR
-- [ ] `portfolio/metrics.service.ts`:
+- [x] `portfolio/metrics.service.ts`:
   - `currentValueUsd` = latest valuation
   - `netEarnedUsd` = `currentValueUsd - baselineUsd`
   - `aprSinceActivation` = annualized from `(net / baseline) / daysSince(tradingEnabledAt)`
   - `apr24h` = `(valueNow - value24hAgo) / value24hAgo × 365` (cap sane bounds)
-- [ ] Cron / post-cycle job: append `portfolio_snapshot` after each trading cycle
+- [x] Cron / post-cycle job: append `portfolio_snapshot` after each trading cycle
 
 ### 1.5 API
-- [ ] `GET /api/v1/portfolio/summary?mode=demo|live` (default user’s `account_mode`)
+- [x] `GET /api/v1/portfolio/summary?mode=demo|live` (default user’s `account_mode`)
   - Returns: `currentValueUsd`, `baselineUsd`, `manualDepositUsd`, `detectedDepositUsd`, `netEarnedUsd`, `aprSinceActivation`, `apr24h`, `walletAddress`, `accountMode`, `chainLabel`
-- [ ] Extend `GET /api/v1/wallets/balances` with `?mode=demo|live` (resolve wallet + RPC)
+- [x] Extend `GET /api/v1/wallets/balances` with `?mode=demo|live` (resolve wallet + RPC)
 
 ---
 
 ## Phase 2 — Demo trading path (backend)
 
 ### 2.1 Demo wallet resolution
-- [ ] `resolveTradingWallet(user, mode)` → demo: `DEMO_AGENT_WALLET`, live: `user.walletAddress`
-- [ ] `resolveTradingRpc(mode)` → demo: Anvil, live: mainnet
-- [ ] Health check: demo cycles call `assertAnvilForkHealthy()` before run
+- [x] `resolveTradingWallet(user, mode)` → demo: `DEMO_AGENT_WALLET`, live: `user.walletAddress`
+- [x] `resolveTradingRpc(mode)` → demo: Anvil, live: mainnet
+- [x] Health check: demo cycles call `assertAnvilForkHealthy()` before run
 
 ### 2.2 Trading runner integration
 - [ ] `trading-runner.service.ts`: read `user.accountMode` (not only smoke-script `--fork`)
@@ -233,7 +233,7 @@ flowchart TB
 
 ## Phase 7 — Docs & ops
 
-- [ ] `backend/README.md`: demo vs live, Anvil setup, env vars
+- [x] `backend/README.md`: demo vs live, Anvil setup, env vars
 - [ ] `ARCANE_QUICKSWAP_TRADING_TODO.md`: cross-link demo/live section
 - [ ] Runbook: `npm run fork:anvil` + `fork:reset` for local demo
 
@@ -241,8 +241,8 @@ flowchart TB
 
 ## Implementation order (recommended)
 
-1. **Phase 0** — schema + env (foundation)
-2. **Phase 1** — portfolio service + API (unblocks dashboard)
+1. ~~**Phase 0** — schema + env (foundation)~~ ✅
+2. ~~**Phase 1** — portfolio service + API (unblocks dashboard)~~ ✅
 3. **Phase 3.1–3.2** — account mode onboarding (signup prompt)
 4. **Phase 4** — dashboard wired to real metrics
 5. **Phase 2** — demo trading in product (not only smoke script)

@@ -129,10 +129,10 @@ flowchart TB
 - [x] Health check: demo cycles call `assertAnvilForkHealthy()` before run
 
 ### 2.2 Trading runner integration
-- [ ] `trading-runner.service.ts`: read `user.accountMode` (not only smoke-script `--fork`)
-- [ ] Demo path: `applyQuickSwapForkRpc()`, optional `fundAgentViaWhaleImpersonation(DEMO_FORK_WHALE)`, skip Somnia attestation
-- [ ] Live path: unchanged mainnet + optional Somnia
-- [ ] Persist `account_mode` on `TradingCycle` rows for history filtering
+- [x] `trading-runner.service.ts`: read `user.accountMode` (not only smoke-script `--fork`)
+- [x] Demo path: `applyQuickSwapForkRpc()`, optional `fundAgentViaWhaleImpersonation(DEMO_FORK_WHALE)`, skip Somnia attestation
+- [x] Live path: unchanged mainnet + optional Somnia
+- [x] Persist `account_mode` on `TradingCycle` rows for history filtering
 
 ### 2.3 Demo cycle API
 - [ ] `POST /api/v1/trading/cycles` respects account mode (or `?mode=demo` for explicit dev)

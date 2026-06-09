@@ -75,7 +75,7 @@ export async function runDualLlmTradingCycle(input: {
         requestId: null,
         txHash: null,
         onChainResponse: null,
-        message: "Somnia attestation skipped (simulation mode)",
+        message: "Somnia attestation skipped (demo or simulation mode)",
       }
     : await submitSomniaAttestation({
         userId: input.userId,

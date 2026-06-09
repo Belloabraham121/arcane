@@ -143,6 +143,23 @@ async function ensureNativeBalance(
   await testClient.setBalance({ address, value: minWei });
 }
 
+/** Impersonate an address on the fork so it can sign via JSON-RPC. */
+export async function impersonateAccountOnFork(
+  anvilRpc: string,
+  address: Address,
+): Promise<void> {
+  const testClient = anvilTestClient(anvilRpc);
+  await testClient.impersonateAccount({ address });
+}
+
+export async function stopImpersonatingOnFork(
+  anvilRpc: string,
+  address: Address,
+): Promise<void> {
+  const testClient = anvilTestClient(anvilRpc);
+  await testClient.stopImpersonatingAccount({ address });
+}
+
 /** Point QuickSwap reads/swaps at a local Anvil fork RPC. */
 export function applyQuickSwapForkRpc(anvilRpc: string): void {
   process.env.QUICKSWAP_RPC_HTTP = anvilRpc;

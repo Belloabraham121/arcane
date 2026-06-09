@@ -106,6 +106,7 @@ model TradingCycle {
   userId      String             @map("user_id") @db.Uuid
   strategyId  String             @map("strategy_id") @db.Uuid
   strategy    AgentStrategy      @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  accountMode AccountMode        @default(live) @map("account_mode")
   reason      String             @db.Text
   status      TradingCycleStatus @default(completed)
   message     String             @db.Text

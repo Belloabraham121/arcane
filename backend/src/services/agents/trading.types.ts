@@ -37,6 +37,7 @@ export type TradingCycleSummary = {
   cycleId: string;
   userId: string;
   strategyId: string;
+  accountMode: "demo" | "live";
   reason: "activation" | "manual" | "scheduled" | "deposit";
   startedAt: string;
   finishedAt: string;

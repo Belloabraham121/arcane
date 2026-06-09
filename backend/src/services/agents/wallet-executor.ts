@@ -55,7 +55,40 @@ export type SubmittedTransaction = {
 
 type AgentAccount = ReturnType<typeof privateKeyToAccount>;
 
+type ForkImpersonateAccount = {
+  address: Address;
+  type: "json-rpc";
+};
+
+export type AgentSigningSession = {
+  mode: "fork_impersonate";
+  walletAddress: Address;
+};
+
 const accountCache = new Map<string, AgentAccount>();
+let activeSigningSession: AgentSigningSession | null = null;
+
+/** Demo fork cycles sign as the shared demo wallet via Anvil impersonation. */
+export function setAgentSigningSession(session: AgentSigningSession | null): void {
+  activeSigningSession = session;
+}
+
+async function resolveAgentAccount(userId: string): Promise<{
+  account: AgentAccount | ForkImpersonateAccount;
+  walletAddress: Address;
+}> {
+  if (activeSigningSession?.mode === "fork_impersonate") {
+    return {
+      account: {
+        address: activeSigningSession.walletAddress,
+        type: "json-rpc",
+      },
+      walletAddress: activeSigningSession.walletAddress,
+    };
+  }
+
+  return getUserAgentAccount(userId);
+}
 
 function normalizePrivateKey(privateKey: string): Hex {
   const trimmed = privateKey.trim();
@@ -95,7 +128,7 @@ export async function getUserAgentAccount(userId: string): Promise<{
   return { account, walletAddress: credentials.walletAddress };
 }
 
-function getAgentWalletClient(account: AgentAccount) {
+function getAgentWalletClient(account: AgentAccount | ForkImpersonateAccount) {
   const { rpcHttp } = getQuickSwapEnv();
   return createWalletClient({
     account,
@@ -178,7 +211,7 @@ export async function submitAgentTransaction(
   kind: SubmittedTransaction["kind"],
   meta?: Pick<SubmittedTransaction, "tokenIn" | "tokenOut" | "amountIn" | "amountOut">,
 ): Promise<SubmittedTransaction> {
-  const { account, walletAddress } = await getUserAgentAccount(userId);
+  const { account, walletAddress } = await resolveAgentAccount(userId);
   await assertSufficientGas(walletAddress);
 
   const walletClient = getAgentWalletClient(account);
@@ -231,7 +264,7 @@ export async function ensureTokenApproval(
   amount: bigint,
   allowedPoolIds: readonly string[],
 ): Promise<SubmittedTransaction | null> {
-  const { walletAddress } = await getUserAgentAccount(userId);
+  const { walletAddress } = await resolveAgentAccount(userId);
   await assertTokenAllowed(userId, token, allowedPoolIds);
 
   const allowance = await getTokenAllowance(walletAddress, token, spender);
@@ -264,7 +297,7 @@ export async function executeRebalancePlan(
   const { userId, plan, allowedPoolIds } = input;
   const slippageBps = resolveSwapSlippageBps(input.slippageBps, input.riskLimits);
 
-  const { walletAddress } = await getUserAgentAccount(userId);
+  const { walletAddress } = await resolveAgentAccount(userId);
   await assertTokenAllowed(userId, plan.tokenIn, allowedPoolIds);
   await assertTokenAllowed(userId, plan.tokenOut, allowedPoolIds);
   await assertSufficientBalance(walletAddress, plan.tokenIn, plan.amountIn);
@@ -318,7 +351,7 @@ export async function executeSwapExactIn(
   const { userId, tokenIn, tokenOut, amountIn, allowedPoolIds } = input;
   const slippageBps = resolveSwapSlippageBps(input.slippageBps, input.riskLimits);
 
-  const { walletAddress } = await getUserAgentAccount(userId);
+  const { walletAddress } = await resolveAgentAccount(userId);
   await assertTokenAllowed(userId, tokenIn, allowedPoolIds);
   await assertTokenAllowed(userId, tokenOut, allowedPoolIds);
   await assertSufficientBalance(walletAddress, tokenIn, amountIn);
@@ -358,4 +391,5 @@ export async function executeSwapExactIn(
 /** Clear cached decrypted accounts (tests). */
 export function resetAgentAccountCache(): void {
   accountCache.clear();
+  activeSigningSession = null;
 }

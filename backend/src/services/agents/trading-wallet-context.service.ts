@@ -1,10 +1,18 @@
 import type { AccountMode } from "@prisma/client";
 import type { Address } from "viem";
 import { getDemoEnv } from "../../config/env";
+import { createLogger } from "../../shared/logger";
+import { setAgentSigningSession } from "./wallet-executor";
 import {
   AnvilForkUnhealthyError,
   assertAnvilForkHealthy,
+  fundAgentOnFork,
+  impersonateAccountOnFork,
+  stopImpersonatingOnFork,
 } from "../dev/anvil-fork.service";
+import { getWalletBalances } from "../wallet/token-balance.service";
+
+const log = createLogger("trading-wallet");
 import {
   resolvePortfolioRpcMode,
   resolvePortfolioWallet,
@@ -49,6 +57,67 @@ export async function assertTradingRpcHealthy(rpcMode: TradingRpcMode): Promise<
   }
 
   await assertAnvilForkHealthy(demoEnv.anvilRpcUrl);
+}
+
+/** Seed the shared demo wallet on the fork when it has no token balances yet. */
+export async function ensureDemoTradingWalletFunded(input: {
+  anvilRpc: string;
+  agentAddress: Address;
+  depositAmount: number;
+  whaleAddress: Address;
+  poolIds: string[];
+}): Promise<void> {
+  const balances = await getWalletBalances(input.agentAddress, input.poolIds);
+  const hasTokens = balances.balances.some((row) => {
+    try {
+      return BigInt(row.balance) > 0n;
+    } catch {
+      return false;
+    }
+  });
+
+  if (hasTokens) {
+    return;
+  }
+
+  const funded = await fundAgentOnFork({
+    anvilRpc: input.anvilRpc,
+    agentAddress: input.agentAddress,
+    depositAmount: input.depositAmount,
+    whaleAddress: input.whaleAddress,
+  });
+
+  log.info("Demo trading wallet funded on fork", {
+    agentAddress: input.agentAddress,
+    method: funded.method,
+    whaleAddress: funded.whaleAddress,
+  });
+}
+
+/** Impersonate the shared demo wallet so fork swaps sign from the correct address. */
+export async function withDemoAgentSigning<T>(
+  rpcMode: TradingRpcMode,
+  walletAddress: Address,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (rpcMode === "mainnet") {
+    return fn();
+  }
+
+  const demoEnv = getDemoEnv();
+  setAgentSigningSession({
+    mode: "fork_impersonate",
+    walletAddress,
+  });
+
+  await impersonateAccountOnFork(demoEnv.anvilRpcUrl, walletAddress);
+
+  try {
+    return await fn();
+  } finally {
+    await stopImpersonatingOnFork(demoEnv.anvilRpcUrl, walletAddress);
+    setAgentSigningSession(null);
+  }
 }
 
 export { withPortfolioRpc as withTradingRpc, AnvilForkUnhealthyError };

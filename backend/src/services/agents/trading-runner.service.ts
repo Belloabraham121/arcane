@@ -12,12 +12,15 @@ import {
   proactiveDriftThresholdPercent,
 } from "./trading-recommendations";
 import { schedulePortfolioSnapshot } from "../portfolio/snapshot.service";
+import { getDemoEnv } from "../../config/env";
 import {
   AnvilForkUnhealthyError,
   assertTradingRpcHealthy,
+  ensureDemoTradingWalletFunded,
   resolveTradingRpc,
   resolveTradingWallet,
   TradingDemoDisabledError,
+  withDemoAgentSigning,
   withTradingRpc,
 } from "./trading-wallet-context.service";
 import { getWalletBalances } from "../wallet/token-balance.service";
@@ -481,8 +484,21 @@ export async function runTradingCycle(
         .map(([id]) => id),
     );
 
-    return await withTradingRpc(trading.rpcMode, async () => {
+    return await withTradingRpc(trading.rpcMode, async () =>
+      withDemoAgentSigning(trading.rpcMode, trading.walletAddress, async () => {
     const tradingWalletAddress = trading.walletAddress;
+    const isDemoCycle = trading.rpcMode === "fork";
+
+    if (isDemoCycle) {
+      const demoEnv = getDemoEnv();
+      await ensureDemoTradingWalletFunded({
+        anvilRpc: demoEnv.anvilRpcUrl,
+        agentAddress: tradingWalletAddress,
+        depositAmount: strategy.depositAmount,
+        whaleAddress: demoEnv.forkWhale,
+        poolIds: [...activePoolIds],
+      });
+    }
 
     const [pools, balances] = await Promise.all([
       fetchPools(),
@@ -532,7 +548,8 @@ export async function runTradingCycle(
           activePoolIds: [...activePoolIds],
           riskLimits,
           dryRunTrades: overrides?.simulation?.dryRunTrades,
-          skipSomniaAttestation: overrides?.simulation?.skipSomniaAttestation,
+          skipSomniaAttestation:
+            isDemoCycle || overrides?.simulation?.skipSomniaAttestation,
           onToolExecuted: (outcome) => {
             emitFromToolOutcome(userId, cycleId, outcome);
           },
@@ -640,6 +657,7 @@ export async function runTradingCycle(
       cycleId,
       userId,
       strategyId: strategy.id,
+      accountMode: trading.accountMode,
       reason,
       startedAt,
       finishedAt,
@@ -711,7 +729,8 @@ export async function runTradingCycle(
     });
 
     return summary;
-    });
+      }),
+    );
   } catch (err) {
     if (err instanceof RiskControlError) {
       throw new TradingError(err.code, err.message, err.status);
@@ -724,6 +743,7 @@ export async function runTradingCycle(
       cycleId,
       userId,
       strategyId: "",
+      accountMode: "live",
       reason,
       startedAt,
       finishedAt: new Date().toISOString(),
@@ -743,7 +763,9 @@ export async function runTradingCycle(
         failedSummary.depositAmount = strategy.depositAmount;
         const user = await findUserById(userId);
         if (user) {
-          failedSummary.walletAddress = resolveTradingWallet(user).walletAddress;
+          const failedTrading = resolveTradingWallet(user);
+          failedSummary.accountMode = failedTrading.accountMode;
+          failedSummary.walletAddress = failedTrading.walletAddress;
         }
         await persistTradingCycle(failedSummary);
       }

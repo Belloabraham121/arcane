@@ -10,6 +10,7 @@ import type {
 
 export type TradingHistoryListItem = {
   id: string;
+  accountMode: "demo" | "live";
   reason: string;
   status: string;
   message: string;
@@ -168,6 +169,7 @@ export async function persistTradingCycle(
       id: summary.cycleId,
       userId: summary.userId,
       strategyId: summary.strategyId,
+      accountMode: summary.accountMode,
       reason: summary.reason,
       status: summary.phase === "failed" ? "failed" : "completed",
       message: summary.message,
@@ -210,6 +212,7 @@ export async function listTradingCycles(
   return {
     items: rows.map((row) => ({
       id: row.id,
+      accountMode: row.accountMode,
       reason: row.reason,
       status: row.status,
       message: row.message,
@@ -242,6 +245,7 @@ export async function getTradingCycleDetail(
 
   return {
     id: row.id,
+    accountMode: row.accountMode,
     reason: row.reason,
     status: row.status,
     message: row.message,

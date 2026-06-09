@@ -5,6 +5,12 @@ import { findUserById } from "../auth/user.repository";
 import { listPoolsWithMetrics } from "../defi/quickswap/pool-metrics.service";
 import type { QuickSwapPool } from "../defi/quickswap/types";
 import { planRebalance } from "../defi/quickswap/route-planner";
+import {
+  buildTradingRecommendation,
+  computeProactiveSwapAmount,
+  pickSmartRebalancePair,
+  proactiveDriftThresholdPercent,
+} from "./trading-recommendations";
 import { getWalletBalances } from "../wallet/token-balance.service";
 import * as repo from "./strategy.repository";
 import { persistTradingCycle } from "./trading.repository";
@@ -62,6 +68,13 @@ export type TradingCycleOverrides = {
   ) => Promise<DualLlmTradingCycleResult>;
   listPoolsWithMetrics?: typeof listPoolsWithMetrics;
   getWalletBalances?: typeof getWalletBalances;
+  /** Dev simulation: skip Somnia attestation, dry-run swaps. */
+  simulation?: {
+    dryRunTrades?: boolean;
+    skipSomniaAttestation?: boolean;
+  };
+  /** Dev smoke: bypass TRADING_CYCLE_COOLDOWN_MINUTES. */
+  skipCycleCooldown?: boolean;
 };
 
 /** Clears in-memory cycle state between integration tests. */
@@ -157,56 +170,6 @@ function exclusivePoolToken(
   );
 }
 
-function pickRebalancePools(
-  drift: PoolAllocationDrift[],
-  thresholdPercent: number,
-): { fromPoolId: string; toPoolId: string } | null {
-  const overweight = drift
-    .filter((entry) => entry.driftPercent > thresholdPercent)
-    .sort((a, b) => b.driftPercent - a.driftPercent)[0];
-  const underweight = drift
-    .filter((entry) => entry.driftPercent < -thresholdPercent)
-    .sort((a, b) => a.driftPercent - b.driftPercent)[0];
-
-  if (!overweight || !underweight) {
-    return null;
-  }
-
-  return {
-    fromPoolId: overweight.poolId,
-    toPoolId: underweight.poolId,
-  };
-}
-
-function computeSwapAmount(
-  tokenBalanceRaw: string,
-  overweightDriftPercent: number,
-  maxSwapPortfolioBps: number,
-  minSwapAmountRaw: bigint,
-): bigint | null {
-  const balance = BigInt(tokenBalanceRaw);
-  if (balance <= 0n) {
-    return null;
-  }
-
-  const driftBps = BigInt(
-    Math.min(
-      Math.max(Math.round(overweightDriftPercent * 100), 0),
-      maxSwapPortfolioBps,
-    ),
-  );
-  if (driftBps === 0n) {
-    return null;
-  }
-
-  const amount = (balance * driftBps) / 10_000n;
-  if (amount < minSwapAmountRaw) {
-    return null;
-  }
-
-  return amount;
-}
-
 function toExecutedTransactions(
   txs: Awaited<ReturnType<typeof executeRebalancePlan>>,
 ): ExecutedTransaction[] {
@@ -219,6 +182,71 @@ function toExecutedTransactions(
     amountIn: tx.amountIn?.toString(),
     amountOut: tx.amountOut?.toString(),
   }));
+}
+
+async function trySmartRebalance(input: {
+  userId: string;
+  walletAddress: Address;
+  poolDrift: PoolAllocationDrift[];
+  pools: QuickSwapPool[];
+  balances: Awaited<ReturnType<typeof getWalletBalances>>;
+  activePoolIds: string[];
+  riskLimits: EffectiveRiskLimits;
+}): Promise<{
+  executedTransactions: ExecutedTransaction[];
+  message?: string;
+  poolFrom?: string;
+  poolTo?: string;
+}> {
+  const recommendation = buildTradingRecommendation({
+    poolDrift: input.poolDrift,
+    pools: input.pools,
+    balances: input.balances,
+    riskLimits: input.riskLimits,
+  });
+
+  if (!recommendation.shouldTrade || !recommendation.toPoolId) {
+    return {
+      executedTransactions: [],
+      message: recommendation.reason,
+    };
+  }
+
+  const amount = recommendation.amountInRaw
+    ? BigInt(recommendation.amountInRaw)
+    : null;
+  if (!amount || amount <= 0n) {
+    return { executedTransactions: [] };
+  }
+
+  const plan = await planRebalance(
+    recommendation.fromPoolId!,
+    recommendation.toPoolId,
+    amount,
+    input.walletAddress,
+    { pools: input.pools },
+  );
+
+  if (plan.kind === "no_swap") {
+    return {
+      executedTransactions: [],
+      message: plan.reason,
+    };
+  }
+
+  const txs = await executeRebalancePlan({
+    userId: input.userId,
+    plan,
+    allowedPoolIds: input.activePoolIds,
+    riskLimits: input.riskLimits,
+  });
+
+  return {
+    executedTransactions: toExecutedTransactions(txs),
+    message: recommendation.reason,
+    poolFrom: recommendation.fromPoolId,
+    poolTo: recommendation.toPoolId,
+  };
 }
 
 async function tryAutoRebalance(input: {
@@ -236,12 +264,15 @@ async function tryAutoRebalance(input: {
   poolTo?: string;
 }> {
   const {
-    driftThresholdPercent,
     maxSwapPortfolioBps,
     minSwapAmountRaw,
   } = input.riskLimits;
 
-  const pair = pickRebalancePools(input.poolDrift, driftThresholdPercent);
+  const pair = pickSmartRebalancePair(
+    input.poolDrift,
+    input.pools,
+    proactiveDriftThresholdPercent(input.riskLimits),
+  );
   if (!pair) {
     return { executedTransactions: [] };
   }
@@ -274,7 +305,7 @@ async function tryAutoRebalance(input: {
     return { executedTransactions: [] };
   }
 
-  const amount = computeSwapAmount(
+  const amount = computeProactiveSwapAmount(
     balanceRow.balance,
     overweight.driftPercent,
     maxSwapPortfolioBps,
@@ -289,6 +320,7 @@ async function tryAutoRebalance(input: {
     pair.toPoolId,
     amount,
     input.walletAddress,
+    { pools: input.pools },
   );
 
   if (plan.kind === "no_swap") {
@@ -452,7 +484,9 @@ export async function runTradingCycle(
     );
     const riskLimits = resolveRiskLimits(subAgents);
 
-    assertCycleCooldown(strategy.lastCycleAt, riskLimits, reason);
+    if (!overrides?.skipCycleCooldown) {
+      assertCycleCooldown(strategy.lastCycleAt, riskLimits, reason);
+    }
     if (hasBalance) {
       assertPortfolioFunded(balances, riskLimits);
     }
@@ -472,6 +506,8 @@ export async function runTradingCycle(
           subAgents,
           activePoolIds: [...activePoolIds],
           riskLimits,
+          dryRunTrades: overrides?.simulation?.dryRunTrades,
+          skipSomniaAttestation: overrides?.simulation?.skipSomniaAttestation,
           onToolExecuted: (outcome) => {
             emitFromToolOutcome(userId, cycleId, outcome);
           },
@@ -494,6 +530,36 @@ export async function runTradingCycle(
           message: llm.somniaAttestation.message,
         };
         executionMessage = llm.message;
+
+        if (executedTransactions.length === 0) {
+          try {
+            const smart = await trySmartRebalance({
+              userId,
+              walletAddress: user.walletAddress as Address,
+              poolDrift,
+              pools,
+              balances,
+              activePoolIds: [...activePoolIds],
+              riskLimits,
+            });
+            if (smart.executedTransactions.length > 0) {
+              executedTransactions = smart.executedTransactions;
+              emitFromExecutedTransactions(userId, cycleId, smart.executedTransactions, {
+                poolFrom: smart.poolFrom ?? null,
+                poolTo: smart.poolTo ?? null,
+              });
+              executionMessage = `OpenAI held — smart rebalance executed. ${smart.message ?? ""}`;
+            } else if (smart.message) {
+              log.info("Smart rebalance skipped", { userId, cycleId, reason: smart.message });
+            }
+          } catch (smartErr) {
+            log.warn("Smart rebalance failed", {
+              userId,
+              cycleId,
+              detail: smartErr instanceof Error ? smartErr.message : String(smartErr),
+            });
+          }
+        }
       } catch (err) {
         const detail =
           err instanceof OpenAiTradingError

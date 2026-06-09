@@ -42,6 +42,10 @@ export async function runDualLlmTradingCycle(input: {
   activePoolIds: readonly string[];
   riskLimits: EffectiveRiskLimits;
   onToolExecuted?: (outcome: ToolExecutionOutcome) => void;
+  /** Skip Somnia createRequest (dev simulation). */
+  skipSomniaAttestation?: boolean;
+  /** Simulate swap/rebalance execution without broadcasting txs. */
+  dryRunTrades?: boolean;
 }): Promise<DualLlmTradingCycleResult> {
   const portfolio = buildPortfolioContext({
     walletAddress: input.walletAddress,
@@ -65,12 +69,23 @@ export async function runDualLlmTradingCycle(input: {
 
   log.info("Starting dual-LLM trading cycle", { userId: input.userId });
 
-  const somniaAttestation = await submitSomniaAttestation({
-    userId: input.userId,
-    portfolioSummary,
-  });
+  const somniaAttestation = input.skipSomniaAttestation
+    ? {
+        status: "skipped" as const,
+        requestId: null,
+        txHash: null,
+        onChainResponse: null,
+        message: "Somnia attestation skipped (simulation mode)",
+      }
+    : await submitSomniaAttestation({
+        userId: input.userId,
+        portfolioSummary,
+      });
 
-  const openAi = await runOpenAiTradingCycle(input);
+  const openAi = await runOpenAiTradingCycle({
+    ...input,
+    dryRunTrades: input.dryRunTrades,
+  });
 
   return {
     ...openAi,

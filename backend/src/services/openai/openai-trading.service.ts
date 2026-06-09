@@ -76,7 +76,11 @@ const OPENAI_TRADING_TOOLS: ChatCompletionTool[] = [
         properties: {
           tokenIn: { type: "string", description: "Token in address (0x...)" },
           tokenOut: { type: "string", description: "Token out address (0x...)" },
-          amountIn: { type: "string", description: "Raw amount in wei" },
+          amountIn: {
+            type: "string",
+            description:
+              "Raw token units from portfolio.balances[].balance or recommendedAction.amountInRaw. NOT formatted. 1 WSOMI = 1000000000000000000",
+          },
         },
         required: ["tokenIn", "tokenOut", "amountIn"],
         additionalProperties: false,
@@ -88,13 +92,17 @@ const OPENAI_TRADING_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "swapExactIn",
       description:
-        "Execute a single-hop exact-input swap from the agent wallet. amountIn is raw units as a decimal string.",
+        "Execute an on-chain exact-input swap from the agent wallet (submits approve + swap txs). amountIn is raw units as a decimal string.",
       parameters: {
         type: "object",
         properties: {
           tokenIn: { type: "string" },
           tokenOut: { type: "string" },
-          amountIn: { type: "string" },
+          amountIn: {
+            type: "string",
+            description:
+              "Raw token units from recommendedAction.amountInRaw or balances[].balance — never formatted",
+          },
         },
         required: ["tokenIn", "tokenOut", "amountIn"],
         additionalProperties: false,
@@ -106,12 +114,16 @@ const OPENAI_TRADING_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "rebalanceToPool",
       description:
-        "Move capital toward targetPoolId by swapping from the most overweight pool. amount is raw token units as a decimal string.",
+        "Execute an on-chain pool-to-pool rebalance (submits approve + swap txs). Moves capital toward targetPoolId from the overweight pool.",
       parameters: {
         type: "object",
         properties: {
           targetPoolId: { type: "string" },
-          amount: { type: "string" },
+          amount: {
+            type: "string",
+            description:
+              "Raw sold-leg amount: use recommendedAction.amountInRaw exactly (integer string)",
+          },
         },
         required: ["targetPoolId", "amount"],
         additionalProperties: false,
@@ -193,6 +205,7 @@ export async function runOpenAiTradingCycle(input: {
   activePoolIds: readonly string[];
   riskLimits: EffectiveRiskLimits;
   onToolExecuted?: (outcome: ToolExecutionOutcome) => void;
+  dryRunTrades?: boolean;
 }): Promise<OpenAiTradingCycleResult> {
   const { maxLlmToolRounds, openaiModel } = getTradingExecutionEnv();
   const { driftThresholdPercent } = input.riskLimits;
@@ -220,6 +233,7 @@ export async function runOpenAiTradingCycle(input: {
     balances: input.balances,
     portfolio,
     riskLimits: input.riskLimits,
+    dryRun: input.dryRunTrades,
   };
 
   const systemPrompt = buildTradingSystemPrompt(
@@ -232,7 +246,34 @@ export async function runOpenAiTradingCycle(input: {
     { role: "system", content: systemPrompt },
     {
       role: "user",
-      content: `Portfolio context (JSON):\n${JSON.stringify(portfolio)}`,
+      content: [
+        "Portfolio context (JSON):",
+        JSON.stringify(portfolio),
+        "",
+        portfolio.recommendedAction.shouldTrade
+          ? [
+              "ACTION REQUIRED this cycle:",
+              portfolio.recommendedAction.reason,
+              `Tool: ${portfolio.recommendedAction.suggestedTool}`,
+              portfolio.recommendedAction.toPoolId
+                ? `targetPoolId=${portfolio.recommendedAction.toPoolId}`
+                : "",
+              portfolio.recommendedAction.tokenIn
+                ? `tokenIn=${portfolio.recommendedAction.tokenIn.address} (${portfolio.recommendedAction.tokenIn.symbol})`
+                : "",
+              portfolio.recommendedAction.amountInRaw
+                ? `amountInRaw=${portfolio.recommendedAction.amountInRaw}`
+                : "",
+              portfolio.recommendedAction.amountInHint
+                ? `amountInHint=${portfolio.recommendedAction.amountInHint}`
+                : "",
+              "IMPORTANT: pass amountInRaw verbatim to rebalanceToPool/swapExactIn/quoteSwap. Do NOT use formatted balances or human numbers.",
+              "Steps: listPools → getPortfolio → quoteSwap(amountInRaw) → rebalanceToPool(targetPoolId, amountInRaw).",
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : "No mandatory trade this cycle (recommendedAction.shouldTrade is false). Still review pools and act if a clear opportunity appears.",
+      ].join("\n"),
     },
   ];
 

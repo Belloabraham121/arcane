@@ -4,7 +4,10 @@ import { getQuickSwapBundle, type QuickSwapToken } from "../../config/quickswap"
 import { getQuickSwapEnv } from "../../config/env";
 import { erc20MinimalAbi } from "../defi/quickswap/abis";
 import { getQuickSwapPublicClient } from "../defi/quickswap/client";
-import { listKnownPools } from "../defi/quickswap/pool-registry";
+import {
+  getKnownPoolById,
+  listKnownPools,
+} from "../defi/quickswap/pool-registry";
 import type { QuickSwapPoolToken } from "../defi/quickswap/types";
 
 export type WalletTokenBalance = {
@@ -61,15 +64,21 @@ function uniqueTokens(tokens: QuickSwapPoolToken[]): QuickSwapPoolToken[] {
 
 /** Tokens that appear in the given pool ids (or all seed pools when omitted). */
 export async function resolveTokensForPools(poolIds?: string[]): Promise<QuickSwapPoolToken[]> {
-  const pools = await listKnownPools();
-  const idSet = poolIds?.length ? new Set(poolIds) : null;
+  if (!poolIds?.length) {
+    const pools = await listKnownPools();
+    const tokens: QuickSwapPoolToken[] = [];
+    for (const pool of pools) {
+      tokens.push(pool.token0, pool.token1);
+    }
+    return uniqueTokens(tokens);
+  }
 
   const tokens: QuickSwapPoolToken[] = [];
-  for (const pool of pools) {
-    if (idSet && !idSet.has(pool.id)) {
-      continue;
+  for (const poolId of poolIds) {
+    const pool = await getKnownPoolById(poolId);
+    if (pool) {
+      tokens.push(pool.token0, pool.token1);
     }
-    tokens.push(pool.token0, pool.token1);
   }
 
   return uniqueTokens(tokens);

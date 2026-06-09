@@ -140,6 +140,40 @@ RUN_LLM_TESTS=1 LLM_TEST_EMAIL=you@signup-email.com npm run test:llm
 
 Fund the **agent wallet** (shown on dashboard / `GET /auth/me`) via [Somnia testnet faucet](https://testnet.somnia.network) before `test:llm` or `smoke:llm:trading`.
 
+### Simulated trading cycle (no mainnet deposit)
+
+```bash
+# In-memory balances + OpenAI + dry-run swaps (fastest, no Anvil)
+OPENAI_API_KEY=sk-... npm run smoke:trading:cycle -- --email=you@signup-email.com --simulate --force
+```
+
+### Anvil fork + whale impersonation (on-chain fork txs)
+
+Uses [Foundry Anvil](https://book.getfoundry.sh/anvil/) to fork Somnia mainnet, impersonate a
+token-rich address, transfer USDCe/WSOMI/WETH to the agent wallet, then run **real** swap txs
+against the fork (OpenAI still drives decisions).
+
+```bash
+# Terminal 1 — fork mainnet (use fork:reset if Anvil hangs on setBalance / impersonation)
+npm run fork:anvil
+# or: npm run fork:reset
+
+# Terminal 2 — find a whale on the fork (optional; or pass --whale=0x...)
+npm run fork:find-whale
+
+# Terminal 3 — fund via impersonation + run cycle
+OPENAI_API_KEY=sk-... npm run smoke:trading:cycle -- \
+  --email=you@signup-email.com --fork --whale=0xRichAddress --force
+```
+
+Without `--whale`, the script falls back to `anvil_deal` (Foundry cheat) on the fork.
+
+Impersonation flow (same as Hardhat `impersonateAccount`):
+
+1. `anvil_impersonateAccount(whale)`
+2. Whale signs `transfer()` to your agent wallet
+3. Agent wallet signs QuickSwap swaps on the fork RPC
+
 ## Folder structure
 
 ```

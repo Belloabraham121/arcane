@@ -40,12 +40,27 @@ export type PlanRebalanceOptions = {
   tokenIn?: Address;
   tokenOut?: Address;
   slippageBps?: number;
+  /** When set, routing ignores zero-liquidity pools in this list. */
+  pools?: QuickSwapPool[];
 };
 
 export type FindBestRouteOptions = {
   maxHops?: number;
   pools?: QuickSwapPool[];
 };
+
+/** True when Algebra `liquidity` is non-zero (pool can be quoted/swapped). */
+export function poolHasTradeableLiquidity(pool: QuickSwapPool): boolean {
+  try {
+    return BigInt(pool.metrics.liquidity) > 0n;
+  } catch {
+    return false;
+  }
+}
+
+export function liquidPoolsOnly(pools: readonly QuickSwapPool[]): QuickSwapPool[] {
+  return pools.filter(poolHasTradeableLiquidity);
+}
 
 function normalizeAddress(address: Address): string {
   return address.toLowerCase();
@@ -202,44 +217,56 @@ export async function findBestRoute(
     );
   }
 
-  const pools = options?.pools ?? (await listKnownPools());
+  const sourcePools = options?.pools ?? (await listKnownPools());
+  const pools = liquidPoolsOnly(sourcePools);
+  if (pools.length === 0) {
+    throw new RoutePlannerError(
+      "No pools with tradeable liquidity available for routing",
+      "ZERO_LIQUIDITY",
+    );
+  }
+
   const graph = buildTokenGraph(pools);
   const maxHops = options?.maxHops ?? MAX_SWAP_HOPS;
   const paths = findTokenPaths(graph, tokenIn, tokenOut, maxHops);
 
   if (paths.length === 0) {
     throw new RoutePlannerError(
-      `No route found from ${tokenIn} to ${tokenOut} within ${maxHops} hops`,
+      `No route found from ${tokenIn} to ${tokenOut} within ${maxHops} hops (liquid pools only)`,
       "ROUTE_NOT_FOUND",
     );
   }
 
-  const quoted = await Promise.all(
-    paths.map(async (path) => {
+  const quoted: QuotedSwapPath[] = [];
+  for (const path of paths) {
+    try {
       const quote = await quotePath(path, amountIn);
-      return {
+      if (BigInt(quote.amountOut) <= 0n) {
+        continue;
+      }
+      quoted.push({
         tokens: path,
         hops: path.length - 1,
         poolIds: poolIdsForPath(graph, path),
         quote,
-      } satisfies QuotedSwapPath;
-    }),
-  );
+      });
+    } catch {
+      // Skip paths that revert (e.g. zero-liquidity hop on fork).
+    }
+  }
 
-  const best = quoted.reduce((winner, candidate) => {
-    const winnerOut = BigInt(winner.quote.amountOut);
-    const candidateOut = BigInt(candidate.quote.amountOut);
-    return candidateOut > winnerOut ? candidate : winner;
-  });
-
-  if (BigInt(best.quote.amountOut) <= 0n) {
+  if (quoted.length === 0) {
     throw new RoutePlannerError(
-      "All candidate routes returned zero output",
+      "All candidate routes failed or returned zero output",
       "QUOTE_UNAVAILABLE",
     );
   }
 
-  return best;
+  return quoted.reduce((winner, candidate) => {
+    const winnerOut = BigInt(winner.quote.amountOut);
+    const candidateOut = BigInt(candidate.quote.amountOut);
+    return candidateOut > winnerOut ? candidate : winner;
+  });
 }
 
 function resolveRebalanceTokens(
@@ -359,7 +386,13 @@ export async function planRebalance(
     };
   }
 
-  const best = await findBestRoute(tokenIn, tokenOut, amount);
+  const routePools = options?.pools
+    ? liquidPoolsOnly(options.pools)
+    : liquidPoolsOnly(await listKnownPools());
+
+  const best = await findBestRoute(tokenIn, tokenOut, amount, {
+    pools: routePools,
+  });
   const slippageBps =
     options?.slippageBps ?? getQuickSwapEnv().defaultSlippageBps;
   const swap = buildSwapFromQuote(

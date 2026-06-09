@@ -9,6 +9,7 @@ import { authRouter } from "./api/routes/v1/auth";
 import { agentStrategyRouter } from "./api/routes/v1/agents/strategy";
 import { agentTradingRouter } from "./api/routes/v1/agents/trading";
 import { quickswapPoolsRouter } from "./api/routes/v1/quickswap/pools";
+import { demoDepositRouter } from "./api/routes/v1/demo/deposit";
 import { demoPreviewRouter } from "./api/routes/v1/demo/preview";
 import { tradingCyclesRouter } from "./api/routes/v1/trading/cycles";
 import { userAccountModeRouter } from "./api/routes/v1/users/account-mode";
@@ -31,6 +32,7 @@ export function createApp() {
   app.use(agentTradingRouter);
   app.use(tradingCyclesRouter);
   app.use(demoPreviewRouter);
+  app.use(demoDepositRouter);
   app.use(userAccountModeRouter);
   app.use(quickswapPoolsRouter);
   app.use(portfolioSummaryRouter);

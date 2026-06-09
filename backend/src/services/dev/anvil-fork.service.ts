@@ -8,6 +8,8 @@ import {
   keccak256,
   pad,
   parseEther,
+  parseUnits,
+  formatUnits,
   publicActions,
   toHex,
   walletActions,
@@ -479,4 +481,118 @@ export async function findWhaleCandidate(
     }
   }
   return null;
+}
+
+export const DEMO_DEPOSIT_SYMBOLS = ["USDCe", "WSOMI", "WETH", "SOMI"] as const;
+
+export type DemoDepositSymbol = (typeof DEMO_DEPOSIT_SYMBOLS)[number];
+
+async function setErc20BalanceOnFork(
+  rpcUrl: string,
+  token: Address,
+  account: Address,
+  newBalance: bigint,
+): Promise<void> {
+  const client = anvilPublicClient(rpcUrl);
+  const slot = erc20BalanceStorageSlot(account);
+
+  await client.request({
+    method: "anvil_setStorageAt",
+    params: [token, slot, pad(toHex(newBalance), { size: 32 })],
+  });
+}
+
+/** Add ERC20 tokens to a fork wallet (credits on top of existing balance). */
+export async function creditErc20OnFork(
+  rpcUrl: string,
+  token: Address,
+  account: Address,
+  creditAmount: bigint,
+): Promise<bigint> {
+  if (creditAmount <= 0n) {
+    throw new Error("Credit amount must be positive");
+  }
+
+  const current = await readErc20Balance(rpcUrl, token, account).catch(
+    () => 0n,
+  );
+  const newBalance = current + creditAmount;
+
+  try {
+    await anvilPublicClient(rpcUrl).request({
+      method: "anvil_deal",
+      params: [token, account, pad(toHex(newBalance), { size: 32 })],
+    });
+  } catch {
+    await setErc20BalanceOnFork(rpcUrl, token, account, newBalance);
+  }
+
+  return newBalance;
+}
+
+/** Add native SOMI to a fork wallet. */
+export async function creditNativeOnFork(
+  rpcUrl: string,
+  account: Address,
+  creditWei: bigint,
+): Promise<bigint> {
+  if (creditWei <= 0n) {
+    throw new Error("Credit amount must be positive");
+  }
+
+  const client = anvilPublicClient(rpcUrl);
+  const testClient = anvilTestClient(rpcUrl);
+  const current = await client.getBalance({ address: account });
+  const newBalance = current + creditWei;
+  await testClient.setBalance({ address: account, value: newBalance });
+  return newBalance;
+}
+
+export async function creditDemoWalletToken(input: {
+  anvilRpc: string;
+  walletAddress: Address;
+  symbol: DemoDepositSymbol;
+  amount: string;
+}): Promise<{ symbol: string; credited: string; formattedBalance: string }> {
+  await assertAnvilForkHealthy(input.anvilRpc);
+  await mineAnvilBlock(input.anvilRpc, 1);
+
+  const amount = input.amount.trim();
+  if (!amount || Number(amount) <= 0 || !Number.isFinite(Number(amount))) {
+    throw new Error("Enter a positive token amount");
+  }
+
+  if (input.symbol === "SOMI") {
+    const creditWei = parseEther(amount);
+    const newBalance = await creditNativeOnFork(
+      input.anvilRpc,
+      input.walletAddress,
+      creditWei,
+    );
+    return {
+      symbol: "SOMI",
+      credited: amount,
+      formattedBalance: formatUnits(newBalance, 18),
+    };
+  }
+
+  const bundle = getQuickSwapBundle(5031);
+  const token = bundle.tokens.find((row) => row.symbol === input.symbol);
+  if (!token) {
+    throw new Error(`Unsupported demo deposit token: ${input.symbol}`);
+  }
+
+  const creditRaw = parseUnits(amount, token.decimals);
+  const newBalance = await creditErc20OnFork(
+    input.anvilRpc,
+    token.address,
+    input.walletAddress,
+    creditRaw,
+  );
+
+  return {
+    symbol: input.symbol,
+    credited: amount,
+    formattedBalance: formatUnits(newBalance, token.decimals),
+  };
 }

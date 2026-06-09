@@ -20,6 +20,7 @@ import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
 import { WalletBalancesList } from "@/components/setup/wallet-balances-list"
 import { ActivePoolsPanel } from "@/components/dashboard/active-pools-panel"
 import { AgentStatusBadge } from "@/components/dashboard/agent-status-badge"
+import { DemoDepositModal } from "@/components/dashboard/demo-deposit-modal"
 import { LastTradeCard } from "@/components/dashboard/last-trade-card"
 import { PoolMetricsStrip } from "@/components/dashboard/pool-metrics-strip"
 import {
@@ -58,6 +59,7 @@ export default function DashboardPage() {
     useSession()
   const [previewDemo, setPreviewDemo] = useState(false)
   const [addressCopied, setAddressCopied] = useState(false)
+  const [demoDepositOpen, setDemoDepositOpen] = useState(false)
   const [strategy, setStrategy] = useState<AgentStrategy | null>(null)
   const [pools, setPools] = useState<QuickSwapPool[]>([])
   const [poolsError, setPoolsError] = useState<string | null>(null)
@@ -136,9 +138,13 @@ export default function DashboardPage() {
   } = usePortfolioSummary(viewMode, portfolioEnabled)
 
   const refreshTradingData = useCallback(async () => {
+    if (!viewMode) {
+      return
+    }
+
     const [statusResult, historyResult] = await Promise.all([
-      fetchTradingStatus(),
-      fetchTradingHistory(1, 1),
+      fetchTradingStatus(viewMode),
+      fetchTradingHistory(1, 1, viewMode),
     ])
     if (statusResult.success && statusResult.data) {
       setTradingStatus(statusResult.data.status)
@@ -164,7 +170,7 @@ export default function DashboardPage() {
     if (detailResult.success && detailResult.data?.cycle) {
       setLastTrade(lastTradeFromHistoryDetail(detailResult.data.cycle))
     }
-  }, [])
+  }, [viewMode])
 
   const { connected: socketConnected, cycleActive: socketCycleActive } =
     useTradingSocket({
@@ -208,6 +214,13 @@ export default function DashboardPage() {
       window.clearInterval(timer)
     }
   }, [strategy, refreshTradingData])
+
+  useEffect(() => {
+    if (!strategy || strategy.status !== "active" || !viewMode) {
+      return
+    }
+    void refreshTradingData()
+  }, [viewMode, strategy, refreshTradingData])
 
   const marketRows = useMemo(
     () =>
@@ -378,9 +391,20 @@ export default function DashboardPage() {
             )}
 
             <div>
-              <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                Current value
-              </p>
+              <div className="mb-2 flex flex-wrap items-center gap-3">
+                <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
+                  Current value
+                </p>
+                {accountMode === "demo" && (
+                  <button
+                    type="button"
+                    onClick={() => setDemoDepositOpen(true)}
+                    className="border border-amber-500/50 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-amber-600 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+                  >
+                    + Deposit tokens
+                  </button>
+                )}
+              </div>
               <h1 className="text-6xl font-bold font-pixel tracking-tight text-foreground lg:text-7xl">
                 {currentValueUsd != null
                   ? `$${formatUsd(currentValueUsd, {
@@ -714,6 +738,16 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      <DemoDepositModal
+        open={demoDepositOpen}
+        walletAddress={displayWalletAddress}
+        onClose={() => setDemoDepositOpen(false)}
+        onDeposited={() => {
+          void reloadPortfolio()
+          void reloadBalances()
+        }}
+      />
     </>
   )
 }

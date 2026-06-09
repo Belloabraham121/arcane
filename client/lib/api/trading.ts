@@ -1,3 +1,4 @@
+import type { AccountMode } from "./auth"
 import { API_URL, apiRequest } from "./client"
 
 export type TradingCyclePhase = "idle" | "analyzing" | "completed" | "failed"
@@ -63,8 +64,11 @@ export type TradingStatus = {
   demoCycleBusy: boolean
 }
 
-export async function fetchTradingStatus() {
-  return apiRequest<{ status: TradingStatus }>("/api/v1/agents/trading/status")
+export async function fetchTradingStatus(mode?: AccountMode) {
+  const query = mode ? `?mode=${mode}` : ""
+  return apiRequest<{ status: TradingStatus }>(
+    `/api/v1/agents/trading/status${query}`,
+  )
 }
 
 export async function runTradingCycle() {
@@ -76,6 +80,7 @@ export async function runTradingCycle() {
 
 export type TradingHistoryListItem = {
   id: string
+  accountMode: AccountMode
   reason: string
   status: string
   message: string
@@ -128,11 +133,18 @@ type HistoryEnvelope = {
   error: { code: string; message: string } | null
 }
 
-export async function fetchTradingHistory(page = 1, limit = 20) {
+export async function fetchTradingHistory(
+  page = 1,
+  limit = 20,
+  mode?: AccountMode,
+) {
   const params = new URLSearchParams({
     page: String(page),
     limit: String(limit),
   })
+  if (mode) {
+    params.set("mode", mode)
+  }
 
   try {
     const res = await fetch(

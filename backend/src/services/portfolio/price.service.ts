@@ -7,10 +7,21 @@ const log = createLogger("portfolio-price");
 const STABLECOIN_SYMBOLS = new Set(["USDCe", "USDC", "USDT"]);
 
 const COINGECKO_IDS: Record<string, string> = {
+  USDCe: "usd-coin",
+  USDC: "usd-coin",
   SOMI: "somnia-network",
   WSOMI: "somnia-network",
   WETH: "ethereum",
 };
+
+/** Prefer live market prices from CoinGecko for these symbols (then pool / peg fallback). */
+const COINGECKO_PRIORITY_SYMBOLS = new Set([
+  "USDCe",
+  "USDC",
+  "WSOMI",
+  "SOMI",
+  "WETH",
+]);
 
 const COINGECKO_CACHE_TTL_MS = 60_000;
 
@@ -93,9 +104,9 @@ export type TokenUsdPrice = {
 
 /**
  * Resolve USD prices with precedence:
- * 1. Stablecoins → $1
- * 2. Pool ratios vs stablecoin leg
- * 3. CoinGecko fallback (SOMI, WSOMI, WETH)
+ * 1. CoinGecko for USDCe, WSOMI, SOMI, WETH (live market)
+ * 2. Stablecoins → $1 peg
+ * 3. Pool ratios vs stablecoin leg
  */
 export async function resolveTokenUsdPrices(
   symbols: string[],
@@ -105,6 +116,14 @@ export async function resolveTokenUsdPrices(
   const result = new Map<string, TokenUsdPrice>();
 
   for (const symbol of unique) {
+    if (COINGECKO_PRIORITY_SYMBOLS.has(symbol)) {
+      const cgPrice = await fetchCoingeckoUsd(symbol);
+      if (cgPrice != null) {
+        result.set(symbol, { symbol, usd: cgPrice, source: "coingecko" });
+        continue;
+      }
+    }
+
     if (isStablecoinSymbol(symbol)) {
       result.set(symbol, { symbol, usd: 1, source: "stablecoin" });
       continue;

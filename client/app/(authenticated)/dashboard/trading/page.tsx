@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { AccountModeBadge } from "@/components/layout/account-mode-badge"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
 import { TradingHistoryTableSkeleton } from "@/components/skeletons/content-skeletons"
 import { useSession } from "@/providers/session-provider"
@@ -33,10 +34,17 @@ function poolLabel(poolId: string | null): string {
 
 function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
   const lastTrade = lastTradeFromHistoryDetail(detail)
+  const isDemo = detail.accountMode === "demo"
 
   return (
     <div className="border-t border-border bg-muted/20 px-4 py-4 space-y-4">
-      {detail.somniaAttestation?.txHash && (
+      {isDemo && (
+        <p className="font-mono text-[10px] text-amber-700 dark:text-amber-400">
+          Anvil fork transaction — not on Somnia mainnet.
+        </p>
+      )}
+
+      {!isDemo && detail.somniaAttestation?.txHash && (
         <div>
           <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Somnia on-chain agent (attestation)
@@ -99,14 +107,20 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
             Primary on-chain action
           </p>
           <p className="font-mono text-xs text-foreground">{lastTrade.label}</p>
-          <a
-            href={somniaTxUrl(lastTrade.txHash)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 inline-block font-mono text-xs text-[#ea580c] hover:underline"
-          >
-            View on Somnia explorer ↗
-          </a>
+          {isDemo ? (
+            <code className="mt-1 block break-all font-mono text-[10px] text-muted-foreground">
+              {lastTrade.txHash}
+            </code>
+          ) : (
+            <a
+              href={somniaTxUrl(lastTrade.txHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-block font-mono text-xs text-[#ea580c] hover:underline"
+            >
+              View on Somnia explorer ↗
+            </a>
+          )}
         </div>
       )}
 
@@ -162,7 +176,8 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
 
 export default function TradingHistoryPage() {
   const router = useRouter()
-  const { sessionReady } = useSession()
+  const { sessionReady, accountMode } = useSession()
+  const historyMode = accountMode ?? undefined
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<TradingHistoryListItem[]>([])
   const [pagination, setPagination] = useState<TradingHistoryPagination | null>(
@@ -178,7 +193,7 @@ export default function TradingHistoryPage() {
 
   const loadPage = useCallback(async (nextPage: number) => {
     setError(null)
-    const result = await fetchTradingHistory(nextPage, PAGE_SIZE)
+    const result = await fetchTradingHistory(nextPage, PAGE_SIZE, historyMode)
     if (!result.success || !result.data) {
       setError(result.error?.message ?? "Failed to load trading history")
       return
@@ -186,7 +201,7 @@ export default function TradingHistoryPage() {
     setItems(result.data.items)
     setPagination(result.meta?.pagination ?? null)
     setPage(nextPage)
-  }, [])
+  }, [historyMode])
 
   useEffect(() => {
     if (!sessionReady) {
@@ -234,7 +249,12 @@ export default function TradingHistoryPage() {
     <>
       <PageSubBar
         title="Trading history"
-        subtitle="Cycles, LLM reasoning, and on-chain actions on Somnia mainnet"
+        subtitle={
+          accountMode === "demo"
+            ? "Demo fork cycles only — separate from live mainnet transactions"
+            : "Live mainnet cycles only — demo fork transactions are listed separately"
+        }
+        badge={accountMode ? <AccountModeBadge mode={accountMode} /> : undefined}
         backHref={APP_ROUTES.dashboard}
         backLabel="Back to dashboard"
       />
@@ -282,6 +302,9 @@ export default function TradingHistoryPage() {
                         >
                           {cycle.status}
                         </span>
+                        {cycle.accountMode && (
+                          <AccountModeBadge mode={cycle.accountMode} />
+                        )}
                         {cycle.llmPending && (
                           <span className="font-mono text-[10px] text-muted-foreground">
                             LLM pending

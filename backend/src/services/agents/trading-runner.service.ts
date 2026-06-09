@@ -35,7 +35,10 @@ import {
 } from "./trading-wallet-context.service";
 import { getWalletBalances } from "../wallet/token-balance.service";
 import * as repo from "./strategy.repository";
-import { persistTradingCycle } from "./trading.repository";
+import {
+  findLatestTradingCycle,
+  persistTradingCycle,
+} from "./trading.repository";
 import {
   emitFromExecutedTransactions,
   emitFromToolOutcome,
@@ -157,6 +160,10 @@ export function resolveCycleIntervalMinutes(input: {
 }
 const lastCycleByUser = new Map<string, TradingCycleSummary>();
 const lastErrorByUser = new Map<string, string>();
+
+function cycleCacheKey(userId: string, accountMode: AccountMode): string {
+  return `${userId}:${accountMode}`;
+}
 
 function poolAllocationsFromRows(
   rows: { poolId: string; amount: number }[],
@@ -444,23 +451,37 @@ export function getTradingStatus(userId: string): TradingStatusResponse {
 
 export async function getTradingStatusForUser(
   userId: string,
+  modeOverride?: AccountMode,
 ): Promise<TradingStatusResponse> {
   const [strategy, user] = await Promise.all([
     repo.findStrategyByUserId(userId),
     findUserById(userId),
   ]);
   const base = getTradingStatus(userId);
-  const accountMode = user?.accountMode ?? "live";
+  const accountMode = modeOverride ?? user?.accountMode ?? "live";
   const demoAvailability = await getDemoTradingAvailability();
+
+  const dbLastCycle =
+    user?.walletAddress != null
+      ? await findLatestTradingCycle(
+          userId,
+          accountMode,
+          user.walletAddress,
+        )
+      : null;
+  const cachedLastCycle =
+    lastCycleByUser.get(cycleCacheKey(userId, accountMode)) ?? null;
+  const lastCycle = dbLastCycle ?? cachedLastCycle ?? null;
 
   const status: TradingStatusResponse = {
     ...base,
     accountMode,
+    lastCycle,
     demoWalletNotice: accountMode === "demo" ? DEMO_WALLET_NOTICE : null,
     demoTradingAvailable: demoAvailability.available,
     demoCycleBusy: isDemoWalletCycleRunning(),
     tradingEnabledAt: strategy?.tradingEnabledAt?.toISOString() ?? null,
-    lastCycleAt: strategy?.lastCycleAt?.toISOString() ?? null,
+    lastCycleAt: lastCycle?.finishedAt ?? strategy?.lastCycleAt?.toISOString() ?? null,
   };
 
   return status;
@@ -760,7 +781,7 @@ export async function runTradingCycle(
       rpcMode: resolveTradingRpc(trading.accountMode),
     });
 
-    lastCycleByUser.set(userId, summary);
+    lastCycleByUser.set(cycleCacheKey(userId, summary.accountMode), summary);
 
     emitTradingCycleCompleted(userId, {
       cycleId,

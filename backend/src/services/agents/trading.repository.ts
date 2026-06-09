@@ -1,9 +1,11 @@
-import type { Prisma } from "@prisma/client";
+import type { AccountMode, Prisma } from "@prisma/client";
 import { prisma } from "../../infrastructure/postgres/client";
+import { getDemoEnv } from "../../config/env";
 import type {
   ExecutedTransaction,
   PoolAllocationDrift,
   SomniaAttestationSummary,
+  TradingCyclePhase,
   TradingCycleSummary,
   TradingToolAction,
 } from "./trading.types";
@@ -190,16 +192,116 @@ export async function persistTradingCycle(
   });
 }
 
+function resolveWalletAddressForMode(
+  accountMode: AccountMode,
+  liveWalletAddress: string,
+): string {
+  return accountMode === "demo"
+    ? getDemoEnv().agentWallet
+    : liveWalletAddress;
+}
+
+function mapRowToCycleSummary(
+  row: {
+    id: string;
+    userId: string;
+    strategyId: string;
+    accountMode: AccountMode;
+    reason: string;
+    status: string;
+    message: string;
+    llmPending: boolean;
+    llmResponse: string | null;
+    somniaAttestation: unknown;
+    poolDrift: unknown;
+    startedAt: Date;
+    finishedAt: Date;
+    strategy: { depositAmount: number };
+    actions: {
+      type: string;
+      tokenIn: string | null;
+      tokenOut: string | null;
+      amountIn: string | null;
+      amountOut: string | null;
+      txHash: string | null;
+      status: string;
+    }[];
+  },
+  liveWalletAddress: string,
+): TradingCycleSummary {
+  const executedTransactions: ExecutedTransaction[] = row.actions
+    .filter((action) => action.type === "approve" || action.type === "swap")
+    .map((action) => ({
+      kind: action.type as "approve" | "swap",
+      hash: action.txHash ?? "",
+      status: action.status === "reverted" ? "reverted" : "success",
+      tokenIn: action.tokenIn ?? undefined,
+      tokenOut: action.tokenOut ?? undefined,
+      amountIn: action.amountIn ?? undefined,
+      amountOut: action.amountOut ?? undefined,
+    }))
+    .filter((tx) => tx.hash.length > 0);
+
+  const phase: TradingCyclePhase =
+    row.status === "failed" ? "failed" : "completed";
+
+  return {
+    cycleId: row.id,
+    userId: row.userId,
+    strategyId: row.strategyId,
+    accountMode: row.accountMode,
+    reason: row.reason as TradingCycleSummary["reason"],
+    startedAt: row.startedAt.toISOString(),
+    finishedAt: row.finishedAt.toISOString(),
+    phase,
+    message: row.message,
+    walletAddress: resolveWalletAddressForMode(
+      row.accountMode,
+      liveWalletAddress,
+    ),
+    depositAmount: row.strategy.depositAmount,
+    poolDrift: (row.poolDrift as PoolAllocationDrift[] | null) ?? [],
+    executedTransactions,
+    llmPending: row.llmPending,
+    llmResponse: row.llmResponse,
+    llmProvider: row.llmResponse ? "openai" : undefined,
+    somniaAttestation: parseSomniaAttestation(row.somniaAttestation) ?? undefined,
+  };
+}
+
+export async function findLatestTradingCycle(
+  userId: string,
+  accountMode: AccountMode,
+  liveWalletAddress: string,
+): Promise<TradingCycleSummary | null> {
+  const row = await prisma.tradingCycle.findFirst({
+    where: { userId, accountMode },
+    orderBy: { startedAt: "desc" },
+    include: {
+      actions: { orderBy: { createdAt: "asc" } },
+      strategy: { select: { depositAmount: true } },
+    },
+  });
+
+  if (!row) {
+    return null;
+  }
+
+  return mapRowToCycleSummary(row, liveWalletAddress);
+}
+
 export async function listTradingCycles(
   userId: string,
   page: number,
   limit: number,
+  accountMode?: AccountMode,
 ): Promise<{ items: TradingHistoryListItem[]; total: number }> {
   const skip = (page - 1) * limit;
+  const where = accountMode ? { userId, accountMode } : { userId };
 
   const [rows, total] = await Promise.all([
     prisma.tradingCycle.findMany({
-      where: { userId },
+      where,
       orderBy: { startedAt: "desc" },
       skip,
       take: limit,
@@ -207,7 +309,7 @@ export async function listTradingCycles(
         _count: { select: { actions: true } },
       },
     }),
-    prisma.tradingCycle.count({ where: { userId } }),
+    prisma.tradingCycle.count({ where }),
   ]);
 
   return {

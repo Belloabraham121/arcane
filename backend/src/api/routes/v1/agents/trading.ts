@@ -19,16 +19,30 @@ const runCycleQuerySchema = z.object({
   mode: z.enum(["demo", "live"]).optional(),
 });
 
+const modeQuerySchema = z.object({
+  mode: z.enum(["demo", "live"]).optional(),
+});
+
 const historyQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  mode: z.enum(["demo", "live"]).optional(),
 });
 
 export const agentTradingRouter = Router();
 
 agentTradingRouter.get("/api/v1/agents/trading/status", requireAuth, async (req, res) => {
+  const parsed = modeQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return fail(req, res, 400, {
+      code: "VALIDATION_ERROR",
+      message: "Invalid trading status query",
+      details: parsed.error.flatten().fieldErrors,
+    });
+  }
+
   try {
-    const status = await getTradingStatusForUser(req.user.id);
+    const status = await getTradingStatusForUser(req.user.id, parsed.data.mode);
     return ok(req, res, { status });
   } catch (err) {
     if (err instanceof TradingError) {
@@ -83,8 +97,22 @@ agentTradingRouter.get("/api/v1/agents/trading/history", requireAuth, async (req
     });
   }
 
-  const { page, limit } = parsed.data;
-  const { items, total } = await listTradingCycles(req.user.id, page, limit);
+  const user = await findUserById(req.user.id);
+  if (!user) {
+    return fail(req, res, 404, {
+      code: "USER_NOT_FOUND",
+      message: "User not found",
+    });
+  }
+
+  const { page, limit, mode } = parsed.data;
+  const accountMode = mode ?? user.accountMode ?? undefined;
+  const { items, total } = await listTradingCycles(
+    req.user.id,
+    page,
+    limit,
+    accountMode ?? undefined,
+  );
 
   return res.status(200).json({
     success: true,

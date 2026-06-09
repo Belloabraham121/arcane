@@ -60,7 +60,7 @@ describe("portfolio price resolver", () => {
     assert.equal(usdPriceFromPool("USDCe", pool), null);
   });
 
-  it("prefers stablecoin peg over pool for USDCe", async () => {
+  it("falls back to stablecoin peg and pool when CoinGecko is unavailable", async () => {
     const prices = await resolveTokenUsdPrices(["USDCe", "WSOMI"], [mockPool()]);
     assert.equal(prices.get("USDCe")?.usd, 1);
     assert.equal(prices.get("USDCe")?.source, "stablecoin");

@@ -5,6 +5,7 @@ import {
   liquidPoolsOnly,
   poolHasTradeableLiquidity,
 } from "../defi/quickswap/route-planner";
+import type { PlanRebalanceOptions } from "../defi/quickswap/route-planner";
 import type { QuickSwapPool } from "../defi/quickswap/types";
 import type { WalletBalancesResult } from "../wallet/token-balance.service";
 import type { PoolAllocationDrift } from "./trading.types";
@@ -17,6 +18,7 @@ export type TradingRecommendation = {
   fromPoolId?: string;
   toPoolId?: string;
   tokenIn?: { address: Address; symbol: string };
+  /** Set when pools share the same pair — explicit swap leg for planRebalance. */
   tokenOut?: { address: Address; symbol: string };
   amountInRaw?: string;
   /** Human-readable hint — do NOT pass this to tools; use amountInRaw only. */
@@ -43,22 +45,67 @@ function exclusivePoolToken(
   );
 }
 
+/** When pools share the same pair, swap the heavier wallet leg toward the lighter. */
+export function pickSamePairSwapLeg(
+  pool: QuickSwapPool,
+  balances: WalletBalancesResult,
+): { tokenIn: QuickSwapPool["token0"]; tokenOut: QuickSwapPool["token0"] } | null {
+  const bal0 = balances.balances.find(
+    (row) =>
+      row.address &&
+      normalizeAddress(row.address) === normalizeAddress(pool.token0.address),
+  );
+  const bal1 = balances.balances.find(
+    (row) =>
+      row.address &&
+      normalizeAddress(row.address) === normalizeAddress(pool.token1.address),
+  );
+  const raw0 = BigInt(bal0?.balance ?? "0");
+  const raw1 = BigInt(bal1?.balance ?? "0");
+  if (raw0 <= 0n && raw1 <= 0n) {
+    return null;
+  }
+  if (raw0 >= raw1) {
+    return { tokenIn: pool.token0, tokenOut: pool.token1 };
+  }
+  return { tokenIn: pool.token1, tokenOut: pool.token0 };
+}
+
 export function pickSmartRebalancePair(
   drift: PoolAllocationDrift[],
   pools: readonly QuickSwapPool[],
   thresholdPercent: number,
 ): { fromPoolId: string; toPoolId: string } | null {
   const liquidIds = new Set(liquidPoolsOnly(pools).map((pool) => pool.id));
+  const resolvableIds = new Set(pools.map((pool) => pool.id));
 
   const overweight = drift
     .filter(
-      (entry) => entry.driftPercent > thresholdPercent && liquidIds.has(entry.poolId),
+      (entry) =>
+        entry.driftPercent > thresholdPercent &&
+        resolvableIds.has(entry.poolId) &&
+        liquidIds.has(entry.poolId),
     )
     .sort((a, b) => b.driftPercent - a.driftPercent)[0];
 
-  const underweight = drift
-    .filter((entry) => entry.driftPercent < -thresholdPercent)
+  const underweightByDrift = drift
+    .filter(
+      (entry) =>
+        entry.driftPercent < -thresholdPercent &&
+        resolvableIds.has(entry.poolId),
+    )
     .sort((a, b) => a.driftPercent - b.driftPercent)[0];
+
+  const underweight =
+    underweightByDrift ??
+    drift
+      .filter((entry) => resolvableIds.has(entry.poolId))
+      .sort(
+        (a, b) =>
+          b.targetPercent -
+          b.currentPercent -
+          (a.targetPercent - a.currentPercent),
+      )[0];
 
   if (!overweight || !underweight || overweight.poolId === underweight.poolId) {
     return null;
@@ -94,6 +141,20 @@ export function computeProactiveSwapAmount(
   }
 
   return amount;
+}
+
+export function rebalancePlanOptions(
+  recommendation: TradingRecommendation,
+  pools: QuickSwapPool[],
+): PlanRebalanceOptions {
+  const options: PlanRebalanceOptions = { pools };
+  if (recommendation.tokenIn?.address) {
+    options.tokenIn = recommendation.tokenIn.address;
+  }
+  if (recommendation.tokenOut?.address) {
+    options.tokenOut = recommendation.tokenOut.address;
+  }
+  return options;
 }
 
 export function proactiveDriftThresholdPercent(
@@ -143,16 +204,6 @@ export function buildTradingRecommendation(input: {
     };
   }
 
-  const sourceToken = exclusivePoolToken(fromPool, toPool);
-  if (!sourceToken) {
-    return {
-      shouldTrade: false,
-      reason: "Pools share the same tokens — no swap leg required.",
-      suggestedTool: "hold",
-      tradeablePoolIds,
-    };
-  }
-
   const overweight = input.poolDrift.find(
     (entry) => entry.poolId === pair.fromPoolId,
   );
@@ -160,6 +211,24 @@ export function buildTradingRecommendation(input: {
     return {
       shouldTrade: false,
       reason: "Overweight pool drift entry missing.",
+      suggestedTool: "hold",
+      tradeablePoolIds,
+    };
+  }
+
+  const exclusiveToken = exclusivePoolToken(fromPool, toPool);
+  const samePairLeg = exclusiveToken
+    ? null
+    : pickSamePairSwapLeg(fromPool, input.balances);
+  const sourceToken = exclusiveToken ?? samePairLeg?.tokenIn ?? null;
+  const targetToken = exclusiveToken
+    ? null
+    : (samePairLeg?.tokenOut ?? null);
+
+  if (!sourceToken) {
+    return {
+      shouldTrade: false,
+      reason: "Pools share the same tokens but no wallet balance is available to swap.",
       suggestedTool: "hold",
       tradeablePoolIds,
     };
@@ -198,9 +267,13 @@ export function buildTradingRecommendation(input: {
     ? ""
     : ` Target pool ${toPool.id} has zero liquidity — route via other liquid pools only.`;
 
+  const samePairNote = targetToken
+    ? ` Same token pair — swap ${sourceToken.symbol}→${targetToken.symbol} to shift exposure.`
+    : "";
+
   return {
     shouldTrade: true,
-    reason: `Drift exceeds ${threshold}%: reduce ${fromPool.label} (+${overweight.driftPercent.toFixed(2)}%) toward ${toPool.label}.${targetNote}`,
+    reason: `Drift exceeds ${threshold}%: reduce ${fromPool.label} (+${overweight.driftPercent.toFixed(2)}%) toward ${toPool.label}.${samePairNote}${targetNote}`,
     suggestedTool: "rebalanceToPool",
     fromPoolId: pair.fromPoolId,
     toPoolId: pair.toPoolId,
@@ -208,6 +281,9 @@ export function buildTradingRecommendation(input: {
       address: sourceToken.address,
       symbol: sourceToken.symbol,
     },
+    tokenOut: targetToken
+      ? { address: targetToken.address, symbol: targetToken.symbol }
+      : undefined,
     amountInRaw: amount.toString(),
     amountInHint: formatAmountHint(
       amount,

@@ -4,6 +4,7 @@ import { findUserById } from "../auth/user.repository";
 import { handleStrategyActivation } from "../portfolio/activation.service";
 import {
   isUserCycleRunning,
+  resetVirtualPoolPercents,
   scheduleTradingCycle,
   shouldTriggerCycleOnActivate,
 } from "./trading-runner.service";
@@ -469,6 +470,7 @@ export async function patchPoolAllocations(
   }
 
   log.info("Pool allocations updated", { userId });
+  resetVirtualPoolPercents(userId, accountMode);
 
   if (
     strategy.status === "active" &&

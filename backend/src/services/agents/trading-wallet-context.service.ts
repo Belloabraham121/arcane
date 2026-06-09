@@ -6,6 +6,7 @@ import { setAgentSigningSession } from "./wallet-executor";
 import {
   AnvilForkUnhealthyError,
   assertAnvilForkHealthy,
+  ensureDemoAgentGasFunded,
   fundAgentOnFork,
   impersonateAccountOnFork,
   stopImpersonatingOnFork,
@@ -70,6 +71,8 @@ export async function ensureDemoTradingWalletFunded(input: {
   whaleAddress: Address;
   poolIds: string[];
 }): Promise<void> {
+  await ensureDemoAgentGasFunded(input.anvilRpc, input.agentAddress);
+
   const balances = await getWalletBalances(input.agentAddress, input.poolIds);
   const hasTokens = balances.balances.some((row) => {
     try {

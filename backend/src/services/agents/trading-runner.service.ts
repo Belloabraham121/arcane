@@ -16,9 +16,7 @@ import type { QuickSwapPool } from "../defi/quickswap/types";
 import { planRebalance } from "../defi/quickswap/route-planner";
 import {
   buildTradingRecommendation,
-  computeProactiveSwapAmount,
-  pickSmartRebalancePair,
-  proactiveDriftThresholdPercent,
+  rebalancePlanOptions,
 } from "./trading-recommendations";
 import { schedulePortfolioSnapshot } from "../portfolio/snapshot.service";
 import { getDemoEnv } from "../../config/env";
@@ -192,13 +190,79 @@ function parseBalanceAmount(formatted: string): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+const virtualPoolPercentByUser = new Map<string, Record<string, number>>();
+
+function initVirtualPoolPercents(
+  activePoolIds: readonly string[],
+): Record<string, number> {
+  const n = activePoolIds.length;
+  if (n === 0) {
+    return {};
+  }
+  const equal = 100 / n;
+  return Object.fromEntries(activePoolIds.map((id) => [id, equal]));
+}
+
+function virtualPoolSetKey(activePoolIds: readonly string[]): string {
+  return [...activePoolIds].sort().join(",");
+}
+
+function getVirtualPoolPercents(
+  userId: string,
+  accountMode: AccountMode,
+  activePoolIds: readonly string[],
+): Record<string, number> {
+  const cacheKey = cycleCacheKey(userId, accountMode);
+  const poolSetKey = virtualPoolSetKey(activePoolIds);
+  const stored = virtualPoolPercentByUser.get(cacheKey);
+  if (stored && virtualPoolSetKey(Object.keys(stored)) === poolSetKey) {
+    return stored;
+  }
+  const initial = initVirtualPoolPercents(activePoolIds);
+  virtualPoolPercentByUser.set(cacheKey, initial);
+  return initial;
+}
+
+export function resetVirtualPoolPercents(
+  userId: string,
+  accountMode: AccountMode,
+): void {
+  virtualPoolPercentByUser.delete(cycleCacheKey(userId, accountMode));
+}
+
+function applyVirtualRebalanceShift(
+  userId: string,
+  accountMode: AccountMode,
+  fromPoolId: string,
+  toPoolId: string,
+  poolDrift: PoolAllocationDrift[],
+): void {
+  const overweight = poolDrift.find((entry) => entry.poolId === fromPoolId);
+  const underweight = poolDrift.find((entry) => entry.poolId === toPoolId);
+  if (!overweight || !underweight) {
+    return;
+  }
+  const shift = Math.min(
+    overweight.driftPercent,
+    Math.abs(underweight.driftPercent),
+  );
+  if (shift <= 0) {
+    return;
+  }
+  const stored = virtualPoolPercentByUser.get(cycleCacheKey(userId, accountMode));
+  if (!stored) {
+    return;
+  }
+  stored[fromPoolId] = (stored[fromPoolId] ?? 0) - shift;
+  stored[toPoolId] = (stored[toPoolId] ?? 0) + shift;
+}
+
 function buildPoolDrift(
   poolAllocations: PoolAllocations,
   pools: Awaited<ReturnType<typeof listPoolsWithMetrics>>,
-  balanceWeights: Map<string, number>,
+  virtualPercents: Record<string, number>,
 ): PoolAllocationDrift[] {
   const allocationTotal = Object.values(poolAllocations).reduce((sum, v) => sum + v, 0);
-  const weightTotal = [...balanceWeights.values()].reduce((sum, v) => sum + v, 0);
 
   const activePoolIds = Object.entries(poolAllocations)
     .filter(([, amount]) => amount > 0)
@@ -210,10 +274,7 @@ function buildPoolDrift(
     const targetPercent =
       allocationTotal > 0 ? (targetAmount / allocationTotal) * 100 : 0;
 
-    const poolWeight =
-      (balanceWeights.get(`${poolId}:token0`) ?? 0) +
-      (balanceWeights.get(`${poolId}:token1`) ?? 0);
-    const currentPercent = weightTotal > 0 ? (poolWeight / weightTotal) * 100 : 0;
+    const currentPercent = virtualPercents[poolId] ?? 0;
 
     return {
       poolId,
@@ -223,24 +284,6 @@ function buildPoolDrift(
       driftPercent: currentPercent - targetPercent,
     };
   });
-}
-
-function normalizeAddress(address: Address): string {
-  return address.toLowerCase();
-}
-
-function exclusivePoolToken(
-  fromPool: QuickSwapPool,
-  toPool: QuickSwapPool,
-): QuickSwapPool["token0"] | null {
-  const toAddresses = new Set(
-    [toPool.token0.address, toPool.token1.address].map(normalizeAddress),
-  );
-  const candidates = [fromPool.token0, fromPool.token1];
-  return (
-    candidates.find((token) => !toAddresses.has(normalizeAddress(token.address))) ??
-    null
-  );
 }
 
 function toExecutedTransactions(
@@ -259,6 +302,7 @@ function toExecutedTransactions(
 
 async function trySmartRebalance(input: {
   userId: string;
+  accountMode: AccountMode;
   walletAddress: Address;
   poolDrift: PoolAllocationDrift[];
   pools: QuickSwapPool[];
@@ -297,7 +341,7 @@ async function trySmartRebalance(input: {
     recommendation.toPoolId,
     amount,
     input.walletAddress,
-    { pools: input.pools },
+    rebalancePlanOptions(recommendation, input.pools),
   );
 
   if (plan.kind === "no_swap") {
@@ -324,6 +368,7 @@ async function trySmartRebalance(input: {
 
 async function tryAutoRebalance(input: {
   userId: string;
+  accountMode: AccountMode;
   walletAddress: Address;
   poolDrift: PoolAllocationDrift[];
   pools: QuickSwapPool[];
@@ -336,107 +381,7 @@ async function tryAutoRebalance(input: {
   poolFrom?: string;
   poolTo?: string;
 }> {
-  const {
-    maxSwapPortfolioBps,
-    minSwapAmountRaw,
-  } = input.riskLimits;
-
-  const pair = pickSmartRebalancePair(
-    input.poolDrift,
-    input.pools,
-    proactiveDriftThresholdPercent(input.riskLimits),
-  );
-  if (!pair) {
-    return { executedTransactions: [] };
-  }
-
-  const fromPool = input.pools.find((pool) => pool.id === pair.fromPoolId);
-  const toPool = input.pools.find((pool) => pool.id === pair.toPoolId);
-  if (!fromPool || !toPool) {
-    return { executedTransactions: [] };
-  }
-
-  const sourceToken = exclusivePoolToken(fromPool, toPool);
-  if (!sourceToken) {
-    return {
-      executedTransactions: [],
-      message: "Pools share the same tokens — no on-chain swap required.",
-    };
-  }
-
-  const overweight = input.poolDrift.find(
-    (entry) => entry.poolId === pair.fromPoolId,
-  );
-  if (!overweight) {
-    return { executedTransactions: [] };
-  }
-
-  const balanceRow = input.balances.balances.find(
-    (entry) => entry.symbol === sourceToken.symbol,
-  );
-  if (!balanceRow) {
-    return { executedTransactions: [] };
-  }
-
-  const amount = computeProactiveSwapAmount(
-    balanceRow.balance,
-    overweight.driftPercent,
-    maxSwapPortfolioBps,
-    minSwapAmountRaw,
-  );
-  if (!amount) {
-    return { executedTransactions: [] };
-  }
-
-  const plan = await planRebalance(
-    pair.fromPoolId,
-    pair.toPoolId,
-    amount,
-    input.walletAddress,
-    { pools: input.pools },
-  );
-
-  if (plan.kind === "no_swap") {
-    return {
-      executedTransactions: [],
-      message: plan.reason,
-    };
-  }
-
-  const txs = await executeRebalancePlan({
-    userId: input.userId,
-    plan,
-    allowedPoolIds: input.activePoolIds,
-    riskLimits: input.riskLimits,
-  });
-
-  return {
-    executedTransactions: toExecutedTransactions(txs),
-    message: `Rebalanced ${sourceToken.symbol} from ${fromPool.label} toward ${toPool.label} (agent wallet; no user approval).`,
-    poolFrom: fromPool.id,
-    poolTo: toPool.id,
-  };
-}
-
-function balanceWeightsForPools(
-  pools: Awaited<ReturnType<typeof listPoolsWithMetrics>>,
-  activePoolIds: Set<string>,
-  balances: Awaited<ReturnType<typeof getWalletBalances>>,
-): Map<string, number> {
-  const bySymbol = new Map(balances.balances.map((b) => [b.symbol, parseBalanceAmount(b.formatted)]));
-  const weights = new Map<string, number>();
-
-  for (const pool of pools) {
-    if (!activePoolIds.has(pool.id)) {
-      continue;
-    }
-    const w0 = bySymbol.get(pool.token0.symbol) ?? 0;
-    const w1 = bySymbol.get(pool.token1.symbol) ?? 0;
-    weights.set(`${pool.id}:token0`, w0);
-    weights.set(`${pool.id}:token1`, w1);
-  }
-
-  return weights;
+  return trySmartRebalance(input);
 }
 
 export function getTradingStatus(userId: string): TradingStatusResponse {
@@ -603,8 +548,12 @@ export async function runTradingCycle(
       fetchBalances(tradingWalletAddress, [...activePoolIds]),
     ]);
 
-    const weights = balanceWeightsForPools(pools, activePoolIds, balances);
-    const poolDrift = buildPoolDrift(poolAllocations, pools, weights);
+    const virtualPercents = getVirtualPoolPercents(
+      userId,
+      trading.accountMode,
+      [...activePoolIds],
+    );
+    let poolDrift = buildPoolDrift(poolAllocations, pools, virtualPercents);
 
     const hasBalance = balances.balances.some((b) => parseBalanceAmount(b.formatted) > 0);
     const finishedAt = new Date().toISOString();
@@ -675,6 +624,7 @@ export async function runTradingCycle(
           try {
             const smart = await trySmartRebalance({
               userId,
+              accountMode: trading.accountMode,
               walletAddress: tradingWalletAddress,
               poolDrift,
               pools,
@@ -723,6 +673,7 @@ export async function runTradingCycle(
         try {
           const rebalance = await tryAutoRebalance({
             userId,
+            accountMode: trading.accountMode,
             walletAddress: tradingWalletAddress,
             poolDrift,
             pools,
@@ -756,6 +707,29 @@ export async function runTradingCycle(
                 : "Fallback rebalance failed";
           executionMessage = `${detail} — ${fallbackDetail}`;
         }
+      }
+    }
+
+    if (executedTransactions.length > 0) {
+      const rec = buildTradingRecommendation({
+        poolDrift,
+        pools,
+        balances,
+        riskLimits,
+      });
+      if (rec.fromPoolId && rec.toPoolId) {
+        applyVirtualRebalanceShift(
+          userId,
+          trading.accountMode,
+          rec.fromPoolId,
+          rec.toPoolId,
+          poolDrift,
+        );
+        poolDrift = buildPoolDrift(
+          poolAllocations,
+          pools,
+          getVirtualPoolPercents(userId, trading.accountMode, [...activePoolIds]),
+        );
       }
     }
 

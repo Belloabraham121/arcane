@@ -145,6 +145,16 @@ async function ensureNativeBalance(
   await testClient.setBalance({ address, value: minWei });
 }
 
+/** Ensure the shared demo agent wallet can pay gas on the Anvil fork. */
+export async function ensureDemoAgentGasFunded(
+  anvilRpc: string,
+  agentAddress: Address,
+  minWei: bigint = parseEther("5"),
+): Promise<void> {
+  await assertAnvilForkHealthy(anvilRpc);
+  await ensureNativeBalance(anvilRpc, agentAddress, minWei);
+}
+
 /** Impersonate an address on the fork so it can sign via JSON-RPC. */
 export async function impersonateAccountOnFork(
   anvilRpc: string,
@@ -589,6 +599,8 @@ export async function creditDemoWalletToken(input: {
     input.walletAddress,
     creditRaw,
   );
+
+  await ensureDemoAgentGasFunded(input.anvilRpc, input.walletAddress);
 
   return {
     symbol: input.symbol,

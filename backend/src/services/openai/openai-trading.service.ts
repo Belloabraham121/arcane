@@ -261,6 +261,9 @@ export async function runOpenAiTradingCycle(input: {
               portfolio.recommendedAction.tokenIn
                 ? `tokenIn=${portfolio.recommendedAction.tokenIn.address} (${portfolio.recommendedAction.tokenIn.symbol})`
                 : "",
+              portfolio.recommendedAction.tokenOut
+                ? `tokenOut=${portfolio.recommendedAction.tokenOut.address} (${portfolio.recommendedAction.tokenOut.symbol})`
+                : "",
               portfolio.recommendedAction.amountInRaw
                 ? `amountInRaw=${portfolio.recommendedAction.amountInRaw}`
                 : "",
@@ -268,11 +271,12 @@ export async function runOpenAiTradingCycle(input: {
                 ? `amountInHint=${portfolio.recommendedAction.amountInHint}`
                 : "",
               "IMPORTANT: pass amountInRaw verbatim to rebalanceToPool/swapExactIn/quoteSwap. Do NOT use formatted balances or human numbers.",
+              "Execute autonomously — do NOT ask the user for confirmation or whether to proceed.",
               "Steps: listPools → getPortfolio → quoteSwap(amountInRaw) → rebalanceToPool(targetPoolId, amountInRaw).",
             ]
               .filter(Boolean)
               .join("\n")
-          : "No mandatory trade this cycle (recommendedAction.shouldTrade is false). Still review pools and act if a clear opportunity appears.",
+          : "No mandatory trade this cycle (recommendedAction.shouldTrade is false). Summarize status briefly. Do NOT ask the user any questions.",
       ].join("\n"),
     },
   ];

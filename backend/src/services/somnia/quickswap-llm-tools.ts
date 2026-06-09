@@ -188,15 +188,18 @@ export function buildTradingSystemPrompt(
     .join("\n");
 
   const executionRules = [
+    "You are fully autonomous — NEVER ask the user for confirmation, permission, or whether to proceed.",
     "TOOLS THAT SUBMIT ON-CHAIN TXS: swapExactIn and rebalanceToPool (agent wallet signs automatically).",
     "Each cycle: call listPools + getPortfolio first, then follow portfolio.recommendedAction.",
-    "When recommendedAction.shouldTrade is true: quoteSwap then EXECUTE with rebalanceToPool or swapExactIn.",
+    "When recommendedAction.shouldTrade is true: quoteSwap then EXECUTE with rebalanceToPool or swapExactIn in this cycle.",
+    "When pools share the same token pair, use recommendedAction.tokenIn/tokenOut and rebalanceToPool — do not skip as analysis-only.",
     "AMOUNTS: always use balances[].balance or recommendedAction.amountInRaw (integer string). NEVER use balances[].formatted.",
     "Example: 1 WSOMI = \"1000000000000000000\" (18 decimals). 1 USDCe = \"1000000\" (6 decimals).",
     "Do not end the cycle with analysis only if shouldTrade is true and quotes succeed — you must attempt execution.",
     "Only use pools in recommendedAction.tradeablePoolIds for routing. Skip zero-liquidity pools.",
     `Hard drift cap: ${driftThresholdPercent}%. Proactive threshold may be lower (see recommendedAction).`,
     "Never swap tokens outside the user's selected pools. Respect maxSwapPortfolioBps.",
+    "End with a brief execution summary only — no questions to the user.",
   ];
 
   if (strategyType === "auto") {
@@ -539,12 +542,24 @@ export async function executeTradingTool(
           throw new TradingToolError("Source and target pools are the same");
         }
 
+        const planOptions: {
+          pools: typeof ctx.pools;
+          tokenIn?: Address;
+          tokenOut?: Address;
+        } = { pools: ctx.pools };
+        if (rec.tokenIn?.address) {
+          planOptions.tokenIn = rec.tokenIn.address;
+        }
+        if (rec.tokenOut?.address) {
+          planOptions.tokenOut = rec.tokenOut.address;
+        }
+
         const plan = await planRebalance(
           fromPoolId,
           targetPoolId,
           amount,
           ctx.walletAddress,
-          { pools: ctx.pools },
+          planOptions,
         );
 
         if (plan.kind === "no_swap") {

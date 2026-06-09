@@ -180,8 +180,11 @@ async function assertSufficientGas(walletAddress: Address): Promise<void> {
   const client = getQuickSwapPublicClient();
   const native = await client.getBalance({ address: walletAddress });
   if (native === 0n) {
+    const isDemoFork = activeSigningSession?.mode === "fork_impersonate";
     throw new WalletExecutorError(
-      "Agent wallet has no SOMI for gas — fund the wallet on Somnia mainnet",
+      isDemoFork
+        ? "Demo agent wallet has no SOMI for gas on the Anvil fork — ensure Anvil is running and DEMO_TRADING_ENABLED=true"
+        : "Agent wallet has no SOMI for gas — fund the wallet on Somnia mainnet",
       "INSUFFICIENT_GAS",
     );
   }

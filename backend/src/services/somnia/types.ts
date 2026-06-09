@@ -47,6 +47,7 @@ export type CreateAgentRequestResult = {
   requestId: bigint;
   txHash: Hash;
   deposit: bigint;
+  blockNumber: bigint;
 };
 
 export type AgentRequestResult<T = unknown> = {

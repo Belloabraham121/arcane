@@ -368,10 +368,18 @@ export default function DashboardPage() {
               </p>
             )}
 
+            {tradingStatus?.lastCycle?.somniaAttestation?.txHash && (
+              <p className="font-mono text-[10px] text-muted-foreground">
+                Somnia attestation:{" "}
+                <span className="text-foreground">
+                  request #{tradingStatus.lastCycle.somniaAttestation.requestId ?? "—"}
+                </span>
+              </p>
+            )}
             {tradingStatus?.lastCycle?.llmResponse && (
               <div className="border border-border px-4 py-4">
                 <p className="mb-1 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  Latest LLM summary
+                  OpenAI summary
                 </p>
                 <p className="font-mono text-xs text-muted-foreground">
                   {tradingStatus.lastCycle.llmResponse}

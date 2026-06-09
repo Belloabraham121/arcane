@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import { decodeFunctionData, parseAbi } from "viem";
+import { decodeFunctionData, encodeFunctionData, parseAbi } from "viem";
 import {
   assertPoolInAllocations,
   capSwapAmountByPolicy,
@@ -215,6 +215,22 @@ function pickOverweightPoolId(drift: PoolAllocationDrift[]): string | null {
     .filter((entry) => entry.driftPercent > 0)
     .sort((a, b) => b.driftPercent - a.driftPercent)[0];
   return overweight?.poolId ?? null;
+}
+
+export function encodeTradingToolCalldata(
+  functionName: string,
+  args: readonly unknown[],
+): Hex {
+  return encodeFunctionData({
+    abi: QUICKSWAP_TOOLS_ABI,
+    functionName: functionName as
+      | "listPools"
+      | "getPortfolio"
+      | "quoteSwap"
+      | "swapExactIn"
+      | "rebalanceToPool",
+    args: args as never,
+  });
 }
 
 export function decodeToolCalldata(

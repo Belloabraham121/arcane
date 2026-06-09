@@ -14,11 +14,11 @@ import {
   emitTradingCycleCompleted,
   emitTradingCycleStarted,
 } from "../../websocket/trading-events";
-import { SomniaAgentError } from "../somnia/agent-caller";
 import {
-  runLlmTradingCycle,
-  type LlmTradingCycleResult,
-} from "../somnia/llm-trading.service";
+  runDualLlmTradingCycle,
+  type DualLlmTradingCycleResult,
+} from "./dual-llm-trading.service";
+import { OpenAiTradingError } from "../openai/openai-trading.service";
 import { resolveSubAgents } from "../somnia/quickswap-llm-tools";
 import type {
   ExecutedTransaction,
@@ -57,9 +57,9 @@ export class TradingError extends Error {
 const runningUsers = new Set<string>();
 
 export type TradingCycleOverrides = {
-  runLlmTradingCycle?: (
-    input: Parameters<typeof runLlmTradingCycle>[0],
-  ) => Promise<LlmTradingCycleResult>;
+  runDualLlmTradingCycle?: (
+    input: Parameters<typeof runDualLlmTradingCycle>[0],
+  ) => Promise<DualLlmTradingCycleResult>;
   listPoolsWithMetrics?: typeof listPoolsWithMetrics;
   getWalletBalances?: typeof getWalletBalances;
 };
@@ -370,8 +370,8 @@ export async function getTradingStatusForUser(
 }
 
 /**
- * Runs one trading cycle: portfolio snapshot → Somnia inferToolsChat → tool execution.
- * Falls back to drift rebalance if LLM is unavailable (e.g. insufficient testnet STT).
+ * Runs one trading cycle: portfolio snapshot → Somnia on-chain attestation → OpenAI decisions → tool execution.
+ * Falls back to drift rebalance if OpenAI is unavailable.
  */
 export async function runTradingCycle(
   userId: string,
@@ -380,7 +380,7 @@ export async function runTradingCycle(
 ): Promise<TradingCycleSummary> {
   const fetchPools = overrides?.listPoolsWithMetrics ?? listPoolsWithMetrics;
   const fetchBalances = overrides?.getWalletBalances ?? getWalletBalances;
-  const invokeLlm = overrides?.runLlmTradingCycle ?? runLlmTradingCycle;
+  const invokeLlm = overrides?.runDualLlmTradingCycle ?? runDualLlmTradingCycle;
   if (runningUsers.has(userId)) {
     throw new TradingError(
       "CYCLE_IN_PROGRESS",
@@ -442,6 +442,8 @@ export async function runTradingCycle(
     let toolActions: TradingToolAction[] = [];
     let llmResponse: string | null = null;
     let llmPending = true;
+    let llmProvider: TradingCycleSummary["llmProvider"];
+    let somniaAttestation: TradingCycleSummary["somniaAttestation"];
     let executionMessage: string | undefined;
 
     const subAgents = resolveSubAgents(
@@ -483,10 +485,18 @@ export async function runTradingCycle(
         }));
         llmResponse = llm.llmResponse;
         llmPending = false;
+        llmProvider = llm.provider;
+        somniaAttestation = {
+          status: llm.somniaAttestation.status,
+          requestId: llm.somniaAttestation.requestId,
+          txHash: llm.somniaAttestation.txHash,
+          onChainResponse: llm.somniaAttestation.onChainResponse,
+          message: llm.somniaAttestation.message,
+        };
         executionMessage = llm.message;
       } catch (err) {
         const detail =
-          err instanceof SomniaAgentError
+          err instanceof OpenAiTradingError
             ? err.message
             : err instanceof Error
               ? err.message
@@ -532,7 +542,7 @@ export async function runTradingCycle(
     }
 
     const defaultMessage = hasBalance
-      ? "Portfolio analyzed. LLM agent uses the user's wallet on Somnia testnet (STT required)."
+      ? "Portfolio analyzed. OpenAI drives trading; Somnia on-chain agent attests integration."
       : "No on-chain balance detected yet — deposit to the agent wallet, then run another cycle.";
 
     const summary: TradingCycleSummary = {
@@ -549,6 +559,8 @@ export async function runTradingCycle(
       executedTransactions,
       llmPending,
       llmResponse,
+      llmProvider,
+      somniaAttestation,
       toolActions: toolActions.length > 0 ? toolActions : undefined,
       message:
         executedTransactions.length > 0
@@ -578,6 +590,15 @@ export async function runTradingCycle(
       status: "completed",
       message: summary.message,
       llmResponse: summary.llmResponse ?? null,
+      llmProvider: summary.llmProvider,
+      somniaAttestation: summary.somniaAttestation
+        ? {
+            status: summary.somniaAttestation.status,
+            requestId: summary.somniaAttestation.requestId,
+            txHash: summary.somniaAttestation.txHash,
+            message: summary.somniaAttestation.message,
+          }
+        : undefined,
       executedCount: summary.executedTransactions.length,
       finishedAt: summary.finishedAt,
     });

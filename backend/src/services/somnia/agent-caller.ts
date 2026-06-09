@@ -41,7 +41,6 @@ const ZERO_CALLBACK_ADDRESS = "0x0000000000000000000000000000000000000000" as co
 const ZERO_CALLBACK_SELECTOR = "0x00000000" as const;
 
 let httpClient: PublicClient | null = null;
-let wsClient: PublicClient | null = null;
 
 function getHttpClient(): PublicClient {
   if (!httpClient) {
@@ -54,21 +53,9 @@ function getHttpClient(): PublicClient {
   return httpClient;
 }
 
-function getWsClient(): PublicClient {
-  if (!wsClient) {
-    const { rpcWs } = getSomniaAgentEnv();
-    wsClient = createPublicClient({
-      chain: somniaAgentChain,
-      transport: webSocket(rpcWs),
-    });
-  }
-  return wsClient;
-}
-
 /** Reset cached RPC clients (tests). */
 export function resetSomniaAgentClients(): void {
   httpClient = null;
-  wsClient = null;
 }
 
 /** Quote STT deposit for one agent request (reserve + subcommittee reward). */
@@ -165,41 +152,103 @@ export async function createAgentRequest(
     );
   }
 
-  return { requestId, txHash, deposit };
+  return { requestId, txHash, deposit, blockNumber: receipt.blockNumber };
 }
 
-/** Wait for `RequestFinalized` via WebSocket subscription. */
-export async function waitForRequestFinalized(
+type AgentRequestSnapshot = Awaited<ReturnType<typeof getAgentRequest>>;
+
+const REQUEST_SNAPSHOT_POLL_MS = 100;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** `getRequest` reverts once the platform purges finalized requests — never throw here. */
+async function readAgentRequestSnapshot(
   requestId: bigint,
-  timeoutMs?: number,
+): Promise<AgentRequestSnapshot | null> {
+  try {
+    return await getAgentRequest(requestId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Poll `getRequest` while the request is live. Somnia purges records within ~100ms
+ * of finalization, so we must capture validator responses before `RequestFinalized`.
+ */
+function startRequestSnapshotPoller(
+  requestId: bigint,
+  deadlineMs: number,
+): {
+  getBest(): AgentRequestSnapshot | null;
+  stop(): void;
+} {
+  let best: AgentRequestSnapshot | null = null;
+  let stopped = false;
+
+  const loop = async () => {
+    while (!stopped && Date.now() < deadlineMs) {
+      const snap = await readAgentRequestSnapshot(requestId);
+      if (snap) {
+        if ((snap.responses?.length ?? 0) > 0) {
+          best = snap;
+        } else {
+          const status = Number(snap.status);
+          if (
+            status !== ResponseStatus.Pending &&
+            status !== ResponseStatus.None
+          ) {
+            best = snap;
+          }
+        }
+      }
+      await sleep(REQUEST_SNAPSHOT_POLL_MS);
+    }
+  };
+
+  void loop();
+
+  return {
+    getBest: () => best,
+    stop: () => {
+      stopped = true;
+    },
+  };
+}
+
+/** Wait for `RequestFinalized` via WebSocket subscription (filtered by requestId). */
+async function waitForRequestFinalizedWs(
+  requestId: bigint,
+  timeoutMs: number,
 ): Promise<{ status: number; label: string }> {
   const env = getSomniaAgentEnv();
-  const timeout = timeoutMs ?? env.requestTimeoutMs;
-  const ws = getWsClient();
+  const ws = createPublicClient({
+    chain: somniaAgentChain,
+    transport: webSocket(env.rpcWs),
+  });
 
   const status = await new Promise<number>((resolve, reject) => {
     const timer = setTimeout(() => {
       unwatch();
       reject(
         new SomniaAgentError(
-          `Timed out after ${timeout}ms waiting for RequestFinalized`,
+          `Timed out after ${timeoutMs}ms waiting for RequestFinalized`,
           "REQUEST_TIMEOUT",
         ),
       );
-    }, timeout);
+    }, timeoutMs);
 
     const unwatch = ws.watchContractEvent({
       address: env.agentPlatform,
       abi: platformAbi,
       eventName: "RequestFinalized",
+      args: { requestId },
       onLogs: (logs) => {
-        for (const entry of logs) {
-          if (entry.args.requestId === requestId) {
-            clearTimeout(timer);
-            unwatch();
-            resolve(Number(entry.args.status));
-          }
-        }
+        clearTimeout(timer);
+        unwatch();
+        resolve(Number(logs[0]!.args.status));
       },
       onError: (err) => {
         clearTimeout(timer);
@@ -210,6 +259,99 @@ export async function waitForRequestFinalized(
   });
 
   return { status, label: responseStatusLabel(status) };
+}
+
+const LOG_SCAN_CHUNK_SIZE = 49n;
+const LOG_SCAN_INTERVAL_MS = 5_000;
+
+/** Scan `RequestFinalized` logs when WebSocket delivery is slow or unavailable. */
+async function waitForRequestFinalizedLogs(
+  requestId: bigint,
+  fromBlock: bigint,
+  timeoutMs: number,
+): Promise<{ status: number; label: string }> {
+  const env = getSomniaAgentEnv();
+  const client = getHttpClient();
+  const deadline = Date.now() + timeoutMs;
+  let cursor = fromBlock;
+
+  while (Date.now() < deadline) {
+    const latest = await client.getBlockNumber();
+
+    while (cursor <= latest && Date.now() < deadline) {
+      const to =
+        cursor + LOG_SCAN_CHUNK_SIZE > latest
+          ? latest
+          : cursor + LOG_SCAN_CHUNK_SIZE;
+
+      try {
+        const logs = await client.getLogs({
+          address: env.agentPlatform,
+          abi: platformAbi,
+          eventName: "RequestFinalized",
+          fromBlock: cursor,
+          toBlock: to,
+        });
+        const match = logs.find((entry) => entry.args.requestId === requestId);
+        if (match) {
+          const status = Number(match.args.status);
+          return { status, label: responseStatusLabel(status) };
+        }
+      } catch (err) {
+        log.debug("RequestFinalized log scan chunk failed", {
+          requestId: requestId.toString(),
+          fromBlock: cursor.toString(),
+          toBlock: to.toString(),
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      cursor = to + 1n;
+    }
+
+    await sleep(LOG_SCAN_INTERVAL_MS);
+  }
+
+  throw new SomniaAgentError(
+    `Timed out after ${timeoutMs}ms scanning RequestFinalized logs`,
+    "REQUEST_TIMEOUT",
+  );
+}
+
+export type RequestFinalizationResult = {
+  status: number;
+  label: string;
+  snapshot: AgentRequestSnapshot | null;
+};
+
+/**
+ * Wait for request finalization. Runs a fast `getRequest` poller in parallel because
+ * Somnia purges request storage immediately after `RequestFinalized`.
+ */
+export async function waitForRequestFinalized(
+  requestId: bigint,
+  timeoutMs?: number,
+  fromBlock?: bigint,
+): Promise<RequestFinalizationResult> {
+  const env = getSomniaAgentEnv();
+  const timeout = timeoutMs ?? env.requestTimeoutMs;
+  const deadline = Date.now() + timeout;
+  const poller = startRequestSnapshotPoller(requestId, deadline);
+
+  const waiters: Promise<{ status: number; label: string }>[] = [
+    waitForRequestFinalizedWs(requestId, timeout),
+  ];
+  if (fromBlock != null) {
+    waiters.push(waitForRequestFinalizedLogs(requestId, fromBlock, timeout));
+  }
+
+  try {
+    const { status, label } = await Promise.any(waiters);
+    await sleep(250);
+    return { status, label, snapshot: poller.getBest() };
+  } finally {
+    poller.stop();
+  }
 }
 
 /** Read on-chain request state after finalization. */
@@ -243,29 +385,33 @@ export async function invokeAgent<T = unknown>(
   account: PrivateKeyAccount,
   options: InvokeAgentOptions,
 ): Promise<AgentRequestResult<T>> {
-  const { requestId, txHash } = await createAgentRequest(account, options.payload, {
-    agentId: options.agentId,
-    perAgentCostWei: options.perAgentCostWei,
-  });
+  const { requestId, txHash, blockNumber } = await createAgentRequest(
+    account,
+    options.payload,
+    {
+      agentId: options.agentId,
+      perAgentCostWei: options.perAgentCostWei,
+    },
+  );
 
   log.info("Waiting for agent request finalization", {
     requestId: requestId.toString(),
     txHash,
   });
 
-  const { status, label } = await waitForRequestFinalized(
+  const { status, label, snapshot } = await waitForRequestFinalized(
     requestId,
     options.timeoutMs,
+    blockNumber,
   );
 
   if (status !== ResponseStatus.Success) {
-    const request = await getAgentRequest(requestId);
     log.error("Agent request failed", {
       requestId: requestId.toString(),
       finalizedStatus: label,
-      onChainStatus: request.status,
-      responseCount: request.responseCount.toString(),
-      failureCount: request.failureCount.toString(),
+      onChainStatus: snapshot ? Number(snapshot.status) : null,
+      responseCount: snapshot?.responseCount?.toString() ?? null,
+      failureCount: snapshot?.failureCount?.toString() ?? null,
     });
 
     throw new SomniaAgentError(
@@ -276,10 +422,11 @@ export async function invokeAgent<T = unknown>(
     );
   }
 
-  const request = await getAgentRequest(requestId);
-  if (!request.responses?.length) {
+  const request =
+    snapshot ?? (await readAgentRequestSnapshot(requestId));
+  if (!request?.responses?.length) {
     throw new SomniaAgentError(
-      "No validator responses on finalized request",
+      "No validator responses on finalized request (request purged before snapshot)",
       "EMPTY_RESPONSE",
     );
   }

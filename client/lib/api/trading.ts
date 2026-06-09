@@ -26,6 +26,14 @@ export type TradingToolAction = {
   result: string
 }
 
+export type SomniaAttestationSummary = {
+  status: "submitted" | "success" | "failed" | "skipped"
+  requestId: string | null
+  txHash: string | null
+  onChainResponse: string | null
+  message: string
+}
+
 export type TradingCycleSummary = {
   cycleId: string
   reason: "activation" | "manual" | "scheduled" | "deposit"
@@ -38,6 +46,8 @@ export type TradingCycleSummary = {
   executedTransactions: ExecutedTransaction[]
   llmPending: boolean
   llmResponse?: string | null
+  llmProvider?: "openai"
+  somniaAttestation?: SomniaAttestationSummary
   toolActions?: TradingToolAction[]
 }
 
@@ -67,6 +77,8 @@ export type TradingHistoryListItem = {
   message: string
   llmPending: boolean
   llmResponse: string | null
+  llmProvider: string | null
+  somniaAttestation: SomniaAttestationSummary | null
   startedAt: string
   finishedAt: string
   actionCount: number

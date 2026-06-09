@@ -25,6 +25,14 @@ export type TradingToolAction = {
   result: string;
 };
 
+export type SomniaAttestationSummary = {
+  status: "submitted" | "success" | "failed" | "skipped";
+  requestId: string | null;
+  txHash: string | null;
+  onChainResponse: string | null;
+  message: string;
+};
+
 export type TradingCycleSummary = {
   cycleId: string;
   userId: string;
@@ -39,9 +47,12 @@ export type TradingCycleSummary = {
   poolDrift: PoolAllocationDrift[];
   /** On-chain txs signed by the agent wallet (no user approval). */
   executedTransactions: ExecutedTransaction[];
-  /** False after Somnia inferToolsChat runs in this cycle. */
+  /** False after OpenAI trading analysis runs in this cycle. */
   llmPending: boolean;
   llmResponse?: string | null;
+  /** OpenAI powers decisions; Somnia on-chain call is attestation-only. */
+  llmProvider?: "openai";
+  somniaAttestation?: SomniaAttestationSummary;
   toolActions?: TradingToolAction[];
 };
 

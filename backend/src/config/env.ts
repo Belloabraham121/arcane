@@ -200,5 +200,8 @@ export function getTradingExecutionEnv() {
     ),
     depositDetectionEnabled:
       optional("TRADING_DEPOSIT_DETECTION_ENABLED", "true") === "true",
+    somniaAttestationEnabled:
+      optional("SOMNIA_ATTESTATION_ENABLED", "true") === "true",
+    openaiModel: optional("OPENAI_MODEL", "gpt-4o-mini"),
   };
 }

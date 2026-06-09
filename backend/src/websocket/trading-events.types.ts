@@ -25,12 +25,21 @@ export type TradingActionExecutedEvent = {
   at: string;
 };
 
+export type SomniaAttestationEvent = {
+  status: "submitted" | "success" | "failed" | "skipped";
+  requestId: string | null;
+  txHash: string | null;
+  message: string;
+};
+
 export type TradingCycleCompletedEvent = {
   cycleId: string;
   reason: string;
   status: "completed" | "failed";
   message: string;
   llmResponse?: string | null;
+  llmProvider?: "openai";
+  somniaAttestation?: SomniaAttestationEvent;
   executedCount: number;
   finishedAt: string;
 };

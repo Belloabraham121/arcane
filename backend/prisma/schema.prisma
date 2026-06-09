@@ -85,6 +85,8 @@ model TradingCycle {
   llmPending  Boolean            @default(true) @map("llm_pending")
   llmResponse String?            @map("llm_response") @db.Text
   llmSummary  String?            @map("llm_summary") @db.Text
+  /// Somnia on-chain LLM attestation (tx proof — not used for trading decisions).
+  somniaAttestation Json?        @map("somnia_attestation")
   poolDrift   Json?              @map("pool_drift")
   startedAt   DateTime           @map("started_at") @db.Timestamptz
   finishedAt  DateTime           @map("finished_at") @db.Timestamptz

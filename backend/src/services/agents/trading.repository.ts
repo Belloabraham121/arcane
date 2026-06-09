@@ -3,6 +3,7 @@ import { prisma } from "../../infrastructure/postgres/client";
 import type {
   ExecutedTransaction,
   PoolAllocationDrift,
+  SomniaAttestationSummary,
   TradingCycleSummary,
   TradingToolAction,
 } from "./trading.types";
@@ -14,6 +15,8 @@ export type TradingHistoryListItem = {
   message: string;
   llmPending: boolean;
   llmResponse: string | null;
+  llmProvider: string | null;
+  somniaAttestation: SomniaAttestationSummary | null;
   startedAt: string;
   finishedAt: string;
   actionCount: number;
@@ -60,6 +63,38 @@ function mapActionType(
   return tx.kind;
 }
 
+function parseSomniaAttestation(
+  value: unknown,
+): SomniaAttestationSummary | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const status = row.status;
+  if (
+    status !== "submitted" &&
+    status !== "success" &&
+    status !== "failed" &&
+    status !== "skipped"
+  ) {
+    return null;
+  }
+  return {
+    status,
+    requestId: typeof row.requestId === "string" ? row.requestId : null,
+    txHash: typeof row.txHash === "string" ? row.txHash : null,
+    onChainResponse:
+      typeof row.onChainResponse === "string" ? row.onChainResponse : null,
+    message: typeof row.message === "string" ? row.message : "",
+  };
+}
+
+function summaryLlmProviderFromRow(row: {
+  llmResponse: string | null;
+}): string | null {
+  return row.llmResponse ? "openai" : null;
+}
+
 export async function persistTradingCycle(
   summary: TradingCycleSummary,
   toolActions?: TradingToolAction[],
@@ -75,6 +110,17 @@ export async function persistTradingCycle(
       amountOut: tx.amountOut ?? null,
       txHash: tx.hash,
       status: tx.status === "success" ? "success" : "reverted",
+    });
+  }
+
+  if (summary.somniaAttestation?.txHash) {
+    actions.push({
+      type: "tool",
+      toolName: "somnia_attestation",
+      txHash: summary.somniaAttestation.txHash,
+      status:
+        summary.somniaAttestation.status === "failed" ? "failed" : "success",
+      metadata: summary.somniaAttestation as Prisma.InputJsonValue,
     });
   }
 
@@ -128,6 +174,9 @@ export async function persistTradingCycle(
       llmPending: summary.llmPending,
       llmResponse: summary.llmResponse ?? null,
       llmSummary: summary.llmResponse ?? summary.message,
+      somniaAttestation: summary.somniaAttestation
+        ? (summary.somniaAttestation as Prisma.InputJsonValue)
+        : undefined,
       poolDrift: summary.poolDrift as Prisma.InputJsonValue,
       startedAt: new Date(summary.startedAt),
       finishedAt: new Date(summary.finishedAt),
@@ -166,6 +215,8 @@ export async function listTradingCycles(
       message: row.message,
       llmPending: row.llmPending,
       llmResponse: row.llmResponse,
+      llmProvider: summaryLlmProviderFromRow(row),
+      somniaAttestation: parseSomniaAttestation(row.somniaAttestation),
       startedAt: row.startedAt.toISOString(),
       finishedAt: row.finishedAt.toISOString(),
       actionCount: row._count.actions,
@@ -196,6 +247,8 @@ export async function getTradingCycleDetail(
     message: row.message,
     llmPending: row.llmPending,
     llmResponse: row.llmResponse,
+    llmProvider: summaryLlmProviderFromRow(row),
+    somniaAttestation: parseSomniaAttestation(row.somniaAttestation),
     llmSummary: row.llmSummary,
     startedAt: row.startedAt.toISOString(),
     finishedAt: row.finishedAt.toISOString(),

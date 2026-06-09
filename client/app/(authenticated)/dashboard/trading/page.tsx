@@ -36,10 +36,34 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
 
   return (
     <div className="border-t border-border bg-muted/20 px-4 py-4 space-y-4">
+      {detail.somniaAttestation?.txHash && (
+        <div>
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Somnia on-chain agent (attestation)
+          </p>
+          <p className="font-mono text-xs text-muted-foreground">
+            {detail.somniaAttestation.message}
+          </p>
+          {detail.somniaAttestation.requestId && (
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+              Request #{detail.somniaAttestation.requestId}
+            </p>
+          )}
+          <a
+            href={somniaTxUrl(detail.somniaAttestation.txHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-block font-mono text-xs text-[#ea580c] hover:underline"
+          >
+            View Somnia attestation tx ↗
+          </a>
+        </div>
+      )}
+
       {(detail.llmSummary || detail.llmResponse) && (
         <div>
           <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            LLM reasoning
+            OpenAI reasoning
           </p>
           <p className="font-mono text-xs text-foreground whitespace-pre-wrap">
             {detail.llmSummary ?? detail.llmResponse}

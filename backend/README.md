@@ -111,6 +111,35 @@ RUN_INTEGRATION_TESTS=1 npm test
 | `tests/integration/quickswap-pools.test.ts` | `GET /api/v1/quickswap/pools` returns ≥ 1 pool with TVL, volume, liquidity |
 | `tests/integration/trading-cycle.test.ts` | Active strategy → `runTradingCycle` → cycle + quote action persisted |
 
+### Dual-LLM trading (production path)
+
+Each trading cycle:
+
+1. **Somnia on-chain attestation** — `createRequest` on testnet (tx proof; result not used for trades). Requires agent wallet STT (~0.24 STT). Disable with `SOMNIA_ATTESTATION_ENABLED=false`.
+2. **OpenAI** — `gpt-4o-mini` (default) drives tool calls and swap decisions. Set `OPENAI_API_KEY` in `.env`.
+
+### Live Somnia LLM tests
+
+Requires testnet STT. Two paths:
+
+| Command | Payer | Purpose |
+|---------|-------|---------|
+| `npm run smoke:llm` | `PRIVATE_KEY` in `.env` | Basic `inferString` platform smoke |
+| `npm run smoke:llm:tools` | `PRIVATE_KEY` | Basic `inferToolsChat` smoke |
+| `npm run smoke:llm:trading -- --email=...` | **Agent wallet** | Full QuickSwap tool loop (`runLlmTradingCycle`) |
+
+Automated LLM tests:
+
+```bash
+# Platform inferString + inferToolsChat (uses PRIVATE_KEY)
+RUN_LLM_TESTS=1 PRIVATE_KEY=0x... npm run test:llm
+
+# QuickSwap trading LLM cycle (uses agent wallet STT for your signup email)
+RUN_LLM_TESTS=1 LLM_TEST_EMAIL=you@signup-email.com npm run test:llm
+```
+
+Fund the **agent wallet** (shown on dashboard / `GET /auth/me`) via [Somnia testnet faucet](https://testnet.somnia.network) before `test:llm` or `smoke:llm:trading`.
+
 ## Folder structure
 
 ```

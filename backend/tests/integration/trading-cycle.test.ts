@@ -7,7 +7,7 @@ import {
   runTradingCycle,
 } from "../../src/services/agents/trading-runner.service";
 import { getTradingCycleDetail } from "../../src/services/agents/trading.repository";
-import type { LlmTradingCycleResult } from "../../src/services/somnia/llm-trading.service";
+import type { DualLlmTradingCycleResult } from "../../src/services/agents/dual-llm-trading.service";
 import {
   createActiveStrategyFixture,
   deleteTestUser,
@@ -39,7 +39,7 @@ describeIntegration("runTradingCycle with mocked LLM", () => {
   it("records a trading cycle and quote action", async () => {
     const mockPool = mockQuickSwapPool(fixture.poolId);
 
-    const mockLlm: LlmTradingCycleResult = {
+    const mockLlm: DualLlmTradingCycleResult = {
       llmResponse: "Mock: hold positions; quoted WSOMI/USDCe spread.",
       toolActions: [
         {
@@ -54,13 +54,21 @@ describeIntegration("runTradingCycle with mocked LLM", () => {
       ],
       executedTransactions: [],
       usedLlm: true,
+      provider: "openai",
       message: "Mock LLM cycle completed",
+      somniaAttestation: {
+        status: "submitted",
+        requestId: "12345",
+        txHash: "0xabc1234567890123456789012345678901234567890123456789012345678901234",
+        onChainResponse: null,
+        message: "Mock Somnia attestation",
+      },
     };
 
     const summary = await runTradingCycle(fixture.userId, "manual", {
       listPoolsWithMetrics: async () => [mockPool],
       getWalletBalances: async () => mockWalletBalances(fixture.walletAddress),
-      runLlmTradingCycle: async () => mockLlm,
+      runDualLlmTradingCycle: async () => mockLlm,
     });
 
     assert.equal(summary.phase, "completed");

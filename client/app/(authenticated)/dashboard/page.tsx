@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
+import { AccountModeBadge } from "@/components/layout/account-mode-badge"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import {
@@ -26,9 +27,16 @@ import {
   MarketsTableSkeleton,
   PoolMetricsStripSkeleton,
 } from "@/components/skeletons/content-skeletons"
+import { usePortfolioSummary } from "@/hooks/use-portfolio-summary"
 import { useWalletBalances } from "@/hooks/use-wallet-balances"
 import { useTradingSocket } from "@/hooks/use-trading-socket"
 import { useSession } from "@/providers/session-provider"
+import type { AccountMode } from "@/lib/api/auth"
+import {
+  baselineDepositHint,
+  formatAprLine,
+  formatUsd,
+} from "@/lib/portfolio-display"
 import { fetchPools } from "@/lib/api/quickswap"
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import { buildPoolMarketRows } from "@/lib/pool-allocations"
@@ -45,7 +53,8 @@ const ease = [0.22, 1, 0.36, 1] as const
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { sessionReady } = useSession()
+  const { sessionReady, accountMode } = useSession()
+  const [previewDemo, setPreviewDemo] = useState(false)
   const [strategy, setStrategy] = useState<AgentStrategy | null>(null)
   const [pools, setPools] = useState<QuickSwapPool[]>([])
   const [poolsError, setPoolsError] = useState<string | null>(null)
@@ -108,6 +117,21 @@ export default function DashboardPage() {
     }
   }, [])
 
+  const viewMode: AccountMode | undefined =
+    accountMode === "live" && previewDemo
+      ? "demo"
+      : accountMode ?? undefined
+
+  const portfolioEnabled =
+    Boolean(strategy?.status === "active" && viewMode != null)
+
+  const {
+    summary: portfolio,
+    loading: portfolioLoading,
+    error: portfolioError,
+    reload: reloadPortfolio,
+  } = usePortfolioSummary(viewMode, portfolioEnabled)
+
   const refreshTradingData = useCallback(async () => {
     const [statusResult, historyResult] = await Promise.all([
       fetchTradingStatus(),
@@ -149,9 +173,11 @@ export default function DashboardPage() {
       },
       onCycleCompleted: () => {
         void refreshTradingData()
+        void reloadPortfolio()
       },
       onActionExecuted: () => {
         void refreshTradingData()
+        void reloadPortfolio()
       },
     })
 
@@ -194,13 +220,21 @@ export default function DashboardPage() {
     balances,
     loading: balancesLoading,
     error: balancesError,
-  } = useWalletBalances(strategy ? activePoolIds : [])
+  } = useWalletBalances(
+    strategy ? activePoolIds : [],
+    30_000,
+    viewMode,
+  )
 
   const isAuto = strategy?.strategyType === "auto"
-  const depositedAmount = strategy?.depositAmount ?? 0
-  const currentValue = depositedAmount * 1.0006
-  const netEarned = depositedAmount * 0.0006
-  const totalAPR = 16.43
+  const metricsLoading = strategyLoading || (portfolioEnabled && portfolioLoading)
+  const currentValueUsd = portfolio?.currentValueUsd
+  const baselineUsd = portfolio?.baselineUsd
+  const netEarnedUsd = portfolio?.netEarnedUsd
+  const aprLine =
+    portfolio != null
+      ? formatAprLine(portfolio.aprSinceActivation, portfolio.apr24h)
+      : "—"
   const enabledSubAgents = strategy?.subAgents.filter((agent) => agent.enabled) ?? []
   const agentDisplayStatus = socketCycleActive
     ? tradingStatus?.lastCycle?.executedTransactions?.length
@@ -230,23 +264,45 @@ export default function DashboardPage() {
             ? "Dashboard"
             : `Dashboard — ${isAuto ? "Auto yield" : "Custom strategy"} (active)`
         }
+        badge={viewMode ? <AccountModeBadge mode={viewMode} /> : undefined}
         action={
           strategy && !strategyLoading ? (
-            <button
-              type="button"
-              onClick={() =>
-                router.push(`${setupRouteFor(strategy.strategyType)}?edit=1`)
-              }
-              className="font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:text-[#ff7a2a]"
-            >
-              Edit setup
-            </button>
+            <div className="flex shrink-0 items-center gap-4">
+              {accountMode === "live" && (
+                previewDemo ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDemo(false)}
+                    className="font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Back to live
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDemo(true)}
+                    className="font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Preview demo
+                  </button>
+                )
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(`${setupRouteFor(strategy.strategyType)}?edit=1`)
+                }
+                className="font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:text-[#ff7a2a]"
+              >
+                Edit setup
+              </button>
+            </div>
           ) : undefined
         }
       />
 
       <main className="mx-auto max-w-7xl space-y-10 px-6 py-12 lg:px-12">
-        {strategyLoading || !strategy ? (
+        {metricsLoading || !strategy ? (
           <DashboardHeroSkeleton />
         ) : (
           <motion.div
@@ -255,12 +311,38 @@ export default function DashboardPage() {
             transition={{ duration: 0.5, ease }}
             className="space-y-8"
           >
+            {accountMode === "live" && previewDemo && (
+              <p className="border border-amber-500/30 bg-amber-500/5 px-4 py-3 font-mono text-xs text-amber-700 dark:text-amber-400">
+                Previewing demo portfolio metrics. Your account trades on live
+                mainnet — demo numbers are illustrative only.
+              </p>
+            )}
+
+            {portfolioError && (
+              <p className="border border-[#ea580c]/30 bg-[#ea580c]/5 px-4 py-3 font-mono text-xs text-[#ea580c]">
+                {portfolioError}
+              </p>
+            )}
+
+            {portfolio?.chainLabel && (
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                {portfolio.chainLabel}
+                {portfolio.unpricedSymbols.length > 0 &&
+                  ` · unpriced: ${portfolio.unpricedSymbols.join(", ")}`}
+              </p>
+            )}
+
             <div>
               <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
                 Current value
               </p>
               <h1 className="text-6xl font-bold font-pixel tracking-tight text-foreground lg:text-7xl">
-                ${currentValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {currentValueUsd != null
+                  ? `$${formatUsd(currentValueUsd, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`
+                  : "—"}
               </h1>
             </div>
 
@@ -269,21 +351,42 @@ export default function DashboardPage() {
                 <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
                   Total deposited
                 </p>
-                <p className="text-lg font-mono font-bold">${depositedAmount.toLocaleString()}</p>
+                <p
+                  className="text-lg font-mono font-bold"
+                  title={portfolio ? baselineDepositHint(portfolio) : undefined}
+                >
+                  {baselineUsd != null ? `$${formatUsd(baselineUsd)}` : "—"}
+                </p>
+                {portfolio && (
+                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                    {baselineDepositHint(portfolio)}
+                  </p>
+                )}
               </div>
               <div>
                 <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
                   Net earned
                 </p>
-                <p className="text-lg font-mono font-bold text-[#ea580c]">
-                  ${netEarned.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                <p
+                  className={`text-lg font-mono font-bold ${
+                    netEarnedUsd != null && netEarnedUsd < 0
+                      ? "text-red-600"
+                      : "text-[#ea580c]"
+                  }`}
+                >
+                  {netEarnedUsd != null
+                    ? `$${formatUsd(netEarnedUsd, { maximumFractionDigits: 2 })}`
+                    : "—"}
                 </p>
               </div>
               <div>
                 <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                  Total APR
+                  Portfolio APR
                 </p>
-                <p className="text-lg font-mono font-bold">%{totalAPR.toFixed(2)}</p>
+                <p className="text-lg font-mono font-bold">{aprLine}</p>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                  Since activation · 24h annualized
+                </p>
               </div>
             </div>
           </motion.div>

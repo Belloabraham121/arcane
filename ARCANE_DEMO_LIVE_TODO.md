@@ -174,13 +174,13 @@ flowchart TB
 ## Phase 4 — Dashboard (client)
 
 ### 4.1 Demo / Live toggle
-- [ ] Header toggle on dashboard (switch view; live users can **view** demo metrics but not vice versa? → **view own mode only**, optional “Preview demo” link)
-- [ ] Badge: `DEMO` orange / `LIVE` green in `PageSubBar`
+- [x] Header toggle on dashboard (switch view; live users can **view** demo metrics but not vice versa? → **view own mode only**, optional “Preview demo” link)
+- [x] Badge: `DEMO` orange / `LIVE` green in `PageSubBar`
 
 ### 4.2 Replace fake metrics
-- [ ] Remove hardcoded `1.0006` / `16.43` in `dashboard/page.tsx`
-- [ ] Fetch `GET /api/v1/portfolio/summary` on load + after trading socket cycle complete
-- [ ] Display:
+- [x] Remove hardcoded `1.0006` / `16.43` in `dashboard/page.tsx`
+- [x] Fetch `GET /api/v1/portfolio/summary` on load + after trading socket cycle complete
+- [x] Display:
   - **Current value** — `currentValueUsd`
   - **Total deposited** — `baselineUsd` (with tooltip: manual vs detected)
   - **Net earned** — `netEarnedUsd` (red if negative)

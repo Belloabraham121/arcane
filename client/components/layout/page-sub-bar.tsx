@@ -3,6 +3,7 @@ import Link from "next/link"
 type PageSubBarProps = {
   title: string
   subtitle?: string | null
+  badge?: React.ReactNode
   action?: React.ReactNode
   backHref?: string
   backLabel?: string
@@ -11,6 +12,7 @@ type PageSubBarProps = {
 export function PageSubBar({
   title,
   subtitle = null,
+  badge,
   action,
   backHref,
   backLabel,
@@ -19,11 +21,14 @@ export function PageSubBar({
     <div className="border-b border-border bg-background/50 backdrop-blur">
       <div className="mx-auto max-w-7xl px-6 py-4 lg:px-12">
         <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="font-mono text-xs text-muted-foreground">{title}</p>
-            {subtitle && (
-              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{subtitle}</p>
-            )}
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-xs text-muted-foreground">{title}</p>
+              {subtitle && (
+                <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{subtitle}</p>
+              )}
+            </div>
+            {badge}
           </div>
           {action}
           {backHref && backLabel && (

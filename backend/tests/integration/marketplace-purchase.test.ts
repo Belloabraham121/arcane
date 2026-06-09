@@ -46,6 +46,20 @@ describeIntegration("Marketplace purchase integration", () => {
       "0x5555555555555555555555555555555555555555";
     process.env.MARKETPLACE_X402_DEV_BYPASS = "true";
 
+    await prisma.agentStrategy.update({
+      where: { id: fixture.strategyId },
+      data: {
+        subAgentConfig: [
+          {
+            id: "risk-manager",
+            name: "Risk Manager",
+            systemPrompt: "Limit exposure",
+            enabled: true,
+          },
+        ],
+      },
+    });
+
     const tracker = createMarketplaceBudgetTracker({
       strategyBudgetSttWei: null,
     });

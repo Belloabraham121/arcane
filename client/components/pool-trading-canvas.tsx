@@ -164,15 +164,18 @@ function PoolNodeMesh({ node }: { node: PoolNetworkNode }) {
 
 const ORBIT_RING_RADIUS = 11.8
 const ORBIT_SPEED_BASE = 0.6
+const FOLLOW_TRAIL_OFFSET = 3.5
 
 function SubAgentNodeMesh({
   node,
+  agentMeshRef,
+  tripRef,
   poolNodes,
-  currentPoolIndex,
 }: {
   node: SubAgentNode
+  agentMeshRef: React.RefObject<THREE.Mesh | null>
+  tripRef: React.RefObject<AgentTrip | null>
   poolNodes: PoolNetworkNode[]
-  currentPoolIndex: number
 }) {
   const groupRef = useRef<THREE.Group>(null)
   const coreRef = useRef<THREE.Mesh>(null)
@@ -180,31 +183,69 @@ function SubAgentNodeMesh({
   const angleRef = useRef(
     (node.orbitIndex / Math.max(node.orbitTotal, 1)) * Math.PI * 2,
   )
-
-  const targetPool = poolNodes[currentPoolIndex] ?? poolNodes[0]
-  const poolCenter = targetPool?.position ?? [0, 0, 0]
+  const prevAgentPos = useRef(new THREE.Vector3())
+  const targetVec = useRef(new THREE.Vector3())
 
   useFrame((_, delta) => {
-    if (!groupRef.current) return
+    if (!groupRef.current || !agentMeshRef.current) return
 
-    const orbitSpeed =
-      ORBIT_SPEED_BASE + node.orbitIndex * 0.15 +
-      (node.status === "running" ? 0.4 : 0)
+    const trip = tripRef.current
+    const agentPos = agentMeshRef.current.position
 
-    angleRef.current += delta * orbitSpeed
+    const agentSpeed = agentPos.distanceTo(prevAgentPos.current) / Math.max(delta, 0.001)
+    prevAgentPos.current.copy(agentPos)
 
-    const cx = poolCenter[0]
-    const cy = poolCenter[1]
-    const cz = poolCenter[2]
+    const isAgentMoving = agentSpeed > 0.5
 
-    const ox = cx + Math.cos(angleRef.current) * ORBIT_RING_RADIUS
-    const oy = cy + 0.3
-    const oz = cz + Math.sin(angleRef.current) * ORBIT_RING_RADIUS
+    if (isAgentMoving && trip) {
+      const source = poolNodes[trip.sourceIndex]
+      const target = poolNodes[trip.targetIndex]
+      if (source && target) {
+        const trailDelay = FOLLOW_TRAIL_OFFSET * (node.orbitIndex + 1)
+        const trailProgress = Math.max(0, trip.progress - trailDelay * 0.04)
 
-    groupRef.current.position.lerp(
-      new THREE.Vector3(ox, oy, oz),
-      Math.min(1, delta * 3),
-    )
+        const trailPos = interpolateArc(
+          source.position,
+          target.position,
+          trailProgress,
+          5,
+        )
+
+        const spreadAngle =
+          ((node.orbitIndex + 1) / (node.orbitTotal + 1)) * Math.PI - Math.PI / 2
+        const spreadX = Math.cos(spreadAngle) * 2.5
+        const spreadY = Math.sin(spreadAngle) * 1.5
+
+        targetVec.current.set(
+          trailPos[0] + spreadX,
+          trailPos[1] + 3 + spreadY,
+          trailPos[2],
+        )
+        groupRef.current.position.lerp(targetVec.current, Math.min(1, delta * 5))
+      }
+    } else {
+      const restingIndex = trip ? trip.targetIndex : 0
+      const restPool = poolNodes[restingIndex] ?? poolNodes[0]
+      if (restPool) {
+        const orbitSpeed =
+          ORBIT_SPEED_BASE +
+          node.orbitIndex * 0.15 +
+          (node.status === "running" ? 0.4 : 0)
+
+        angleRef.current += delta * orbitSpeed
+
+        const cx = restPool.position[0]
+        const cy = restPool.position[1]
+        const cz = restPool.position[2]
+
+        targetVec.current.set(
+          cx + Math.cos(angleRef.current) * ORBIT_RING_RADIUS,
+          cy + 0.3,
+          cz + Math.sin(angleRef.current) * ORBIT_RING_RADIUS,
+        )
+        groupRef.current.position.lerp(targetVec.current, Math.min(1, delta * 2.5))
+      }
+    }
 
     if (coreRef.current) {
       coreRef.current.rotation.x += delta * 1.5
@@ -226,7 +267,7 @@ function SubAgentNodeMesh({
   })
 
   return (
-    <group ref={groupRef} position={[poolCenter[0] + ORBIT_RING_RADIUS, poolCenter[1], poolCenter[2]]}>
+    <group ref={groupRef} position={[0, 0, 0]}>
       <mesh ref={coreRef}>
         <tetrahedronGeometry args={[0.9, 0]} />
         <meshPhongMaterial
@@ -283,13 +324,14 @@ function TravelingAgent({
   nodes,
   trip,
   meshRef,
+  tripRef,
 }: {
   nodes: PoolNetworkNode[]
   trip: AgentTrip | null
   meshRef: React.RefObject<THREE.Mesh | null>
+  tripRef: React.MutableRefObject<AgentTrip | null>
 }) {
   const trailRef = useRef<THREE.Points>(null)
-  const tripRef = useRef(trip)
   tripRef.current = trip
 
   const trailPositions = useMemo(() => new Float32Array(60 * 3), [])
@@ -412,12 +454,8 @@ function PoolTradingScene({
   )
 
   const agentMeshRef = useRef<THREE.Mesh>(null)
-
-  const currentPoolIndex = trip
-    ? trip.progress >= 1 || trip.speed === 0
-      ? trip.targetIndex
-      : trip.sourceIndex
-    : 0
+  const tripRef = useRef<AgentTrip | null>(trip)
+  tripRef.current = trip
 
   const subAgentNodes = useMemo(
     () => buildSubAgentNodes(subAgentStatuses, enabledSubAgentIds),
@@ -473,12 +511,13 @@ function PoolTradingScene({
         <SubAgentNodeMesh
           key={node.agentId}
           node={node}
+          agentMeshRef={agentMeshRef}
+          tripRef={tripRef}
           poolNodes={nodes}
-          currentPoolIndex={currentPoolIndex}
         />
       ))}
 
-      <TravelingAgent nodes={nodes} trip={trip} meshRef={agentMeshRef} />
+      <TravelingAgent nodes={nodes} trip={trip} meshRef={agentMeshRef} tripRef={tripRef} />
       <GridFloor />
     </>
   )

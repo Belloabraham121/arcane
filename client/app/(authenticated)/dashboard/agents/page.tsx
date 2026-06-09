@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccountModeBadge } from "@/components/layout/account-mode-badge";
 import { PageSubBar } from "@/components/layout/page-sub-bar";
@@ -9,6 +10,7 @@ import { DraggableGridPanel } from "@/components/draggable-grid-panel";
 import { AgentCycleExecutionPanel } from "@/components/agent-cycle-execution-panel";
 import { AgentLlmResponseDialog } from "@/components/agent-llm-response-dialog";
 import { AgentTradingFeed } from "@/components/agent-trading-feed";
+import { CanvasPortfolioBar } from "@/components/canvas-portfolio-bar";
 import { PoolNodesLegend } from "@/components/pool-nodes-legend";
 import { PoolTradingCanvas } from "@/components/pool-trading-canvas";
 import { useTradingSocket } from "@/hooks/use-trading-socket";
@@ -38,6 +40,7 @@ import {
   idleRouteForPool,
   normalizePoolRouteCommand,
 } from "@/lib/trading-feed-helpers";
+import { usePortfolioSummary } from "@/hooks/use-portfolio-summary";
 import { resolveAgentCanvasMode } from "@/lib/routing/agent-canvas-route";
 import { APP_ROUTES } from "@/lib/routing/app-routes";
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth";
@@ -79,6 +82,8 @@ export default function AgentsPage() {
   const [defaultsAppliedFor, setDefaultsAppliedFor] = useState<
     AccountMode | null
   >(null);
+
+  const { summary: portfolio } = usePortfolioSummary(canvasMode ?? undefined, !loading && canvasMode != null);
 
   const canvasPools = useMemo(
     () => resolveStrategyCanvasPools(poolAmounts, quickswapPools),
@@ -268,6 +273,14 @@ export default function AgentsPage() {
         action={
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-3">
+              {isDemo && (
+                <Link
+                  href={APP_ROUTES.explorer}
+                  className="border border-violet-500 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-violet-500 transition-colors hover:bg-violet-500/10"
+                >
+                  Explorer
+                </Link>
+              )}
               {canViewLatestAgent ? (
                 <button
                   type="button"
@@ -327,6 +340,8 @@ export default function AgentsPage() {
           subAgentStatuses={subAgentStatuses}
           enabledSubAgentIds={enabledSubAgentIds}
         />
+
+        <CanvasPortfolioBar portfolio={portfolio} isDemo={isDemo} />
 
         <DraggableGridPanel
           id="nodes-legend"

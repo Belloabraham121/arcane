@@ -819,15 +819,25 @@ export default function DashboardPage() {
                     ? "Your demo agent network trades on the Anvil fork (paper trading)."
                     : "Your agent network is active on Somnia mainnet."}
                 </p>
-                {viewMode ? (
-                  <ViewAgentsLink
-                    mode={viewMode}
-                    label={
-                      isDemoView ? "View demo agents" : "View live agents"
-                    }
-                    className="shrink-0 border border-[#ea580c] px-4 py-2 font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:bg-[#ea580c]/10"
-                  />
-                ) : null}
+                <div className="flex items-center gap-3">
+                  {viewMode ? (
+                    <ViewAgentsLink
+                      mode={viewMode}
+                      label={
+                        isDemoView ? "View demo agents" : "View live agents"
+                      }
+                      className="shrink-0 border border-[#ea580c] px-4 py-2 font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:bg-[#ea580c]/10"
+                    />
+                  ) : null}
+                  {isDemoView && (
+                    <Link
+                      href={APP_ROUTES.explorer}
+                      className="shrink-0 border border-violet-500 px-4 py-2 font-mono text-xs uppercase tracking-widest text-violet-500 transition-colors hover:bg-violet-500/10"
+                    >
+                      View Explorer
+                    </Link>
+                  )}
+                </div>
               </div>
               <ul className="space-y-2 font-mono text-sm text-foreground">
                 <li>• Rebalance across QuickSwap liquidity pools</li>

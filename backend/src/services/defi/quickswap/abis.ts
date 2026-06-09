@@ -15,6 +15,16 @@ export const swapRouterAbi = require(
   "@cryptoalgebra/integral-periphery/artifacts/contracts/SwapRouter.sol/SwapRouter.json",
 ).abi;
 
+/**
+ * Somnia mainnet SwapRouter (0x1582…) — deployed bytecode matches the pre-pluginData
+ * router shape (no `pluginData` on single-hop, no `pluginData[]` on multihop).
+ * The integral-periphery artifact ABI encodes a newer struct and reverts on-chain.
+ */
+export const swapRouterSomniaAbi = parseAbi([
+  "function exactInputSingle((address tokenIn, address tokenOut, address deployer, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 limitSqrtPrice) params) external payable returns (uint256 amountOut)",
+  "function exactInput((bytes path, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum) params) external payable returns (uint256 amountOut)",
+]);
+
 export const quoterV2Abi = require(
   "@cryptoalgebra/integral-periphery/artifacts/contracts/lens/QuoterV2.sol/QuoterV2.json",
 ).abi;

@@ -2,12 +2,9 @@ import type { Address } from "viem";
 import { encodeFunctionData } from "viem";
 import { ZERO_DEPLOYER } from "../../../config/quickswap";
 import { getQuickSwapEnv } from "../../../config/env";
-import { erc20MinimalAbi, swapRouterAbi } from "./abis";
+import { erc20MinimalAbi, swapRouterSomniaAbi } from "./abis";
 import { QuickSwapNotDeployedError } from "./pool-registry";
-import {
-  emptyPluginDataForHops,
-  encodeAlgebraSwapPath,
-} from "./path-encoding";
+import { encodeAlgebraSwapPath } from "./path-encoding";
 import type { EncodedTxCall, SwapBuildResult } from "./types";
 
 const DEFAULT_DEADLINE_SECONDS = 20 * 60;
@@ -113,11 +110,10 @@ export function buildSwapExactIn(
   const amountOutMinimum = resolveAmountOutMinimum(slippageBps, options);
 
   const data = encodeFunctionData({
-    abi: swapRouterAbi,
+    abi: swapRouterSomniaAbi,
     functionName: "exactInputSingle",
     args: [
       {
-        pluginData: "0x",
         tokenIn,
         tokenOut,
         deployer,
@@ -166,14 +162,12 @@ export function buildSwapRoute(
   const deadline = options?.deadline ?? defaultSwapDeadline();
   const amountOutMinimum = resolveAmountOutMinimum(slippageBps, options);
   const encodedPath = encodeAlgebraSwapPath(path, deployer);
-  const hopCount = path.length - 1;
 
   const data = encodeFunctionData({
-    abi: swapRouterAbi,
+    abi: swapRouterSomniaAbi,
     functionName: "exactInput",
     args: [
       {
-        pluginData: [...emptyPluginDataForHops(hopCount)],
         path: encodedPath,
         recipient,
         deadline,

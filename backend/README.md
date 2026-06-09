@@ -174,8 +174,8 @@ Without `--whale`, the script falls back to `anvil_deal` (Foundry cheat) on the 
 
 | Variable | Default | Role |
 | -------- | ------- | ---- |
-| `DEMO_AGENT_WALLET` | `0xA4B8…e46e` | Shared paper-trading wallet for all demo users |
-| `DEMO_FORK_WHALE` | `0xd1f1…8054` | Whale impersonated on Anvil to fund demo balances |
+| `DEMO_AGENT_WALLET` | `0xd1f1…8054` | Shared paper-trading wallet on the Anvil fork (token-rich whale) |
+| `DEMO_FORK_WHALE` | `0xd1f1…8054` | Same address — impersonated when extra seed balances are needed |
 | `ANVIL_RPC_URL` | `http://127.0.0.1:8545` | Fork RPC; demo trading overrides `QUICKSWAP_RPC_HTTP` |
 | `DEMO_TRADING_ENABLED` | `true` | When `false`, backend refuses demo trading cycles |
 

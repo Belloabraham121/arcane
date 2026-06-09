@@ -22,7 +22,7 @@ import { ZERO_DEPLOYER } from "../src/config/quickswap";
 
 const WSOMI = "0x046EDe9564A72571df6F5e44d0405360c0f4dCab" as const;
 const USDCe = "0x28BEc7E30E6faee657a03e19Bf1128AaD7632A00" as const;
-const AGENT = "0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e" as const;
+const AGENT = "0xd1f1f7b4354bd07e2035d95c12e3192017928054" as const;
 
 async function tryDirection(
   tokenIn: typeof WSOMI | typeof USDCe,

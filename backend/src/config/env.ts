@@ -166,13 +166,15 @@ export function getQuickSwapEnv(): QuickSwapEnv {
   };
 }
 
-/** Shared demo wallet on Anvil fork (paper trading). */
+/**
+ * Shared demo wallet on Anvil fork (paper trading).
+ * Same token-rich mainnet address used as `--whale` for fork funding / impersonation.
+ */
 export const DEFAULT_DEMO_AGENT_WALLET =
-  "0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e" as Address;
-
-/** Token-rich address for Anvil impersonation when seeding the demo wallet. */
-export const DEFAULT_DEMO_FORK_WHALE =
   "0xd1f1f7b4354bd07e2035d95c12e3192017928054" as Address;
+
+/** Whale impersonated on Anvil when the demo wallet needs extra seed balances. */
+export const DEFAULT_DEMO_FORK_WHALE = DEFAULT_DEMO_AGENT_WALLET;
 
 export type DemoEnv = {
   agentWallet: Address;

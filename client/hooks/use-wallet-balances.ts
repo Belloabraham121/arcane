@@ -11,6 +11,7 @@ export function useWalletBalances(
   mode?: AccountMode,
 ) {
   const [balances, setBalances] = useState<WalletTokenBalance[]>([])
+  const [walletAddress, setWalletAddress] = useState<`0x${string}` | null>(null)
   const [chainLabel, setChainLabel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,6 +28,7 @@ export function useWalletBalances(
       return
     }
     setBalances(result.data.balances)
+    setWalletAddress(result.data.walletAddress)
     setChainLabel(result.data.chainLabel ?? null)
     setError(null)
     setLoading(false)
@@ -48,6 +50,7 @@ export function useWalletBalances(
         return
       }
       setBalances(result.data.balances)
+      setWalletAddress(result.data.walletAddress)
       setChainLabel(result.data.chainLabel ?? null)
       setError(null)
       setLoading(false)
@@ -71,5 +74,5 @@ export function useWalletBalances(
     }
   }, [poolKey, modeKey, refreshMs, reload])
 
-  return { balances, loading, error, chainLabel, reload }
+  return { balances, loading, error, walletAddress, chainLabel, reload }
 }

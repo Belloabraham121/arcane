@@ -39,7 +39,13 @@ export function AppNavBar({ walletAddress, accountMode }: AppNavBarProps) {
               </span>
             )}
             {shortWallet && (
-              <span className="font-mono text-xs text-muted-foreground">{shortWallet}</span>
+              <span
+                className="font-mono text-xs text-muted-foreground"
+                title={walletAddress ?? undefined}
+              >
+                {accountMode === "demo" ? "Demo " : ""}
+                {shortWallet}
+              </span>
             )}
             <LogoutButton />
           </div>

@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Check, Copy } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { AccountModeBadge } from "@/components/layout/account-mode-badge"
@@ -53,8 +54,10 @@ const ease = [0.22, 1, 0.36, 1] as const
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { sessionReady, accountMode } = useSession()
+  const { sessionReady, accountMode, demoWalletAddress, tradingWalletAddress } =
+    useSession()
   const [previewDemo, setPreviewDemo] = useState(false)
+  const [addressCopied, setAddressCopied] = useState(false)
   const [strategy, setStrategy] = useState<AgentStrategy | null>(null)
   const [pools, setPools] = useState<QuickSwapPool[]>([])
   const [poolsError, setPoolsError] = useState<string | null>(null)
@@ -174,10 +177,12 @@ export default function DashboardPage() {
       onCycleCompleted: () => {
         void refreshTradingData()
         void reloadPortfolio()
+        void reloadBalances()
       },
       onActionExecuted: () => {
         void refreshTradingData()
         void reloadPortfolio()
+        void reloadBalances()
       },
     })
 
@@ -220,11 +225,30 @@ export default function DashboardPage() {
     balances,
     loading: balancesLoading,
     error: balancesError,
+    walletAddress: balanceWalletAddress,
+    chainLabel: balanceChainLabel,
+    reload: reloadBalances,
   } = useWalletBalances(
     strategy ? activePoolIds : [],
     30_000,
     viewMode,
   )
+
+  const displayWalletAddress =
+    balanceWalletAddress ??
+    portfolio?.walletAddress ??
+    (viewMode === "demo" ? demoWalletAddress : tradingWalletAddress)
+
+  const isDemoView = viewMode === "demo"
+
+  async function copyDisplayWalletAddress() {
+    if (!displayWalletAddress) {
+      return
+    }
+    await navigator.clipboard.writeText(displayWalletAddress)
+    setAddressCopied(true)
+    setTimeout(() => setAddressCopied(false), 2000)
+  }
 
   const isAuto = strategy?.strategyType === "auto"
   const metricsLoading = strategyLoading || (portfolioEnabled && portfolioLoading)
@@ -324,12 +348,33 @@ export default function DashboardPage() {
               </p>
             )}
 
-            {portfolio?.chainLabel && (
+            {(portfolio?.chainLabel ?? balanceChainLabel) && (
               <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                {portfolio.chainLabel}
-                {portfolio.unpricedSymbols.length > 0 &&
+                {portfolio?.chainLabel ?? balanceChainLabel}
+                {portfolio && portfolio.unpricedSymbols.length > 0 &&
                   ` · unpriced: ${portfolio.unpricedSymbols.join(", ")}`}
               </p>
+            )}
+
+            {displayWalletAddress && (
+              <div className="flex flex-wrap items-center gap-3 border border-border bg-muted/20 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {isDemoView ? "Demo wallet (simulation)" : "Agent wallet (mainnet)"}
+                  </p>
+                  <code className="break-all font-mono text-xs text-foreground">
+                    {displayWalletAddress}
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void copyDisplayWalletAddress()}
+                  className="flex shrink-0 items-center gap-2 border border-border px-3 py-2 font-mono text-xs uppercase tracking-widest hover:bg-foreground/5"
+                >
+                  {addressCopied ? <Check size={14} /> : <Copy size={14} />}
+                  {addressCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
             )}
 
             <div>
@@ -523,17 +568,27 @@ export default function DashboardPage() {
 
             <div className="border border-border p-6">
               <p className="mb-2 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-                Agent wallet balances
+                {isDemoView ? "Demo wallet balances" : "Agent wallet balances"}
               </p>
               <p className="mb-4 font-mono text-[10px] text-muted-foreground">
-                Live balances on Somnia mainnet for tokens in your selected pools. The agent
-                signs and submits swaps automatically — you never approve transactions in a wallet.
+                {isDemoView
+                  ? `Fork balances for ${displayWalletAddress ?? "the shared demo wallet"} on the Anvil fork. Pre-seeded for paper trading — no real deposit required.`
+                  : "Live balances on Somnia mainnet for tokens in your selected pools. The agent signs and submits swaps automatically — you never approve transactions in a wallet."}
               </p>
+              {displayWalletAddress && (
+                <code className="mb-4 block break-all font-mono text-[10px] text-muted-foreground">
+                  {displayWalletAddress}
+                </code>
+              )}
               <WalletBalancesList
                 balances={balances}
                 loading={balancesLoading}
                 error={balancesError}
-                emptyLabel="No supported tokens in active pools"
+                emptyLabel={
+                  isDemoView
+                    ? "No fork balances yet — run npm run fork:anvil or activate your agent to auto-fund"
+                    : "No supported tokens in active pools"
+                }
               />
             </div>
             </>

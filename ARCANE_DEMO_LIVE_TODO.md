@@ -3,8 +3,7 @@
 > **Goal:** Every user chooses **Demo** or **Live** at signup. Demo uses one shared paper-trading wallet on an Anvil fork; Live uses the user’s custodial agent wallet on Somnia mainnet. All dashboard metrics (current value, deposited, net earned, APR) are **computed from real data** — no hardcoded multipliers.
 
 **References:**
-- Demo agent wallet (shared): `0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e`
-- Fork whale (Anvil impersonation / seed): `0xd1f1f7b4354bd07e2035d95c12e3192017928054`
+- Demo agent wallet (shared, fork whale): `0xd1f1f7b4354bd07e2035d95c12e3192017928054`
 - Existing fork tooling: `backend/src/services/dev/anvil-fork.service.ts`, `npm run smoke:trading:cycle -- --fork`
 
 ---
@@ -33,7 +32,7 @@ flowchart TB
   end
 
   subgraph demo [Demo mode]
-    DemoAddr[Shared demo wallet 0xA4B8…]
+    DemoAddr[Shared demo wallet 0xd1f1…]
     Anvil[Anvil fork RPC]
     DemoCycle[Trading runner → fork]
   end
@@ -64,8 +63,8 @@ flowchart TB
 ## Phase 0 — Config & data model
 
 ### 0.1 Environment & constants
-- [x] Add `DEMO_AGENT_WALLET` (default `0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e`)
-- [x] Add `DEMO_FORK_WHALE` (default `0xd1f1f7b4354bd07e2035d95c12e3192017928054`)
+- [x] Add `DEMO_AGENT_WALLET` (default `0xd1f1f7b4354bd07e2035d95c12e3192017928054` — fork whale)
+- [x] Add `DEMO_FORK_WHALE` (default same as `DEMO_AGENT_WALLET`)
 - [x] Add `ANVIL_RPC_URL` / document `QUICKSWAP_RPC_HTTP` override for demo paths
 - [x] Add `DEMO_TRADING_ENABLED` flag (backend refuses demo cycles if Anvil unhealthy)
 - [x] Update `backend/.env.example` and `backend/README.md`
@@ -150,7 +149,7 @@ flowchart TB
 ### 3.1 Account mode selection (new step after signup)
 - [x] New page: `/onboarding/account-mode` (before or after strategy type)
 - [x] **Demo card:**
-  - Shared address `0xA4B8…` (read-only copy)
+  - Shared address `0xd1f1…` (read-only copy)
   - Explains: pre-funded paper portfolio on Anvil, no real money, same agent behavior
   - Shows approximate seeded balances (from env or API `GET /api/v1/demo/preview`)
 - [x] **Live card:**

@@ -201,7 +201,7 @@ export default function AccountModeOnboardingPage() {
                     <div className="flex items-start gap-2">
                       <code className="flex-1 break-all font-mono text-xs">
                         {mode === "demo"
-                          ? demoPreview?.demoWalletAddress ?? "0xA4B8…"
+                          ? demoPreview?.demoWalletAddress ?? "0xd1f1…"
                           : liveWalletAddress ?? "—"}
                       </code>
                       <CopyAddressButton

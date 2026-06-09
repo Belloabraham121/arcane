@@ -1,3 +1,5 @@
+import type { AccountMode } from "@/lib/api/auth"
+
 export const TRADING_SOCKET_EVENTS = {
   cycleStarted: "trading:cycle_started",
   actionExecuted: "trading:action_executed",
@@ -6,12 +8,14 @@ export const TRADING_SOCKET_EVENTS = {
 
 export type TradingCycleStartedEvent = {
   cycleId: string
+  accountMode: AccountMode
   reason: string
   startedAt: string
 }
 
 export type TradingActionExecutedEvent = {
   cycleId: string
+  accountMode: AccountMode
   type: string
   toolName?: string | null
   poolFrom?: string | null
@@ -27,6 +31,7 @@ export type TradingActionExecutedEvent = {
 
 export type TradingCycleCompletedEvent = {
   cycleId: string
+  accountMode: AccountMode
   reason: string
   status: "completed" | "failed"
   message: string

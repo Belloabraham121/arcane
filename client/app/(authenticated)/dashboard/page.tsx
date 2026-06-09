@@ -195,7 +195,8 @@ export default function DashboardPage() {
 
   const { connected: socketConnected, cycleActive: socketCycleActive } =
     useTradingSocket({
-      enabled: strategy?.status === "active",
+      accountMode: viewMode,
+      enabled: strategy?.status === "active" && viewMode != null,
       onCycleStarted: () => {
         setTradingStatus((prev) =>
           prev ? { ...prev, phase: "analyzing" } : prev,

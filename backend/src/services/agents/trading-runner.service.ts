@@ -511,8 +511,6 @@ export async function runTradingCycle(
   const cycleId = randomUUID();
   const startedAt = new Date().toISOString();
 
-  emitTradingCycleStarted(userId, { cycleId, reason, startedAt });
-
   try {
     const user = await findUserById(userId);
     if (!user) {
@@ -557,6 +555,13 @@ export async function runTradingCycle(
     if (trading.rpcMode === "fork") {
       await acquireDemoCycleLock(userId);
     }
+
+    emitTradingCycleStarted(userId, {
+      cycleId,
+      accountMode: trading.accountMode,
+      reason,
+      startedAt,
+    });
 
     const poolAllocations = poolAllocationsFromRows(strategy.poolAllocations);
     const activePoolIds = new Set(
@@ -632,7 +637,7 @@ export async function runTradingCycle(
           skipSomniaAttestation:
             isDemoCycle || overrides?.simulation?.skipSomniaAttestation,
           onToolExecuted: (outcome) => {
-            emitFromToolOutcome(userId, cycleId, outcome);
+            emitFromToolOutcome(userId, cycleId, trading.accountMode, outcome);
           },
         });
 
@@ -667,10 +672,16 @@ export async function runTradingCycle(
             });
             if (smart.executedTransactions.length > 0) {
               executedTransactions = smart.executedTransactions;
-              emitFromExecutedTransactions(userId, cycleId, smart.executedTransactions, {
-                poolFrom: smart.poolFrom ?? null,
-                poolTo: smart.poolTo ?? null,
-              });
+              emitFromExecutedTransactions(
+                userId,
+                cycleId,
+                trading.accountMode,
+                smart.executedTransactions,
+                {
+                  poolFrom: smart.poolFrom ?? null,
+                  poolTo: smart.poolTo ?? null,
+                },
+              );
               executionMessage = `OpenAI held — smart rebalance executed. ${smart.message ?? ""}`;
             } else if (smart.message) {
               log.info("Smart rebalance skipped", { userId, cycleId, reason: smart.message });
@@ -709,10 +720,16 @@ export async function runTradingCycle(
           });
           executedTransactions = rebalance.executedTransactions;
           if (rebalance.executedTransactions.length > 0) {
-            emitFromExecutedTransactions(userId, cycleId, rebalance.executedTransactions, {
-              poolFrom: rebalance.poolFrom ?? null,
-              poolTo: rebalance.poolTo ?? null,
-            });
+            emitFromExecutedTransactions(
+              userId,
+              cycleId,
+              trading.accountMode,
+              rebalance.executedTransactions,
+              {
+                poolFrom: rebalance.poolFrom ?? null,
+                poolTo: rebalance.poolTo ?? null,
+              },
+            );
           }
           executionMessage =
             rebalance.executedTransactions.length > 0
@@ -784,6 +801,7 @@ export async function runTradingCycle(
 
     emitTradingCycleCompleted(userId, {
       cycleId,
+      accountMode: summary.accountMode,
       reason,
       status: "completed",
       message: summary.message,
@@ -865,6 +883,7 @@ export async function runTradingCycle(
 
     emitTradingCycleCompleted(userId, {
       cycleId,
+      accountMode: failedSummary.accountMode,
       reason,
       status: "failed",
       message,

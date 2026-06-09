@@ -207,7 +207,9 @@ flowchart TB
 - [x] `PATCH /api/v1/users/account-mode` — set once or allow switch with warning (live → demo OK; demo → live requires deposit?)
 
 ### 5.3 Account mode switch (optional v1)
-- [ ] If allowed: switching live → demo is instant; demo → live requires confirming own wallet address
+- [x] Dashboard `AccountModeSwitch`: live → demo instant; demo → live confirms wallet (`confirmLiveWallet`)
+- [x] Separate `agent_strategy` per `account_mode` (demo and live configs stored independently)
+- [ ] See **`ARCANE_AGENT_CANVAS_TODO.md`** for agent canvas + Socket.IO demo/live real-time UI
 
 ---
 
@@ -255,7 +257,7 @@ flowchart TB
 - Per-user isolated Anvil state (all demo users share one fork)
 - Withdrawals / transfers from demo wallet
 - Historical equity curve chart (snapshots stored for future)
-- Separate demo strategy allocations (same strategy, different execution rail)
+- Sub-agent avatars on 3D agent canvas (v1 uses single wallet agent mesh)
 
 ---
 

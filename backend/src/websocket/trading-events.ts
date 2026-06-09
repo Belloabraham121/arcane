@@ -1,3 +1,4 @@
+import type { AccountMode } from "@prisma/client";
 import type { Server } from "socket.io";
 import { createLogger } from "../shared/logger";
 import type { ToolExecutionOutcome } from "../services/somnia/quickswap-llm-tools";
@@ -75,6 +76,7 @@ function parseToolPools(
 export function emitFromToolOutcome(
   userId: string,
   cycleId: string,
+  accountMode: AccountMode,
   outcome: ToolExecutionOutcome,
 ): void {
   const at = new Date().toISOString();
@@ -84,6 +86,7 @@ export function emitFromToolOutcome(
     for (const tx of outcome.executedTransactions) {
       emitTradingActionExecuted(userId, {
         cycleId,
+        accountMode,
         type: tx.kind === "swap" ? "swap" : "approve",
         toolName: outcome.tool,
         poolFrom,
@@ -106,6 +109,7 @@ export function emitFromToolOutcome(
 
   emitTradingActionExecuted(userId, {
     cycleId,
+    accountMode,
     type: outcome.tool === "rebalanceToPool" ? "rebalance" : "tool",
     toolName: outcome.tool,
     poolFrom,
@@ -118,6 +122,7 @@ export function emitFromToolOutcome(
 export function emitFromExecutedTransactions(
   userId: string,
   cycleId: string,
+  accountMode: AccountMode,
   txs: ExecutedTransaction[],
   context?: { poolFrom?: string | null; poolTo?: string | null },
 ): void {
@@ -125,6 +130,7 @@ export function emitFromExecutedTransactions(
   for (const tx of txs) {
     emitTradingActionExecuted(userId, {
       cycleId,
+      accountMode,
       type: tx.kind,
       poolFrom: context?.poolFrom ?? null,
       poolTo: context?.poolTo ?? null,

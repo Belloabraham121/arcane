@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { io, type Socket } from "socket.io-client"
+import type { AccountMode } from "@/lib/api/auth"
 import { API_URL } from "@/lib/api/client"
 import {
   TRADING_SOCKET_EVENTS,
@@ -11,6 +12,7 @@ import {
   type TradingCycleStartedEvent,
 } from "@/lib/api/trading-socket-types"
 import { POOL_LABELS } from "@/lib/strategy-presets"
+import { tradingSocketEventMatchesMode } from "@/lib/trading-socket-mode"
 import { formatReason } from "@/lib/trading-helpers"
 
 export type PoolRouteCommand = {
@@ -21,6 +23,7 @@ export type PoolRouteCommand = {
 }
 
 type UseTradingSocketOptions = {
+  accountMode?: AccountMode
   enabled?: boolean
   onCycleStarted?: (event: TradingCycleStartedEvent) => void
   onActionExecuted?: (event: TradingActionExecutedEvent) => void
@@ -57,7 +60,7 @@ function feedItemFromAction(event: TradingActionExecutedEvent): LiveTradingFeedI
 }
 
 export function useTradingSocket(options: UseTradingSocketOptions = {}) {
-  const { enabled = true } = options
+  const { accountMode, enabled = true } = options
   const [connected, setConnected] = useState(false)
   const [feedItems, setFeedItems] = useState<LiveTradingFeedItem[]>([])
   const [routeCommand, setRouteCommand] = useState<PoolRouteCommand | null>(null)
@@ -69,6 +72,12 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
   const pushFeed = useCallback((item: LiveTradingFeedItem) => {
     setFeedItems((prev) => [item, ...prev].slice(0, 50))
   }, [])
+
+  useEffect(() => {
+    setFeedItems([])
+    setRouteCommand(null)
+    setCycleActive(false)
+  }, [accountMode])
 
   useEffect(() => {
     if (!enabled) {
@@ -84,10 +93,18 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
 
     socketRef.current = socket
 
+    const modeFilter = () => optionsRef.current.accountMode
+
+    const matchesMode = (eventMode: AccountMode | undefined) =>
+      tradingSocketEventMatchesMode(eventMode, modeFilter())
+
     socket.on("connect", () => setConnected(true))
     socket.on("disconnect", () => setConnected(false))
 
     socket.on(TRADING_SOCKET_EVENTS.cycleStarted, (event: TradingCycleStartedEvent) => {
+      if (!matchesMode(event.accountMode)) {
+        return
+      }
       setCycleActive(true)
       pushFeed({
         id: `start-${event.cycleId}`,
@@ -102,6 +119,9 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
     socket.on(
       TRADING_SOCKET_EVENTS.actionExecuted,
       (event: TradingActionExecutedEvent) => {
+        if (!matchesMode(event.accountMode)) {
+          return
+        }
         pushFeed(feedItemFromAction(event))
 
         if (event.poolFrom || event.poolTo) {
@@ -120,6 +140,9 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
     socket.on(
       TRADING_SOCKET_EVENTS.cycleCompleted,
       (event: TradingCycleCompletedEvent) => {
+        if (!matchesMode(event.accountMode)) {
+          return
+        }
         setCycleActive(false)
         pushFeed({
           id: `done-${event.cycleId}`,
@@ -136,7 +159,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
       socket.disconnect()
       socketRef.current = null
     }
-  }, [enabled, pushFeed])
+  }, [enabled, pushFeed, accountMode])
 
   return {
     connected,

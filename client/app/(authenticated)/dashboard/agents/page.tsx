@@ -42,7 +42,8 @@ export default function AgentsPage() {
   const poolIds = useMemo(() => activePoolIds(poolAmounts), [poolAmounts]);
 
   const { connected, feedItems, routeCommand, cycleActive } = useTradingSocket({
-    enabled: !loading,
+    accountMode: accountMode ?? undefined,
+    enabled: !loading && accountMode != null,
   });
 
   useEffect(() => {

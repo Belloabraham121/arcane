@@ -25,12 +25,17 @@ import {
 } from "../somnia/somnia-attestation.service";
 import {
   runSubAgentPhase,
+  type MarketplacePurchaseSocketPayload,
   type SubAgentOutput,
 } from "./sub-agent-orchestrator";
 import {
   runMarketplaceSttPreflight,
   type MarketplacePreflightResult,
 } from "../marketplace/preflight.js";
+import {
+  createMarketplaceBudgetTracker,
+  MarketplaceCyclePurchases,
+} from "../marketplace/x402-buyer.js";
 
 const log = createLogger("dual-llm-trading");
 
@@ -59,6 +64,13 @@ export async function runDualLlmTradingCycle(input: {
   onToolExecuted?: (outcome: ToolExecutionOutcome) => void;
   onSubAgentStarted?: (agentId: string, agentName: string) => void;
   onSubAgentCompleted?: (output: SubAgentOutput) => void;
+  cycleId?: string;
+  onMarketplacePurchaseStarted?: (
+    payload: Omit<MarketplacePurchaseSocketPayload, "success" | "txHash" | "error" | "at">,
+  ) => void;
+  onMarketplacePurchaseCompleted?: (
+    payload: MarketplacePurchaseSocketPayload,
+  ) => void;
   /** Skip Somnia createRequest (dev simulation). */
   skipSomniaAttestation?: boolean;
   /** Simulate swap/rebalance execution without broadcasting txs. */
@@ -112,6 +124,24 @@ export async function runDualLlmTradingCycle(input: {
     });
   }
 
+  const marketplaceActive =
+    marketplacePreflight.ok && !marketplacePreflight.skipped;
+  const marketplaceOptions = marketplaceActive
+    ? {
+        cycleId: input.cycleId ?? `cycle-${input.userId}`,
+        purchases: new MarketplaceCyclePurchases({
+          userId: input.userId,
+          accountMode: input.accountMode,
+          budgetTracker: createMarketplaceBudgetTracker({
+            strategyBudgetSttWei: input.subAgentX402BudgetSttWei,
+          }),
+          correlationId: input.cycleId ?? `cycle-${input.userId}`,
+        }),
+        onPurchaseStarted: input.onMarketplacePurchaseStarted,
+        onPurchaseCompleted: input.onMarketplacePurchaseCompleted,
+      }
+    : undefined;
+
   const subAgentPhase = await runSubAgentPhase(
     input.subAgents,
     {
@@ -124,6 +154,7 @@ export async function runDualLlmTradingCycle(input: {
     },
     input.onSubAgentCompleted,
     input.onSubAgentStarted,
+    marketplaceOptions,
   );
 
   const somniaAttestation = input.skipSomniaAttestation

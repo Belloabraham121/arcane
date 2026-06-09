@@ -5,6 +5,8 @@ import type { ToolExecutionOutcome } from "../services/somnia/quickswap-llm-tool
 import type { ExecutedTransaction } from "../services/agents/trading.types";
 import {
   TRADING_SOCKET_EVENTS,
+  type MarketplacePurchaseCompletedEvent,
+  type MarketplacePurchaseStartedEvent,
   type SubAgentCompletedEvent,
   type SubAgentStartedEvent,
   type TradingActionExecutedEvent,
@@ -51,6 +53,20 @@ export function emitSubAgentCompleted(
   payload: SubAgentCompletedEvent,
 ): void {
   emitToUser(userId, TRADING_SOCKET_EVENTS.subAgentCompleted, payload);
+}
+
+export function emitMarketplacePurchaseStarted(
+  userId: string,
+  payload: MarketplacePurchaseStartedEvent,
+): void {
+  emitToUser(userId, TRADING_SOCKET_EVENTS.marketplacePurchaseStarted, payload);
+}
+
+export function emitMarketplacePurchaseCompleted(
+  userId: string,
+  payload: MarketplacePurchaseCompletedEvent,
+): void {
+  emitToUser(userId, TRADING_SOCKET_EVENTS.marketplacePurchaseCompleted, payload);
 }
 
 export function emitTradingActionExecuted(

@@ -6,6 +6,9 @@ import type { QuickSwapPool } from "../defi/quickswap/types.js";
 import type { WalletBalancesResult } from "../wallet/token-balance.service.js";
 import type { PoolAllocationDrift } from "./trading.types.js";
 import type { EffectiveRiskLimits } from "./risk-controls.types.js";
+import { getMarketplaceEnv } from "../../config/marketplace.js";
+import { marketplaceProductForSubAgent } from "../marketplace/sub-agent-products.js";
+import type { MarketplaceCyclePurchases } from "../marketplace/x402-buyer.js";
 
 const log = createLogger("sub-agent-orchestrator");
 
@@ -18,6 +21,12 @@ export type SubAgentOutput = {
   summary: string;
   data: Record<string, unknown>;
   durationMs: number;
+  marketplaceProductId?: string;
+  marketplacePurchase?: {
+    amountSttWei: string;
+    txHash: string | null;
+    devBypass: boolean;
+  };
 };
 
 export type SubAgentPhaseResult = {
@@ -40,6 +49,27 @@ type SubAgentContext = {
   recommendedAction: RecommendedActionSummary;
   riskLimits: EffectiveRiskLimits;
   accountMode: AccountMode;
+  marketplaceData?: Record<string, unknown>;
+};
+
+export type MarketplacePurchaseSocketPayload = {
+  cycleId: string;
+  accountMode: AccountMode;
+  agentId: string;
+  agentName: string;
+  productId: string;
+  amountSttWei: string;
+  txHash?: string | null;
+  success: boolean;
+  error?: string;
+  at: string;
+};
+
+export type SubAgentMarketplaceOptions = {
+  cycleId: string;
+  purchases: MarketplaceCyclePurchases;
+  onPurchaseStarted?: (payload: Omit<MarketplacePurchaseSocketPayload, "success" | "txHash" | "error" | "at">) => void;
+  onPurchaseCompleted?: (payload: MarketplacePurchaseSocketPayload) => void;
 };
 
 function buildSubAgentPrompt(
@@ -68,7 +98,7 @@ function buildSubAgentPrompt(
     driftPercent: d.driftPercent,
   }));
 
-  return [
+  const lines = [
     `You are "${agent.name}", a specialized read-only sub-agent in a DeFi portfolio system.`,
     `Your role: ${agent.systemPrompt}`,
     "",
@@ -87,10 +117,23 @@ function buildSubAgentPrompt(
       toPoolId: context.recommendedAction.toPoolId,
     })}`,
     `Risk limits: maxSwapBps=${context.riskLimits.maxSwapPortfolioBps}, maxSlippage=${context.riskLimits.maxSlippageBps}, driftThreshold=${context.riskLimits.driftThresholdPercent}%`,
+  ];
+
+  if (context.marketplaceData) {
+    lines.push(
+      "",
+      "Purchased Marketplace data product (x402 · STT):",
+      JSON.stringify(context.marketplaceData),
+    );
+  }
+
+  lines.push(
     "",
     "Respond with EXACTLY this JSON format (no markdown, no code fences):",
     '{"summary": "your 2-3 sentence analysis", "data": { ... relevant metrics/flags }}',
-  ].join("\n");
+  );
+
+  return lines.join("\n");
 }
 
 function getOpenAiClient(): OpenAI {
@@ -114,19 +157,118 @@ function parseSubAgentResponse(raw: string): { summary: string; data: Record<str
   }
 }
 
+async function fetchMarketplaceDataForAgent(
+  agent: SubAgentConfigItem,
+  marketplace: SubAgentMarketplaceOptions,
+  accountMode: AccountMode,
+): Promise<{
+  marketplaceData?: Record<string, unknown>;
+  purchaseMeta?: SubAgentOutput["marketplacePurchase"];
+  productId?: string;
+}> {
+  const productId = marketplaceProductForSubAgent(agent.id);
+  if (!productId) {
+    return {};
+  }
+
+  const env = getMarketplaceEnv();
+  const priceWei = env.productPricesSttWei[productId].toString();
+
+  marketplace.onPurchaseStarted?.({
+    cycleId: marketplace.cycleId,
+    accountMode,
+    agentId: agent.id,
+    agentName: agent.name,
+    productId,
+    amountSttWei: priceWei,
+  });
+
+  const purchase = await marketplace.purchases.purchase(productId);
+  const at = new Date().toISOString();
+
+  if (purchase.ok && purchase.skipped) {
+    log.info("Marketplace purchase skipped for sub-agent", {
+      agentId: agent.id,
+      productId,
+      reason: purchase.reason,
+    });
+    return {};
+  }
+
+  if (!purchase.ok) {
+    marketplace.onPurchaseCompleted?.({
+      cycleId: marketplace.cycleId,
+      accountMode,
+      agentId: agent.id,
+      agentName: agent.name,
+      productId,
+      amountSttWei: priceWei,
+      success: false,
+      error: purchase.error,
+      at,
+    });
+    log.warn("Marketplace purchase failed — sub-agent uses inline context only", {
+      agentId: agent.id,
+      productId,
+      error: purchase.error,
+    });
+    return {};
+  }
+
+  marketplace.onPurchaseCompleted?.({
+    cycleId: marketplace.cycleId,
+    accountMode,
+    agentId: agent.id,
+    agentName: agent.name,
+    productId,
+    amountSttWei: purchase.amountSttWei.toString(),
+    txHash: purchase.txHash,
+    success: true,
+    at,
+  });
+
+  return {
+    marketplaceData: purchase.data,
+    productId,
+    purchaseMeta: {
+      amountSttWei: purchase.amountSttWei.toString(),
+      txHash: purchase.txHash,
+      devBypass: purchase.devBypass,
+    },
+  };
+}
+
 async function runSingleSubAgent(
   agent: SubAgentConfigItem,
   context: SubAgentContext,
+  marketplace?: SubAgentMarketplaceOptions,
 ): Promise<SubAgentOutput> {
   const start = Date.now();
   const client = getOpenAiClient();
+
+  let agentContext = context;
+  let marketplaceProductId: string | undefined;
+  let marketplacePurchase: SubAgentOutput["marketplacePurchase"];
+
+  if (marketplace) {
+    const fetched = await fetchMarketplaceDataForAgent(
+      agent,
+      marketplace,
+      context.accountMode,
+    );
+    marketplaceProductId = fetched.productId;
+    marketplacePurchase = fetched.purchaseMeta;
+    if (fetched.marketplaceData) {
+      agentContext = { ...context, marketplaceData: fetched.marketplaceData };
+    }
+  }
 
   try {
     const completion = await client.chat.completions.create({
       model: SUB_AGENT_MODEL,
       max_tokens: SUB_AGENT_MAX_TOKENS,
       messages: [
-        { role: "user", content: buildSubAgentPrompt(agent, context) },
+        { role: "user", content: buildSubAgentPrompt(agent, agentContext) },
       ],
     });
 
@@ -137,6 +279,7 @@ async function runSingleSubAgent(
       agentId: agent.id,
       agentName: agent.name,
       durationMs: Date.now() - start,
+      marketplaceProductId,
     });
 
     return {
@@ -145,6 +288,8 @@ async function runSingleSubAgent(
       summary,
       data,
       durationMs: Date.now() - start,
+      marketplaceProductId,
+      marketplacePurchase,
     };
   } catch (err) {
     log.warn("Sub-agent failed, using fallback", {
@@ -158,6 +303,8 @@ async function runSingleSubAgent(
       summary: `${agent.name}: Analysis unavailable this cycle.`,
       data: { error: true },
       durationMs: Date.now() - start,
+      marketplaceProductId,
+      marketplacePurchase,
     };
   }
 }
@@ -171,6 +318,7 @@ export async function runSubAgentPhase(
   context: SubAgentContext,
   onSubAgentCompleted?: (output: SubAgentOutput) => void,
   onSubAgentStarted?: (agentId: string, agentName: string) => void,
+  marketplace?: SubAgentMarketplaceOptions,
 ): Promise<SubAgentPhaseResult> {
   const enabled = subAgents.filter(
     (agent) => agent.enabled && agent.id !== "root-orchestrator",
@@ -184,13 +332,18 @@ export async function runSubAgentPhase(
 
   for (const agent of enabled) {
     onSubAgentStarted?.(agent.id, agent.name);
-    const output = await runSingleSubAgent(agent, context);
+    const output = await runSingleSubAgent(agent, context, marketplace);
     outputs.push(output);
     onSubAgentCompleted?.(output);
   }
 
   const mergedContext = outputs
-    .map((o) => `[${o.agentName}]: ${o.summary}`)
+    .map((o) => {
+      const marketplaceNote = o.marketplaceProductId
+        ? ` [marketplace:${o.marketplaceProductId}]`
+        : "";
+      return `[${o.agentName}]${marketplaceNote}: ${o.summary}`;
+    })
     .join("\n");
 
   return { outputs, mergedContext };

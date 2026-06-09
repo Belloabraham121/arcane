@@ -1,14 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { MarketplaceProductId } from "../../../../config/marketplace.js";
-import { requireAuth } from "../../../middleware/auth.js";
+import { requireMarketplaceAuth } from "../../../middleware/marketplace-auth.js";
 import { buildMarketplaceCatalog } from "../../../../services/marketplace/catalog.js";
 import {
   MarketplaceContextError,
   loadMarketplaceUserContext,
 } from "../../../../services/marketplace/marketplace-context.service.js";
-import { buildMarketplaceProduct } from "../../../../services/marketplace/products.js";
-import { recordMarketplacePurchase } from "../../../../services/marketplace/purchase.repository.js";
+import { deliverMarketplaceProductForUser } from "../../../../services/marketplace/marketplace-delivery.service.js";
 import { createSttPaywallMiddleware } from "../../../../services/marketplace/stt-paywall.js";
 import { fail, ok } from "../../../../utils/http-response.js";
 
@@ -44,32 +43,26 @@ async function deliverProduct(
     });
   }
 
-  try {
-    const context = await loadMarketplaceUserContext(
-      req.user.id,
-      parsed.data.mode,
-    );
-    const data = buildMarketplaceProduct(productId, context);
+  if (!req.marketplacePayment) {
+    return fail(req, res, 500, {
+      code: "PAYMENT_MISSING",
+      message: "Marketplace paywall did not attach payment context",
+    });
+  }
 
-    if (req.marketplacePayment) {
-      await recordMarketplacePurchase({
-        userId: req.user.id,
-        payment: req.marketplacePayment,
-        correlationId: req.correlationId,
-      });
-    }
+  try {
+    const delivered = await deliverMarketplaceProductForUser({
+      userId: req.user.id,
+      productId,
+      accountMode: parsed.data.mode,
+      payment: req.marketplacePayment,
+      correlationId: req.correlationId,
+    });
 
     return ok(req, res, {
       productId,
-      payment: req.marketplacePayment
-        ? {
-            amountSttWei: req.marketplacePayment.amountSttWei.toString(),
-            payerAddress: req.marketplacePayment.payerAddress,
-            txHash: req.marketplacePayment.txHash,
-            devBypass: req.marketplacePayment.devBypass,
-          }
-        : null,
-      ...data,
+      payment: delivered.payment,
+      ...delivered.data,
     });
   } catch (err) {
     const handled = handleMarketplaceError(req, res, err);
@@ -82,27 +75,31 @@ async function deliverProduct(
 
 export const marketplaceRouter = Router();
 
-marketplaceRouter.get("/api/v1/marketplace/catalog", requireAuth, (_req, res) => {
-  return ok(_req, res, buildMarketplaceCatalog());
-});
+marketplaceRouter.get(
+  "/api/v1/marketplace/catalog",
+  requireMarketplaceAuth,
+  (_req, res) => {
+    return ok(_req, res, buildMarketplaceCatalog());
+  },
+);
 
 marketplaceRouter.get(
   "/api/v1/marketplace/pools/snapshot",
-  requireAuth,
+  requireMarketplaceAuth,
   createSttPaywallMiddleware("pools/snapshot"),
   async (req, res) => deliverProduct(req, res, "pools/snapshot"),
 );
 
 marketplaceRouter.get(
   "/api/v1/marketplace/signals/spread",
-  requireAuth,
+  requireMarketplaceAuth,
   createSttPaywallMiddleware("signals/spread"),
   async (req, res) => deliverProduct(req, res, "signals/spread"),
 );
 
 marketplaceRouter.get(
   "/api/v1/marketplace/signals/cross-chain",
-  requireAuth,
+  requireMarketplaceAuth,
   createSttPaywallMiddleware("signals/cross-chain"),
   async (req, res) => deliverProduct(req, res, "signals/cross-chain"),
 );

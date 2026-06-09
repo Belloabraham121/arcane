@@ -5,6 +5,8 @@ export const TRADING_SOCKET_EVENTS = {
   actionExecuted: "trading:action_executed",
   subAgentStarted: "trading:sub_agent_started",
   subAgentCompleted: "trading:sub_agent_completed",
+  marketplacePurchaseStarted: "trading:marketplace_purchase_started",
+  marketplacePurchaseCompleted: "trading:marketplace_purchase_completed",
   cycleCompleted: "trading:cycle_completed",
 } as const;
 
@@ -53,6 +55,28 @@ export type SubAgentCompletedEvent = {
   agentName: string;
   summary: string;
   durationMs: number;
+  at: string;
+};
+
+export type MarketplacePurchaseStartedEvent = {
+  cycleId: string;
+  accountMode: AccountMode;
+  agentId: string;
+  agentName: string;
+  productId: string;
+  amountSttWei: string;
+};
+
+export type MarketplacePurchaseCompletedEvent = {
+  cycleId: string;
+  accountMode: AccountMode;
+  agentId: string;
+  agentName: string;
+  productId: string;
+  amountSttWei: string;
+  txHash?: string | null;
+  success: boolean;
+  error?: string;
   at: string;
 };
 

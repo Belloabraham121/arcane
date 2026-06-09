@@ -7,6 +7,8 @@ import { API_URL } from "@/lib/api/client"
 import {
   TRADING_SOCKET_EVENTS,
   type LiveTradingFeedItem,
+  type MarketplacePurchaseCompletedEvent,
+  type MarketplacePurchaseStartedEvent,
   type SubAgentCompletedEvent,
   type SubAgentStartedEvent,
   type SubAgentStatus,
@@ -238,6 +240,43 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
           },
         })
         optionsRef.current.onSubAgentCompleted?.(event)
+      },
+    )
+
+    socket.on(
+      TRADING_SOCKET_EVENTS.marketplacePurchaseStarted,
+      (event: MarketplacePurchaseStartedEvent) => {
+        if (!matchesMode(event.accountMode)) {
+          return
+        }
+        pushLiveFeed({
+          id: `mkt-start-${event.cycleId}-${event.agentId}-${event.productId}`,
+          at: new Date().toISOString(),
+          headline: `${event.agentName} → Marketplace`,
+          detail: `Buying ${event.productId} (${event.amountSttWei} STT wei)`,
+          status: "running",
+        })
+      },
+    )
+
+    socket.on(
+      TRADING_SOCKET_EVENTS.marketplacePurchaseCompleted,
+      (event: MarketplacePurchaseCompletedEvent) => {
+        if (!matchesMode(event.accountMode)) {
+          return
+        }
+        pushLiveFeed({
+          id: `mkt-done-${event.cycleId}-${event.agentId}-${event.productId}`,
+          at: event.at,
+          headline: event.success
+            ? `Marketplace · ${event.productId}`
+            : `Marketplace failed · ${event.productId}`,
+          detail: event.success
+            ? `Paid ${event.amountSttWei} STT wei`
+            : (event.error ?? "Purchase failed"),
+          txHash: event.txHash ?? null,
+          status: event.success ? "completed" : "failed",
+        })
       },
     )
 

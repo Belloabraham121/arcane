@@ -42,6 +42,8 @@ import {
 import {
   emitFromExecutedTransactions,
   emitFromToolOutcome,
+  emitMarketplacePurchaseCompleted,
+  emitMarketplacePurchaseStarted,
   emitSubAgentCompleted,
   emitSubAgentStarted,
   emitTradingCycleCompleted,
@@ -618,6 +620,7 @@ export async function runTradingCycle(
       try {
         const llm = await invokeLlm({
           userId,
+          cycleId,
           accountMode: trading.accountMode,
           allocationMode,
           walletAddress: tradingWalletAddress,
@@ -635,6 +638,12 @@ export async function runTradingCycle(
           dryRunTrades: overrides?.simulation?.dryRunTrades,
           skipSomniaAttestation:
             isDemoCycle || overrides?.simulation?.skipSomniaAttestation,
+          onMarketplacePurchaseStarted: (payload) => {
+            emitMarketplacePurchaseStarted(userId, payload);
+          },
+          onMarketplacePurchaseCompleted: (payload) => {
+            emitMarketplacePurchaseCompleted(userId, payload);
+          },
           onSubAgentStarted: (agentId: string, agentName: string) => {
             emitSubAgentStarted(userId, {
               cycleId,

@@ -110,19 +110,19 @@ flowchart TB
 ## Phase 3 — x402 buyer integration (sub-agents)
 
 ### 3.1 Buyer client
-- [ ] Create `backend/src/services/marketplace/x402-buyer.ts` — `wrapFetchWithPayment` + agent wallet signer
-- [ ] Budget enforcement: per-call cap + per-cycle cap in STT wei
-- [ ] Product whitelist: only allow configured catalog IDs per strategy
+- [x] Create `backend/src/services/marketplace/x402-buyer.ts` — `wrapFetchWithPayment` + agent wallet signer
+- [x] Budget enforcement: per-call cap + per-cycle cap in STT wei
+- [x] Product whitelist: only allow configured catalog IDs per strategy
 
 ### 3.2 Orchestrator wiring
-- [ ] Extend `sub-agent-orchestrator.ts` — optional Marketplace fetch **before** LLM sub-agent call
-- [ ] Map sub-agent id → default product (e.g. `signal-scout` → spread signal, `bridge-scout` → cross-chain)
-- [ ] Inject purchased JSON into sub-agent prompt alongside existing portfolio context
-- [ ] Emit socket events: `trading:marketplace_purchase_started`, `trading:marketplace_purchase_completed` (include `amountSttWei`, `productId`)
+- [x] Extend `sub-agent-orchestrator.ts` — optional Marketplace fetch **before** LLM sub-agent call
+- [x] Map sub-agent id → default product (e.g. `signal-scout` → spread signal, `bridge-scout` → cross-chain)
+- [x] Inject purchased JSON into sub-agent prompt alongside existing portfolio context
+- [x] Emit socket events: `trading:marketplace_purchase_started`, `trading:marketplace_purchase_completed` (include `amountSttWei`, `productId`)
 
 ### 3.3 Fallback behavior
-- [ ] If Marketplace disabled or purchase fails → sub-agent runs on free inline context only (current behavior)
-- [ ] Log purchase failures without blocking the trading cycle
+- [x] If Marketplace disabled or purchase fails → sub-agent runs on free inline context only (current behavior)
+- [x] Log purchase failures without blocking the trading cycle
 
 ---
 

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import type { Address, Hash, PublicClient } from "viem";
-import { getAddress, isAddress, isHash } from "viem";
+import { getAddress } from "viem";
 import { encodePaymentRequiredHeader } from "@x402/core/http";
 import {
   getMarketplaceEnv,
@@ -13,6 +13,7 @@ import {
   MARKETPLACE_STT_SCHEME,
   MARKETPLACE_X402_NETWORK,
 } from "./constants.js";
+import { decodeNativeSttPaymentSignature } from "./stt-payment.js";
 
 export type MarketplaceSttPayment = {
   productId: MarketplaceProductId;
@@ -22,39 +23,8 @@ export type MarketplaceSttPayment = {
   devBypass: boolean;
 };
 
-type NativeSttPaymentPayload = {
-  x402Version: number;
-  scheme: typeof MARKETPLACE_STT_SCHEME;
-  network: typeof MARKETPLACE_X402_NETWORK;
-  payload: {
-    txHash: Hash;
-    payer: Address;
-  };
-};
-
 function isDevBypassEnabled(): boolean {
   return process.env.MARKETPLACE_X402_DEV_BYPASS === "true";
-}
-
-function decodePaymentHeader(header: string): NativeSttPaymentPayload | null {
-  try {
-    const json = Buffer.from(header, "base64").toString("utf8");
-    const parsed = JSON.parse(json) as NativeSttPaymentPayload;
-    if (
-      parsed?.scheme !== MARKETPLACE_STT_SCHEME ||
-      parsed?.network !== MARKETPLACE_X402_NETWORK ||
-      !parsed.payload?.txHash ||
-      !parsed.payload?.payer
-    ) {
-      return null;
-    }
-    if (!isHash(parsed.payload.txHash) || !isAddress(parsed.payload.payer)) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
 }
 
 export async function verifyNativeSttPayment(input: {
@@ -180,7 +150,7 @@ export function createSttPaywallMiddleware(
       return;
     }
 
-    const decoded = decodePaymentHeader(header);
+    const decoded = decodeNativeSttPaymentSignature(header);
     if (!decoded) {
       fail(req, res, 402, {
         code: "INVALID_PAYMENT_SIGNATURE",

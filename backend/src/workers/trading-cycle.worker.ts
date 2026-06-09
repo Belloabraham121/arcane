@@ -9,7 +9,7 @@ import {
 } from "../services/agents/risk-controls.service";
 import {
   isUserCycleRunning,
-  resolveCycleIntervalMinutes,
+  resolveCycleIntervalMs,
   scheduleTradingCycle,
 } from "../services/agents/trading-runner.service";
 import { findStrategyByUserId } from "../services/agents/strategy.repository";
@@ -47,14 +47,14 @@ function balanceFingerprint(
 function isDueForScheduledCycle(input: {
   lastCycleAt: Date | null;
   tradingEnabledAt: Date | null;
-  intervalMinutes: number;
+  intervalMs: number;
 }): boolean {
   const anchor = input.lastCycleAt ?? input.tradingEnabledAt;
   if (!anchor) {
     return false;
   }
   const elapsedMs = Date.now() - anchor.getTime();
-  return elapsedMs >= input.intervalMinutes * 60_000;
+  return elapsedMs >= input.intervalMs;
 }
 
 function depositDetected(
@@ -75,7 +75,7 @@ export async function runTradingWorkerTick(): Promise<void> {
     depositDetectionEnabled,
     autoCycleIntervalMinutes,
     customCycleIntervalMinutes,
-    demoCycleIntervalMinutes,
+    demoCycleIntervalSeconds,
   } = getTradingExecutionEnv();
 
   const strategies = await listActiveStrategiesForWorker();
@@ -134,19 +134,19 @@ export async function runTradingWorkerTick(): Promise<void> {
 
       await updateBalanceFingerprint(strategy.strategyId, fingerprint);
 
-      const intervalMinutes = resolveCycleIntervalMinutes({
+      const intervalMs = resolveCycleIntervalMs({
         strategyType: strategy.strategyType as "auto" | "custom",
         accountMode: strategy.accountMode,
         cycleIntervalMinutes: strategy.cycleIntervalMinutes,
         autoCycleIntervalMinutes,
         customCycleIntervalMinutes,
-        demoCycleIntervalMinutes,
+        demoCycleIntervalSeconds,
       });
 
       const scheduledDue = isDueForScheduledCycle({
         lastCycleAt: strategy.lastCycleAt,
         tradingEnabledAt: strategy.tradingEnabledAt,
-        intervalMinutes,
+        intervalMs,
       });
 
       if (fingerprint.length === 0) {
@@ -158,7 +158,7 @@ export async function runTradingWorkerTick(): Promise<void> {
         log.debug("Strategy skipped — interval not elapsed", {
           userId: strategy.userId,
           accountMode: strategy.accountMode,
-          intervalMinutes,
+          intervalMs,
           lastCycleAt: strategy.lastCycleAt?.toISOString() ?? null,
         });
       }
@@ -174,7 +174,10 @@ export async function runTradingWorkerTick(): Promise<void> {
         );
         const riskLimits = resolveRiskLimits(subAgents);
 
-        if (isCycleCooldownActive(strategy.lastCycleAt, riskLimits)) {
+        if (
+          strategy.accountMode !== "demo" &&
+          isCycleCooldownActive(strategy.lastCycleAt, riskLimits)
+        ) {
           log.debug("Scheduled cycle skipped — cooldown active", {
             userId: strategy.userId,
           });
@@ -183,7 +186,7 @@ export async function runTradingWorkerTick(): Promise<void> {
 
         log.info("Scheduled trading cycle due", {
           userId: strategy.userId,
-          intervalMinutes,
+          intervalMs,
         });
         scheduleTradingCycle(strategy.userId, "scheduled");
       }

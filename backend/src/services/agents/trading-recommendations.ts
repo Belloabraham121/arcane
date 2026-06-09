@@ -1,3 +1,4 @@
+import type { AccountMode } from "@prisma/client";
 import type { Address } from "viem";
 import { formatAmountHint } from "../../utils/token-amount";
 import { getTradingExecutionEnv } from "../../config/env";
@@ -10,6 +11,12 @@ import type { QuickSwapPool } from "../defi/quickswap/types";
 import type { WalletBalancesResult } from "../wallet/token-balance.service";
 import type { PoolAllocationDrift } from "./trading.types";
 import type { EffectiveRiskLimits } from "./risk-controls.types";
+
+export type AllocationMode = "strict" | "exploratory";
+
+export function resolveAllocationMode(accountMode: AccountMode): AllocationMode {
+  return accountMode === "demo" ? "exploratory" : "strict";
+}
 
 export type TradingRecommendation = {
   shouldTrade: boolean;
@@ -168,13 +175,185 @@ export function proactiveDriftThresholdPercent(
   return Math.min(riskLimits.driftThresholdPercent, proactive);
 }
 
+const exploratoryTargetByUser = new Map<string, string>();
+
+/** Demo / free mode — rotate across liquid selected pools; ignore target weights. */
+export function pickExploratoryRebalancePair(
+  userId: string,
+  accountMode: AccountMode,
+  activePoolIds: readonly string[],
+  pools: readonly QuickSwapPool[],
+): { fromPoolId: string; toPoolId: string } | null {
+  const liquid = liquidPoolsOnly(
+    pools.filter((pool) => activePoolIds.includes(pool.id)),
+  );
+  if (liquid.length < 2) {
+    return null;
+  }
+
+  const ordered = [...liquid].sort((a, b) => a.id.localeCompare(b.id));
+  const cacheKey = `${userId}:${accountMode}`;
+  const lastTarget = exploratoryTargetByUser.get(cacheKey);
+  let toIdx = 0;
+  if (lastTarget) {
+    const idx = ordered.findIndex((pool) => pool.id === lastTarget);
+    toIdx = idx >= 0 ? (idx + 1) % ordered.length : 0;
+  }
+
+  const toPool = ordered[toIdx]!;
+  const fromPool = ordered[(toIdx + 1) % ordered.length]!;
+  exploratoryTargetByUser.set(cacheKey, toPool.id);
+
+  return { fromPoolId: fromPool.id, toPoolId: toPool.id };
+}
+
+export function resetExploratoryRotation(
+  userId: string,
+  accountMode: AccountMode,
+): void {
+  exploratoryTargetByUser.delete(`${userId}:${accountMode}`);
+}
+
+function buildExploratoryRecommendation(input: {
+  userId: string;
+  accountMode: AccountMode;
+  activePoolIds: readonly string[];
+  pools: QuickSwapPool[];
+  balances: WalletBalancesResult;
+  riskLimits: EffectiveRiskLimits;
+}): TradingRecommendation {
+  const tradeablePoolIds = liquidPoolsOnly(
+    input.pools.filter((pool) => input.activePoolIds.includes(pool.id)),
+  ).map((pool) => pool.id);
+
+  const pair = pickExploratoryRebalancePair(
+    input.userId,
+    input.accountMode,
+    input.activePoolIds,
+    input.pools,
+  );
+
+  if (!pair) {
+    return {
+      shouldTrade: false,
+      reason: "Need at least two liquid selected pools for exploratory rebalance.",
+      suggestedTool: "hold",
+      tradeablePoolIds,
+    };
+  }
+
+  const fromPool = input.pools.find((pool) => pool.id === pair.fromPoolId);
+  const toPool = input.pools.find((pool) => pool.id === pair.toPoolId);
+  if (!fromPool || !toPool) {
+    return {
+      shouldTrade: false,
+      reason: "Exploratory pool pair could not be resolved.",
+      suggestedTool: "hold",
+      tradeablePoolIds,
+    };
+  }
+
+  const exclusiveToken = exclusivePoolToken(fromPool, toPool);
+  const samePairLeg = exclusiveToken
+    ? null
+    : pickSamePairSwapLeg(fromPool, input.balances);
+  const sourceToken = exclusiveToken ?? samePairLeg?.tokenIn ?? null;
+  const targetToken = exclusiveToken
+    ? null
+    : (samePairLeg?.tokenOut ?? null);
+
+  if (!sourceToken) {
+    return {
+      shouldTrade: false,
+      reason: "No wallet balance available for exploratory swap.",
+      suggestedTool: "hold",
+      tradeablePoolIds,
+    };
+  }
+
+  const balanceRow = input.balances.balances.find(
+    (row) => row.symbol === sourceToken.symbol,
+  );
+  if (!balanceRow) {
+    return {
+      shouldTrade: false,
+      reason: `No ${sourceToken.symbol} balance to sell.`,
+      suggestedTool: "hold",
+      tradeablePoolIds,
+    };
+  }
+
+  const amount = computeProactiveSwapAmount(
+    balanceRow.balance,
+    5,
+    input.riskLimits.maxSwapPortfolioBps,
+    input.riskLimits.minSwapAmountRaw,
+  );
+
+  if (!amount) {
+    return {
+      shouldTrade: false,
+      reason: "Exploratory swap amount is below minimum after risk caps.",
+      suggestedTool: "hold",
+      tradeablePoolIds,
+    };
+  }
+
+  const samePairNote = targetToken
+    ? ` Swap ${sourceToken.symbol}→${targetToken.symbol}.`
+    : "";
+
+  return {
+    shouldTrade: true,
+    reason: `Exploratory rotation: move exposure from ${fromPool.label} toward ${toPool.label} (setup weights are hints only).${samePairNote}`,
+    suggestedTool: "rebalanceToPool",
+    fromPoolId: pair.fromPoolId,
+    toPoolId: pair.toPoolId,
+    tokenIn: {
+      address: sourceToken.address,
+      symbol: sourceToken.symbol,
+    },
+    tokenOut: targetToken
+      ? { address: targetToken.address, symbol: targetToken.symbol }
+      : undefined,
+    amountInRaw: amount.toString(),
+    amountInHint: formatAmountHint(
+      amount,
+      sourceToken.decimals,
+      sourceToken.symbol,
+    ),
+    tokenDecimals: sourceToken.decimals,
+    tradeablePoolIds,
+  };
+}
+
 /** Actionable trade hint for the LLM and deterministic fallback executor. */
 export function buildTradingRecommendation(input: {
   poolDrift: PoolAllocationDrift[];
   pools: QuickSwapPool[];
   balances: WalletBalancesResult;
   riskLimits: EffectiveRiskLimits;
+  allocationMode?: AllocationMode;
+  userId?: string;
+  accountMode?: AccountMode;
+  activePoolIds?: readonly string[];
 }): TradingRecommendation {
+  if (
+    input.allocationMode === "exploratory" &&
+    input.userId &&
+    input.accountMode &&
+    input.activePoolIds
+  ) {
+    return buildExploratoryRecommendation({
+      userId: input.userId,
+      accountMode: input.accountMode,
+      activePoolIds: input.activePoolIds,
+      pools: input.pools,
+      balances: input.balances,
+      riskLimits: input.riskLimits,
+    });
+  }
+
   const tradeablePoolIds = liquidPoolsOnly(input.pools).map((pool) => pool.id);
   const threshold = proactiveDriftThresholdPercent(input.riskLimits);
 

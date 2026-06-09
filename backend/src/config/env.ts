@@ -221,7 +221,7 @@ export function getTradingExecutionEnv() {
     llmMaxIterations: BigInt(optional("SOMNIA_LLM_MAX_ITERATIONS", "3")),
     workerEnabled: optional("TRADING_WORKER_ENABLED", "true") === "true",
     workerPollIntervalMs: Number(
-      optional("TRADING_WORKER_POLL_INTERVAL_MS", "60000"),
+      optional("TRADING_WORKER_POLL_INTERVAL_MS", "5000"),
     ),
     autoCycleIntervalMinutes: Number(
       optional("TRADING_AUTO_CYCLE_INTERVAL_MINUTES", "10"),
@@ -229,8 +229,9 @@ export function getTradingExecutionEnv() {
     customCycleIntervalMinutes: Number(
       optional("TRADING_CUSTOM_CYCLE_INTERVAL_MINUTES", "15"),
     ),
-    demoCycleIntervalMinutes: Number(
-      optional("TRADING_DEMO_CYCLE_INTERVAL_MINUTES", "5"),
+    /** Demo scheduled cycles — seconds between runs (worker poll should be ≤ this). */
+    demoCycleIntervalSeconds: Number(
+      optional("TRADING_DEMO_CYCLE_INTERVAL_SECONDS", "10"),
     ),
     depositDetectionEnabled:
       optional("TRADING_DEPOSIT_DETECTION_ENABLED", "true") === "true",

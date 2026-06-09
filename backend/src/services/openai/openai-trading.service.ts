@@ -1,4 +1,6 @@
+import type { AccountMode } from "@prisma/client";
 import type { Address, Hex } from "viem";
+import type { AllocationMode } from "../agents/trading-recommendations";
 import OpenAI from "openai";
 import type {
   ChatCompletionMessageParam,
@@ -193,6 +195,8 @@ function toolCallToCalldata(
 
 export async function runOpenAiTradingCycle(input: {
   userId: string;
+  accountMode: AccountMode;
+  allocationMode: AllocationMode;
   walletAddress: Address;
   strategyType: StrategyType;
   depositAmount: number;
@@ -214,6 +218,10 @@ export async function runOpenAiTradingCycle(input: {
   const portfolio = buildPortfolioContext({
     walletAddress: input.walletAddress,
     strategyType: input.strategyType,
+    allocationMode: input.allocationMode,
+    userId: input.userId,
+    accountMode: input.accountMode,
+    activePoolIds: input.activePoolIds,
     depositAmount: input.depositAmount,
     lastCycleAt: input.lastCycleAt,
     poolAllocations: input.poolAllocations,
@@ -240,6 +248,7 @@ export async function runOpenAiTradingCycle(input: {
     input.strategyType,
     input.subAgents,
     driftThresholdPercent,
+    input.allocationMode,
   );
 
   const messages: ChatCompletionMessageParam[] = [
@@ -255,6 +264,9 @@ export async function runOpenAiTradingCycle(input: {
               "ACTION REQUIRED this cycle:",
               portfolio.recommendedAction.reason,
               `Tool: ${portfolio.recommendedAction.suggestedTool}`,
+              portfolio.recommendedAction.fromPoolId
+                ? `fromPoolId=${portfolio.recommendedAction.fromPoolId}`
+                : "",
               portfolio.recommendedAction.toPoolId
                 ? `targetPoolId=${portfolio.recommendedAction.toPoolId}`
                 : "",

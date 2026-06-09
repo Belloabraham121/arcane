@@ -17,6 +17,8 @@ import { planRebalance } from "../defi/quickswap/route-planner";
 import {
   buildTradingRecommendation,
   rebalancePlanOptions,
+  resetExploratoryRotation,
+  resolveAllocationMode,
 } from "./trading-recommendations";
 import { schedulePortfolioSnapshot } from "../portfolio/snapshot.service";
 import { getDemoEnv } from "../../config/env";
@@ -143,30 +145,39 @@ export function isUserCycleRunning(userId: string): boolean {
   return runningUsers.has(userId);
 }
 
-export function resolveCycleIntervalMinutes(input: {
+export function resolveCycleIntervalMs(input: {
   strategyType: "auto" | "custom";
   accountMode?: AccountMode;
   cycleIntervalMinutes: number | null;
   autoCycleIntervalMinutes: number;
   customCycleIntervalMinutes: number;
-  demoCycleIntervalMinutes: number;
+  demoCycleIntervalSeconds: number;
 }): number {
   if (input.accountMode === "demo") {
     if (
       input.strategyType === "custom" &&
       input.cycleIntervalMinutes != null
     ) {
-      return Math.max(5, Math.min(input.cycleIntervalMinutes, 24 * 60));
+      const minutes = Math.max(1, Math.min(input.cycleIntervalMinutes, 24 * 60));
+      return minutes * 60_000;
     }
-    return Math.max(5, Math.min(input.demoCycleIntervalMinutes, 24 * 60));
+    const seconds = Math.max(
+      1,
+      Math.min(input.demoCycleIntervalSeconds, 24 * 60 * 60),
+    );
+    return seconds * 1000;
   }
 
+  let minutes: number;
   if (input.strategyType === "custom" && input.cycleIntervalMinutes != null) {
-    return Math.max(5, Math.min(input.cycleIntervalMinutes, 24 * 60));
+    minutes = Math.max(5, Math.min(input.cycleIntervalMinutes, 24 * 60));
+  } else {
+    minutes =
+      input.strategyType === "auto"
+        ? input.autoCycleIntervalMinutes
+        : input.customCycleIntervalMinutes;
   }
-  return input.strategyType === "auto"
-    ? input.autoCycleIntervalMinutes
-    : input.customCycleIntervalMinutes;
+  return minutes * 60_000;
 }
 const lastCycleByUser = new Map<string, TradingCycleSummary>();
 const lastErrorByUser = new Map<string, string>();
@@ -309,6 +320,7 @@ async function trySmartRebalance(input: {
   balances: Awaited<ReturnType<typeof getWalletBalances>>;
   activePoolIds: string[];
   riskLimits: EffectiveRiskLimits;
+  allocationMode: ReturnType<typeof resolveAllocationMode>;
 }): Promise<{
   executedTransactions: ExecutedTransaction[];
   message?: string;
@@ -320,6 +332,10 @@ async function trySmartRebalance(input: {
     pools: input.pools,
     balances: input.balances,
     riskLimits: input.riskLimits,
+    allocationMode: input.allocationMode,
+    userId: input.userId,
+    accountMode: input.accountMode,
+    activePoolIds: input.activePoolIds,
   });
 
   if (!recommendation.shouldTrade || !recommendation.toPoolId) {
@@ -375,6 +391,7 @@ async function tryAutoRebalance(input: {
   balances: Awaited<ReturnType<typeof getWalletBalances>>;
   activePoolIds: string[];
   riskLimits: EffectiveRiskLimits;
+  allocationMode: ReturnType<typeof resolveAllocationMode>;
 }): Promise<{
   executedTransactions: ExecutedTransaction[];
   message?: string;
@@ -521,11 +538,12 @@ export async function runTradingCycle(
     });
 
     const poolAllocations = poolAllocationsFromRows(strategy.poolAllocations);
-    const activePoolIds = new Set(
+    let activePoolIds = new Set(
       Object.entries(poolAllocations)
         .filter(([, amount]) => amount > 0)
         .map(([id]) => id),
     );
+    const allocationMode = resolveAllocationMode(trading.accountMode);
 
     return await withTradingRpc(trading.rpcMode, async () =>
       withDemoAgentSigning(trading.rpcMode, trading.walletAddress, async () => {
@@ -547,6 +565,17 @@ export async function runTradingCycle(
       fetchPools(),
       fetchBalances(tradingWalletAddress, [...activePoolIds]),
     ]);
+
+    const knownPoolIds = new Set(pools.map((pool) => pool.id));
+    for (const poolId of [...activePoolIds]) {
+      if (!knownPoolIds.has(poolId)) {
+        activePoolIds.delete(poolId);
+        log.warn("Ignoring non-pool id in strategy allocations", {
+          userId,
+          poolId,
+        });
+      }
+    }
 
     const virtualPercents = getVirtualPoolPercents(
       userId,
@@ -572,7 +601,10 @@ export async function runTradingCycle(
     );
     const riskLimits = resolveRiskLimits(subAgents);
 
-    if (!overrides?.skipCycleCooldown) {
+    if (
+      !overrides?.skipCycleCooldown &&
+      !(trading.accountMode === "demo" && reason === "scheduled")
+    ) {
       assertCycleCooldown(strategy.lastCycleAt, riskLimits, reason);
     }
     if (hasBalance) {
@@ -583,6 +615,8 @@ export async function runTradingCycle(
       try {
         const llm = await invokeLlm({
           userId,
+          accountMode: trading.accountMode,
+          allocationMode,
           walletAddress: tradingWalletAddress,
           strategyType: strategy.strategyType,
           depositAmount: strategy.depositAmount,
@@ -631,6 +665,7 @@ export async function runTradingCycle(
               balances,
               activePoolIds: [...activePoolIds],
               riskLimits,
+              allocationMode,
             });
             if (smart.executedTransactions.length > 0) {
               executedTransactions = smart.executedTransactions;
@@ -680,6 +715,7 @@ export async function runTradingCycle(
             balances,
             activePoolIds: [...activePoolIds],
             riskLimits,
+            allocationMode,
           });
           executedTransactions = rebalance.executedTransactions;
           if (rebalance.executedTransactions.length > 0) {
@@ -710,12 +746,16 @@ export async function runTradingCycle(
       }
     }
 
-    if (executedTransactions.length > 0) {
+    if (executedTransactions.length > 0 && allocationMode === "strict") {
       const rec = buildTradingRecommendation({
         poolDrift,
         pools,
         balances,
         riskLimits,
+        allocationMode,
+        userId,
+        accountMode: trading.accountMode,
+        activePoolIds: [...activePoolIds],
       });
       if (rec.fromPoolId && rec.toPoolId) {
         applyVirtualRebalanceShift(

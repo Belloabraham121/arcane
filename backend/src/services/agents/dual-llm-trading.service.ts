@@ -1,4 +1,6 @@
+import type { AccountMode } from "@prisma/client";
 import type { Address } from "viem";
+import type { AllocationMode } from "./trading-recommendations";
 import type { EffectiveRiskLimits } from "./risk-controls.service";
 import { createLogger } from "../../shared/logger";
 import type { PoolAllocationDrift } from "./trading.types";
@@ -30,6 +32,8 @@ export type DualLlmTradingCycleResult = OpenAiTradingCycleResult & {
 
 export async function runDualLlmTradingCycle(input: {
   userId: string;
+  accountMode: AccountMode;
+  allocationMode: AllocationMode;
   walletAddress: Address;
   strategyType: StrategyType;
   depositAmount: number;
@@ -50,6 +54,10 @@ export async function runDualLlmTradingCycle(input: {
   const portfolio = buildPortfolioContext({
     walletAddress: input.walletAddress,
     strategyType: input.strategyType,
+    allocationMode: input.allocationMode,
+    userId: input.userId,
+    accountMode: input.accountMode,
+    activePoolIds: input.activePoolIds,
     depositAmount: input.depositAmount,
     lastCycleAt: input.lastCycleAt,
     poolAllocations: input.poolAllocations,

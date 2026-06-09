@@ -8,6 +8,7 @@ import {
   scheduleTradingCycle,
   shouldTriggerCycleOnActivate,
 } from "./trading-runner.service";
+import { resetExploratoryRotation } from "./trading-recommendations";
 import * as repo from "./strategy.repository";
 import { isKnownPoolId } from "../defi/quickswap/pool-registry";
 import {
@@ -471,6 +472,7 @@ export async function patchPoolAllocations(
 
   log.info("Pool allocations updated", { userId });
   resetVirtualPoolPercents(userId, accountMode);
+  resetExploratoryRotation(userId, accountMode);
 
   if (
     strategy.status === "active" &&

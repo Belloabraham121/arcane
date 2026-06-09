@@ -7,7 +7,10 @@ import {
   type EffectiveRiskLimits,
   resolveSlippageBps,
 } from "../agents/risk-controls.service";
-import { buildTradingRecommendation } from "../agents/trading-recommendations";
+import {
+  type AllocationMode,
+  buildTradingRecommendation,
+} from "../agents/trading-recommendations";
 import {
   liquidPoolsOnly,
   planRebalance,
@@ -70,13 +73,14 @@ export const QUICKSWAP_ONCHAIN_TOOLS: OnchainToolDef[] = [
   {
     signature: "rebalanceToPool(string targetPoolId, uint256 amount)",
     description:
-      "Move capital toward targetPoolId by swapping from the most overweight pool. amount is raw token units of the sold leg.",
+      "Move capital toward targetPoolId by swapping from recommendedAction.fromPoolId (or best source pool). amount is raw token units of the sold leg.",
   },
 ];
 
 export type TradingPortfolioContext = {
   walletAddress: Address;
   strategyType: StrategyType;
+  allocationMode: AllocationMode;
   depositAmount: number;
   lastCycleAt: string | null;
   driftThresholdPercent: number;
@@ -181,11 +185,21 @@ export function buildTradingSystemPrompt(
   strategyType: StrategyType,
   subAgents: SubAgentConfigItem[],
   driftThresholdPercent: number,
+  allocationMode: AllocationMode = "strict",
 ): string {
   const enabledAgents = subAgents
     .filter((agent) => agent.enabled)
     .map((agent) => `- ${agent.name}: ${agent.systemPrompt}`)
     .join("\n");
+
+  const exploratoryRules =
+    allocationMode === "exploratory"
+      ? [
+          "Setup pool percentages are SOFT HINTS only — you are NOT required to match 50/25/25 or any target split.",
+          "Freely rotate and rebalance across ANY of the user's selected liquid pools based on fees, APR, liquidity, and quotes.",
+          "Each cycle, prefer recommendedAction's fromPoolId→toPoolId rotation but you MAY choose a different selected pool pair if quotes are better.",
+        ]
+      : [];
 
   const executionRules = [
     "You are fully autonomous — NEVER ask the user for confirmation, permission, or whether to proceed.",
@@ -197,15 +211,20 @@ export function buildTradingSystemPrompt(
     "Example: 1 WSOMI = \"1000000000000000000\" (18 decimals). 1 USDCe = \"1000000\" (6 decimals).",
     "Do not end the cycle with analysis only if shouldTrade is true and quotes succeed — you must attempt execution.",
     "Only use pools in recommendedAction.tradeablePoolIds for routing. Skip zero-liquidity pools.",
-    `Hard drift cap: ${driftThresholdPercent}%. Proactive threshold may be lower (see recommendedAction).`,
+    allocationMode === "strict"
+      ? `Hard drift cap: ${driftThresholdPercent}%. Proactive threshold may be lower (see recommendedAction).`
+      : "Drift vs setup weights is informational only — trade for opportunity across selected pools.",
     "Never swap tokens outside the user's selected pools. Respect maxSwapPortfolioBps.",
     "End with a brief execution summary only — no questions to the user.",
+    ...exploratoryRules,
   ];
 
   if (strategyType === "auto") {
     return [
       "You are an autonomous DeFi portfolio agent on Somnia QuickSwap (auto strategy).",
-      "Prioritise yield and keep allocations near targets by executing smart rebalances when recommended.",
+      allocationMode === "exploratory"
+        ? "Explore yield across the user's selected pools; rotate exposure freely."
+        : "Prioritise yield and keep allocations near targets by executing smart rebalances when recommended.",
       ...executionRules,
       "Sub-agent guidance:",
       enabledAgents,
@@ -213,7 +232,10 @@ export function buildTradingSystemPrompt(
   }
 
   return [
-    "You are a custom QuickSwap portfolio agent. Honour user pool selection and target weights.",
+    "You are a custom QuickSwap portfolio agent.",
+    allocationMode === "exploratory"
+      ? "User selected which pools you may use — weights are hints, not hard constraints."
+      : "Honour user pool selection and target weights.",
     ...executionRules,
     "Sub-agent configuration:",
     enabledAgents,
@@ -223,6 +245,10 @@ export function buildTradingSystemPrompt(
 export function buildPortfolioContext(input: {
   walletAddress: Address;
   strategyType: StrategyType;
+  allocationMode?: AllocationMode;
+  userId?: string;
+  accountMode?: import("@prisma/client").AccountMode;
+  activePoolIds?: readonly string[];
   depositAmount: number;
   lastCycleAt: Date | null;
   poolAllocations: PoolAllocations;
@@ -232,6 +258,7 @@ export function buildPortfolioContext(input: {
   subAgents: SubAgentConfigItem[];
   riskLimits: EffectiveRiskLimits;
 }): TradingPortfolioContext {
+  const allocationMode = input.allocationMode ?? "strict";
   const { driftThresholdPercent, maxSwapPortfolioBps } = input.riskLimits;
   const activeIds = new Set(
     (Object.entries(input.poolAllocations) as Array<[string, number]>)
@@ -242,6 +269,7 @@ export function buildPortfolioContext(input: {
   return {
     walletAddress: input.walletAddress,
     strategyType: input.strategyType,
+    allocationMode,
     depositAmount: input.depositAmount,
     lastCycleAt: input.lastCycleAt?.toISOString() ?? null,
     driftThresholdPercent,
@@ -279,6 +307,10 @@ export function buildPortfolioContext(input: {
       pools: input.pools,
       balances: input.balances,
       riskLimits: input.riskLimits,
+      allocationMode,
+      userId: input.userId,
+      accountMode: input.accountMode,
+      activePoolIds: input.activePoolIds,
     }),
   };
 }
@@ -532,10 +564,11 @@ export async function executeTradingTool(
           };
         }
 
-        const fromPoolId = pickOverweightPoolId(ctx.poolDrift, ctx.pools);
+        const fromPoolId =
+          rec.fromPoolId ?? pickOverweightPoolId(ctx.poolDrift, ctx.pools);
         if (!fromPoolId) {
           throw new TradingToolError(
-            "No overweight pool with tradeable liquidity found for rebalance source",
+            "No source pool with tradeable liquidity found for rebalance",
           );
         }
         if (fromPoolId === targetPoolId) {

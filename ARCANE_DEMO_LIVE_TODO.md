@@ -165,9 +165,9 @@ flowchart TB
 - [x] Persist mode in session/context (`AccountModeProvider` or extend `session-provider`)
 
 ### 3.3 Setup / deposit UI
-- [ ] Demo setup: hide “enter deposit USD” **or** pre-fill from detected demo balance; label “Simulation deposit (read-only)”
-- [ ] Live setup: keep manual deposit + show live wallet balances for auto-detect hint
-- [ ] `DepositAddressCard`: accept `mode` prop — show correct address & chain label
+- [x] Demo setup: hide “enter deposit USD” **or** pre-fill from detected demo balance; label “Simulation deposit (read-only)”
+- [x] Live setup: keep manual deposit + show live wallet balances for auto-detect hint
+- [x] `DepositAddressCard`: accept `mode` prop — show correct address & chain label
 
 ---
 

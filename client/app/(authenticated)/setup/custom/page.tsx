@@ -19,6 +19,7 @@ import {
   SubAgentEditorSkeleton,
 } from "@/components/skeletons/content-skeletons"
 import { useQuickSwapPools } from "@/hooks/use-quickswap-pools"
+import { useSetupDeposit } from "@/hooks/use-setup-deposit"
 import { useWalletBalances } from "@/hooks/use-wallet-balances"
 import { useSession } from "@/providers/session-provider"
 import { allocatedPoolIds, tokensFromAllocatedPools } from "@/lib/supported-tokens"
@@ -41,7 +42,10 @@ function CustomSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isEditing = searchParams.get("edit") === "1"
-  const { walletAddress, sessionReady } = useSession()
+  const { accountMode, tradingWalletAddress, sessionReady } = useSession()
+  const [strategyDeposit, setStrategyDeposit] = useState<number | undefined>(
+    undefined,
+  )
   const [poolSort, setPoolSort] = useState<PoolSortField>("liquidity")
   const {
     pools,
@@ -70,17 +74,28 @@ function CustomSetupContent() {
     balances,
     loading: balancesLoading,
     error: balancesError,
+    chainLabel,
     reload: reloadBalances,
-  } = useWalletBalances(activePoolIds)
+  } = useWalletBalances(
+    activePoolIds,
+    30_000,
+    accountMode ?? undefined,
+  )
+
+  useSetupDeposit(accountMode, setDepositInput, strategyDeposit)
 
   useEffect(() => {
     if (!sessionReady) {
       return
     }
-    if (!walletAddress) {
+    if (!tradingWalletAddress) {
       router.replace(APP_ROUTES.signIn)
+      return
     }
-  }, [sessionReady, walletAddress, router])
+    if (accountMode == null) {
+      router.replace(APP_ROUTES.accountModeOnboarding)
+    }
+  }, [sessionReady, tradingWalletAddress, accountMode, router])
 
   useEffect(() => {
     if (!sessionReady) {
@@ -108,7 +123,12 @@ function CustomSetupContent() {
         setSubAgents(strategy.subAgents)
         if (strategy.depositAmount > 0) {
           setDepositInput(String(strategy.depositAmount))
+          setStrategyDeposit(strategy.depositAmount)
+        } else {
+          setStrategyDeposit(undefined)
         }
+      } else {
+        setStrategyDeposit(undefined)
       }
 
       setStrategyReady(true)
@@ -197,19 +217,22 @@ function CustomSetupContent() {
             Custom Agent Setup
           </h1>
           <p className="max-w-2xl text-xs font-mono leading-relaxed text-muted-foreground">
-            Choose QuickSwap pools, define sub-agent system prompts, deposit to your
-            address, then launch your dashboard.
+            {accountMode === "demo"
+              ? "Choose QuickSwap pools and define sub-agent prompts — your demo wallet is pre-funded on the Anvil fork."
+              : "Choose QuickSwap pools, define sub-agent system prompts, deposit to your agent wallet, then launch your dashboard."}
           </p>
         </motion.div>
 
         {error && <p className="font-mono text-xs text-[#ea580c]">{error}</p>}
 
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
-          {!sessionReady || !walletAddress ? (
+          {!sessionReady || !tradingWalletAddress || accountMode == null ? (
             <DepositAddressCardSkeleton />
           ) : (
             <DepositAddressCard
-              address={walletAddress}
+              mode={accountMode}
+              address={tradingWalletAddress}
+              chainLabel={chainLabel}
               supportedTokens={supportedTokens}
               balances={balances}
               balancesLoading={balancesLoading}
@@ -249,7 +272,7 @@ function CustomSetupContent() {
 
         <button
           type="button"
-          disabled={saving || !sessionReady || !walletAddress}
+          disabled={saving || !sessionReady || !tradingWalletAddress || accountMode == null}
           onClick={saveSetup}
           className="bg-foreground px-8 py-3 font-mono text-xs uppercase tracking-widest text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >

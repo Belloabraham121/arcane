@@ -1,28 +1,36 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import type { AccountMode } from "@/lib/api/auth"
 import { fetchWalletBalances } from "@/lib/api/wallet"
 import type { WalletTokenBalance } from "@/lib/api/wallet"
 
-export function useWalletBalances(poolIds?: string[], refreshMs = 30_000) {
+export function useWalletBalances(
+  poolIds?: string[],
+  refreshMs = 30_000,
+  mode?: AccountMode,
+) {
   const [balances, setBalances] = useState<WalletTokenBalance[]>([])
+  const [chainLabel, setChainLabel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const poolKey = poolIds?.length ? poolIds.slice().sort().join(",") : "all"
+  const modeKey = mode ?? "default"
 
   const reload = useCallback(async () => {
     const ids = poolKey === "all" ? undefined : poolKey.split(",")
-    const result = await fetchWalletBalances(ids)
+    const result = await fetchWalletBalances(ids, mode)
     if (!result.success || !result.data) {
       setError(result.error?.message ?? "Failed to load wallet balances")
       setLoading(false)
       return
     }
     setBalances(result.data.balances)
+    setChainLabel(result.data.chainLabel ?? null)
     setError(null)
     setLoading(false)
-  }, [poolKey])
+  }, [poolKey, mode])
 
   useEffect(() => {
     let cancelled = false
@@ -30,7 +38,7 @@ export function useWalletBalances(poolIds?: string[], refreshMs = 30_000) {
     const ids = poolKey === "all" ? undefined : poolKey.split(",")
 
     async function load() {
-      const result = await fetchWalletBalances(ids)
+      const result = await fetchWalletBalances(ids, mode)
       if (cancelled) {
         return
       }
@@ -40,6 +48,7 @@ export function useWalletBalances(poolIds?: string[], refreshMs = 30_000) {
         return
       }
       setBalances(result.data.balances)
+      setChainLabel(result.data.chainLabel ?? null)
       setError(null)
       setLoading(false)
     }
@@ -60,7 +69,7 @@ export function useWalletBalances(poolIds?: string[], refreshMs = 30_000) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [poolKey, refreshMs, reload])
+  }, [poolKey, modeKey, refreshMs, reload])
 
-  return { balances, loading, error, reload }
+  return { balances, loading, error, chainLabel, reload }
 }

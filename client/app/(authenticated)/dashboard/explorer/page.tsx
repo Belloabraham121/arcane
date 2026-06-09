@@ -20,6 +20,10 @@ import {
   type TradingActionRecord,
   type TradingHistoryListItem,
 } from "@/lib/api/trading"
+import {
+  fetchMarketplacePurchases,
+  type MarketplacePurchaseRecord,
+} from "@/lib/api/marketplace"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
@@ -34,6 +38,14 @@ type FlatTx = TradingActionRecord & {
   cycleReason: string
   cycleMessage: string
   accountMode: "demo" | "live"
+}
+
+type ExplorerEntry = {
+  id: string
+  kind: "action" | "marketplace"
+  createdAt: string
+  action?: FlatTx
+  purchase?: MarketplacePurchaseRecord
 }
 
 /* ─── helpers ──────────────────────────────────────────────── */
@@ -65,6 +77,24 @@ function methodLabel(tx: FlatTx): string {
   if (tx.type === "sub_agent") return "Analysis"
   if (tx.type === "tool") return tx.toolName ?? "Tool Call"
   return tx.type
+}
+
+function marketplaceProductLabel(productId: string): string {
+  if (productId === "pools/snapshot") return "Pool snapshot"
+  if (productId === "signals/spread") return "Spread signal"
+  if (productId === "signals/cross-chain") return "Cross-chain advisory"
+  return productId
+}
+
+function formatSttWei(wei: string): string {
+  try {
+    const value = BigInt(wei)
+    const stt = Number(value) / 1e18
+    if (stt >= 0.0001) return `${stt.toFixed(4)} STT`
+    return `${wei} wei`
+  } catch {
+    return `${wei} wei`
+  }
 }
 
 function typeIcon(type: string): string {
@@ -125,6 +155,61 @@ function timeAgo(dateStr: string): string {
 }
 
 /* ─── detail panel for a single expanded tx ────────────────── */
+
+function MarketplaceDetailPanel({
+  purchase,
+}: {
+  purchase: MarketplacePurchaseRecord
+}) {
+  return (
+    <div className="border-t border-border/50 bg-muted/10 px-5 py-4 space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <DetailRow label="Product">
+          <span className="text-[10px] text-[#00ff88]">
+            {marketplaceProductLabel(purchase.productId)}
+          </span>
+          <code className="ml-2 text-[9px] text-muted-foreground">
+            {purchase.productId}
+          </code>
+        </DetailRow>
+        <DetailRow label="Amount (STT)">
+          <span className="text-[10px]">{formatSttWei(purchase.amountSttWei)}</span>
+        </DetailRow>
+        <DetailRow label="Payer">
+          <code className="break-all text-[10px] text-muted-foreground">
+            {purchase.payerAddress}
+          </code>
+        </DetailRow>
+        <DetailRow label="Payment Tx">
+          {purchase.txHash ? (
+            <a
+              href={somniaTxUrl(purchase.txHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="break-all text-[10px] text-[#00ff88] hover:underline"
+            >
+              {purchase.txHash}
+            </a>
+          ) : (
+            <span className="text-[10px] text-muted-foreground/40">
+              Dev bypass / no on-chain tx
+            </span>
+          )}
+        </DetailRow>
+        <DetailRow label="Correlation">
+          <code className="text-[9px] text-muted-foreground">
+            {purchase.correlationId}
+          </code>
+        </DetailRow>
+        <DetailRow label="Timestamp">
+          <span className="text-[10px]">
+            {new Date(purchase.createdAt).toLocaleString()}
+          </span>
+        </DetailRow>
+      </div>
+    </div>
+  )
+}
 
 function TxDetailPanel({ tx }: { tx: FlatTx }) {
   const meta = tx.metadata as Record<string, unknown> | null
@@ -488,7 +573,7 @@ export default function ExplorerPage() {
   const { sessionReady, accountMode, demoWalletAddress, tradingWalletAddress } =
     useSession()
   const [loading, setLoading] = useState(true)
-  const [txs, setTxs] = useState<FlatTx[]>([])
+  const [entries, setEntries] = useState<ExplorerEntry[]>([])
   const [search, setSearch] = useState("")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -515,40 +600,52 @@ export default function ExplorerPage() {
       historyPage++
     }
 
-    if (allItems.length === 0) {
-      setTxs([])
-      setLoading(false)
-      return
-    }
-
     const detailResults = await Promise.all(
       allItems
         .filter((row) => row.actionCount > 0)
         .map((row) => fetchTradingCycleDetail(row.id)),
     )
 
-    const flat: FlatTx[] = []
+    const merged: ExplorerEntry[] = []
 
     for (const result of detailResults) {
       if (!result.success || !result.data?.cycle) continue
       const cycle = result.data.cycle
       for (const action of cycle.actions) {
-        flat.push({
+        const flat: FlatTx = {
           ...action,
           cycleId: cycle.id,
           cycleReason: cycle.reason,
           cycleMessage: cycle.message,
           accountMode: cycle.accountMode,
+        }
+        merged.push({
+          id: `action-${flat.id}`,
+          kind: "action",
+          createdAt: flat.createdAt,
+          action: flat,
         })
       }
     }
 
-    flat.sort(
+    const purchasesResult = await fetchMarketplacePurchases(100)
+    if (purchasesResult.success && purchasesResult.data?.purchases) {
+      for (const purchase of purchasesResult.data.purchases) {
+        merged.push({
+          id: `marketplace-${purchase.id}`,
+          kind: "marketplace",
+          createdAt: purchase.createdAt,
+          purchase,
+        })
+      }
+    }
+
+    merged.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
 
-    setTxs(flat)
+    setEntries(merged)
     setLoading(false)
   }, [mode])
 
@@ -566,10 +663,24 @@ export default function ExplorerPage() {
   }, [sessionReady, load, router])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return txs
+    if (!search.trim()) return entries
     const q = search.toLowerCase()
-    return txs.filter(
-      (t) =>
+    return entries.filter((entry) => {
+      if (entry.kind === "marketplace" && entry.purchase) {
+        const p = entry.purchase
+        return (
+          p.productId.toLowerCase().includes(q) ||
+          p.txHash?.toLowerCase().includes(q) ||
+          p.payerAddress.toLowerCase().includes(q) ||
+          p.correlationId.toLowerCase().includes(q) ||
+          q.includes("marketplace") ||
+          q.includes("x402") ||
+          q.includes("stt")
+        )
+      }
+      const t = entry.action
+      if (!t) return false
+      return (
         t.txHash?.toLowerCase().includes(q) ||
         t.tokenIn?.toLowerCase().includes(q) ||
         t.tokenOut?.toLowerCase().includes(q) ||
@@ -578,16 +689,17 @@ export default function ExplorerPage() {
         t.toolName?.toLowerCase().includes(q) ||
         t.type.toLowerCase().includes(q) ||
         agentLabel(t).toLowerCase().includes(q) ||
-        methodLabel(t).toLowerCase().includes(q),
-    )
-  }, [txs, search])
+        methodLabel(t).toLowerCase().includes(q)
+      )
+    })
+  }, [entries, search])
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(filtered.length / TX_PAGE_SIZE)),
     [filtered.length],
   )
 
-  const paginatedTxs = useMemo(() => {
+  const paginatedEntries = useMemo(() => {
     const start = (page - 1) * TX_PAGE_SIZE
     return filtered.slice(start, start + TX_PAGE_SIZE)
   }, [filtered, page])
@@ -608,9 +720,14 @@ export default function ExplorerPage() {
   const pageStart = filtered.length === 0 ? 0 : (page - 1) * TX_PAGE_SIZE + 1
   const pageEnd = Math.min(page * TX_PAGE_SIZE, filtered.length)
   const swapCount = filtered.filter(
-    (t) => t.type === "swap" || t.type === "rebalance",
+    (e) =>
+      e.kind === "action" &&
+      (e.action?.type === "swap" || e.action?.type === "rebalance"),
   ).length
-  const subAgentCount = filtered.filter((t) => t.type === "sub_agent").length
+  const subAgentCount = filtered.filter(
+    (e) => e.kind === "action" && e.action?.type === "sub_agent",
+  ).length
+  const marketplaceCount = filtered.filter((e) => e.kind === "marketplace").length
 
   return (
     <>
@@ -678,6 +795,7 @@ export default function ExplorerPage() {
           <Stat label="Transactions" value={txCount} />
           <Stat label="Swaps" value={swapCount} />
           <Stat label="Analyses" value={subAgentCount} />
+          <Stat label="Marketplace" value={marketplaceCount} />
           <Stat
             label="Network"
             value={mode === "demo" ? "Anvil Fork" : "Somnia"}
@@ -686,7 +804,13 @@ export default function ExplorerPage() {
         </div>
 
         {/* ─── Activity Charts ─── */}
-        {!loading && <ActivityCharts txs={filtered} />}
+        {!loading && (
+          <ActivityCharts
+            txs={filtered
+              .filter((e) => e.kind === "action" && e.action)
+              .map((e) => e.action!)}
+          />
+        )}
 
         {/* ─── Transaction list ─── */}
         <div className="mt-6 overflow-hidden rounded-lg border border-border">
@@ -718,9 +842,64 @@ export default function ExplorerPage() {
             </div>
           ) : (
             <div className="divide-y divide-border/50">
-              {paginatedTxs.map((tx) => {
-                const uid = `${tx.cycleId}-${tx.id}`
+              {paginatedEntries.map((entry) => {
+                const uid = entry.id
                 const isExpanded = expandedId === uid
+
+                if (entry.kind === "marketplace" && entry.purchase) {
+                  const purchase = entry.purchase
+                  return (
+                    <div key={uid}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedId(isExpanded ? null : uid)
+                        }
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/20"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00ff88]/10 text-sm text-[#00ff88]">
+                          ◆
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-[#00ff88]">
+                              Marketplace · x402
+                            </span>
+                            <span className="rounded bg-[#00ff88]/10 px-1.5 py-0.5 text-[9px] text-[#00ff88]">
+                              {marketplaceProductLabel(purchase.productId)}
+                            </span>
+                            {purchase.txHash && (
+                              <code className="truncate text-[10px] text-muted-foreground">
+                                {shortAddr(purchase.txHash)}
+                              </code>
+                            )}
+                          </div>
+                          <div className="mt-0.5 text-[10px] text-muted-foreground">
+                            Paid {formatSttWei(purchase.amountSttWei)} · STT
+                          </div>
+                        </div>
+                        <div className="hidden shrink-0 sm:block">
+                          {statusPill("success")}
+                        </div>
+                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                          {timeAgo(purchase.createdAt)}
+                        </span>
+                        <ChevronRight
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                            isExpanded && "rotate-90",
+                          )}
+                        />
+                      </button>
+                      {isExpanded && (
+                        <MarketplaceDetailPanel purchase={purchase} />
+                      )}
+                    </div>
+                  )
+                }
+
+                const tx = entry.action
+                if (!tx) return null
 
                 return (
                   <div key={uid}>
@@ -731,7 +910,6 @@ export default function ExplorerPage() {
                       }
                       className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/20"
                     >
-                      {/* Type icon */}
                       <div
                         className={cn(
                           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm",
@@ -749,7 +927,6 @@ export default function ExplorerPage() {
                         {typeIcon(tx.type)}
                       </div>
 
-                      {/* Main info */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span
@@ -801,17 +978,14 @@ export default function ExplorerPage() {
                         </div>
                       </div>
 
-                      {/* Status */}
                       <div className="hidden shrink-0 sm:block">
                         {statusPill(tx.status)}
                       </div>
 
-                      {/* Time */}
                       <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                         {timeAgo(tx.createdAt)}
                       </span>
 
-                      {/* Expand chevron */}
                       <ChevronRight
                         className={cn(
                           "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
@@ -820,7 +994,6 @@ export default function ExplorerPage() {
                       />
                     </button>
 
-                    {/* Expanded detail */}
                     {isExpanded && <TxDetailPanel tx={tx} />}
                   </div>
                 )

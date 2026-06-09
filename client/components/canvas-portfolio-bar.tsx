@@ -1,17 +1,21 @@
 "use client"
 
 import type { PortfolioSummary } from "@/lib/api/portfolio"
+import type { MarketplaceSummary } from "@/lib/api/strategy-types"
 import {
   computeReturnSinceActivationPct,
   formatAprLine,
   formatReturnPct,
   formatUsd,
 } from "@/lib/portfolio-display"
+import { formatSttWei } from "@/lib/marketplace-display"
 import { cn } from "@/lib/utils"
 
 type CanvasPortfolioBarProps = {
   portfolio: PortfolioSummary | null
   isDemo?: boolean
+  marketplace?: MarketplaceSummary | null
+  cycleSpendSttWei?: string
 }
 
 function Metric({
@@ -65,7 +69,12 @@ function SkeletonBar({ isDemo }: { isDemo?: boolean }) {
   )
 }
 
-export function CanvasPortfolioBar({ portfolio, isDemo }: CanvasPortfolioBarProps) {
+export function CanvasPortfolioBar({
+  portfolio,
+  isDemo,
+  marketplace,
+  cycleSpendSttWei = "0",
+}: CanvasPortfolioBarProps) {
   if (!portfolio) {
     return <SkeletonBar isDemo={isDemo} />
   }
@@ -128,6 +137,21 @@ export function CanvasPortfolioBar({ portfolio, isDemo }: CanvasPortfolioBarProp
             portfolio.apr24h,
           )}
         />
+
+        {marketplace?.enabled && (
+          <>
+            <Metric
+              label="Cycle data spend"
+              value={formatSttWei(cycleSpendSttWei)}
+              valueClassName="text-[#00ff88]"
+            />
+            <Metric
+              label="Data budget left"
+              value={formatSttWei(marketplace.remainingSttWei)}
+              valueClassName="text-[#00ff88]"
+            />
+          </>
+        )}
 
         {isDemo && (
           <div className="flex items-center pl-4">

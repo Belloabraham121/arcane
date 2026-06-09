@@ -129,31 +129,31 @@ flowchart TB
 ## Phase 4 — Canvas visualization
 
 ### 4.1 Marketplace node
-- [ ] Add central **Marketplace** mesh to `pool-trading-canvas.tsx` (fixed position, e.g. `[0, 6, 0]` or between pool ring and executor)
-- [ ] Distinct color — align with `#00ff88` from `network-nodes.ts` / landing canvas
-- [ ] Label in canvas legend: "Marketplace — shared data hub (x402 · STT)"
+- [x] Add central **Marketplace** mesh to `pool-trading-canvas.tsx` (fixed position, e.g. `[0, 6, 0]` or between pool ring and executor)
+- [x] Distinct color — align with `#00ff88` from `network-nodes.ts` / landing canvas
+- [x] Label in canvas legend: "Marketplace — shared data hub (x402 · STT)"
 
 ### 4.2 Sub-agent travel animation
-- [ ] New trip phase: `to_marketplace` → `at_marketplace` → `to_pool` (mirror `agent-network-canvas.tsx` pattern)
-- [ ] Trigger travel when `marketplace_purchase_started` socket fires
-- [ ] Optional data pulse / beam from Marketplace to sub-agent on `marketplace_purchase_completed`
+- [x] New trip phase: `to_marketplace` → `at_marketplace` → `to_pool` (mirror `agent-network-canvas.tsx` pattern)
+- [x] Trigger travel when `marketplace_purchase_started` socket fires
+- [x] Optional data pulse / beam from Marketplace to sub-agent on `marketplace_purchase_completed`
 
 ### 4.3 Feed & explorer
-- [ ] Show Marketplace purchases in `agent-trading-feed.tsx` (filter tab or badge: "Marketplace")
-- [ ] Show x402 purchases in agent explorer table (product, STT paid, status)
+- [x] Show Marketplace purchases in `agent-trading-feed.tsx` (filter tab or badge: "Marketplace")
+- [x] Show x402 purchases in agent explorer table (product, STT paid, status)
 
 ---
 
 ## Phase 5 — Client UI & setup
 
 ### 5.1 Strategy setup
-- [ ] Sub-agent editor: toggle "Use Marketplace data" per sub-agent (or global toggle on custom/auto setup)
-- [ ] Display STT budget input (read-only in demo; configurable in live when funded)
-- [ ] Setup copy: payments in **STT**, not stablecoins
+- [x] Sub-agent editor: toggle "Use Marketplace data" per sub-agent (or global toggle on custom/auto setup)
+- [x] Display STT budget input (read-only in demo; configurable in live when funded)
+- [x] Setup copy: payments in **STT**, not stablecoins
 
 ### 5.2 Dashboard / canvas chrome
-- [ ] Marketplace link or badge on agent canvas nav when enabled
-- [ ] STT spend this cycle / remaining budget in execution panel or portfolio bar area
+- [x] Marketplace link or badge on agent canvas nav when enabled
+- [x] STT spend this cycle / remaining budget in execution panel or portfolio bar area
 
 ---
 
@@ -229,8 +229,8 @@ flowchart TB
 | 1 — Config & STT policy | `[x]` Complete |
 | 2 — Seller API | `[ ]` Not started |
 | 3 — Buyer + orchestrator | `[ ]` Not started |
-| 4 — Canvas | `[ ]` Not started |
-| 5 — Client UI | `[ ]` Not started |
+| 4 — Canvas | `[x]` Complete |
+| 5 — Client UI | `[x]` Complete |
 | 6 — Persistence | `[ ]` Not started |
 | 7 — Testing | `[ ]` Not started |
 | 8 — Docs | `[ ]` Not started |

@@ -29,9 +29,11 @@ import type { AccountMode } from "@/lib/api/auth";
 import { useSession } from "@/providers/session-provider";
 import {
   DEFAULT_POOL_ALLOCATIONS,
+  type MarketplaceSummary,
   type PoolAllocations,
   type SubAgentConfigItem,
 } from "@/lib/api/strategy-types";
+import { sumSttWei } from "@/lib/marketplace-display";
 import {
   largestResolvablePoolId,
   resolveStrategyCanvasPools,
@@ -66,6 +68,8 @@ export default function AgentsPage() {
   );
   const [quickswapPools, setQuickswapPools] = useState<QuickSwapPool[]>([]);
   const [subAgentConfig, setSubAgentConfig] = useState<SubAgentConfigItem[]>([]);
+  const [marketplaceSummary, setMarketplaceSummary] =
+    useState<MarketplaceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [cycleOutcome, setCycleOutcome] = useState<AgentCycleOutcome | null>(
     null,
@@ -103,7 +107,14 @@ export default function AgentsPage() {
     [subAgentConfig],
   );
 
-  const { connected, feedItems, routeCommand, cycleActive, subAgentStatuses } = useTradingSocket({
+  const {
+    connected,
+    feedItems,
+    routeCommand,
+    cycleActive,
+    subAgentStatuses,
+    marketplaceTripCommands,
+  } = useTradingSocket({
     accountMode: canvasMode ?? undefined,
     enabled: !loading && canvasMode != null,
     hydrateFromHistory: true,
@@ -165,6 +176,9 @@ export default function AgentsPage() {
       if (strategyResult.success && strategyResult.data?.strategy) {
         setPoolAmounts(strategyResult.data.strategy.poolAllocations);
         setSubAgentConfig(strategyResult.data.strategy.subAgents ?? []);
+        setMarketplaceSummary(
+          strategyResult.data.strategy.marketplace ?? null,
+        );
       }
 
       if (poolsResult.success && poolsResult.data?.pools) {
@@ -246,6 +260,24 @@ export default function AgentsPage() {
     cycleOutcome.status !== "running" &&
     Boolean(cycleOutcome.llmResponse || cycleOutcome.message);
 
+  const marketplaceEnabled = marketplaceSummary?.enabled ?? false;
+
+  const cycleSpendSttWei = useMemo(() => {
+    const cycleId = cycleOutcome?.cycleId;
+    if (!cycleId) {
+      return "0";
+    }
+    const amounts = feedItems
+      .filter(
+        (item) =>
+          item.cycleId === cycleId &&
+          item.status === "completed" &&
+          item.marketplace?.amountSttWei,
+      )
+      .map((item) => item.marketplace!.amountSttWei);
+    return sumSttWei(amounts);
+  }, [feedItems, cycleOutcome?.cycleId]);
+
   return (
     <>
       <PageSubBar
@@ -273,6 +305,14 @@ export default function AgentsPage() {
         action={
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-3">
+              {marketplaceEnabled && (
+                <Link
+                  href={APP_ROUTES.explorer}
+                  className="border border-[#00ff88]/50 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-[#00ff88] transition-colors hover:bg-[#00ff88]/10"
+                >
+                  Marketplace
+                </Link>
+              )}
               {isDemo && (
                 <Link
                   href={APP_ROUTES.explorer}
@@ -339,9 +379,16 @@ export default function AgentsPage() {
           accountMode={canvasMode ?? undefined}
           subAgentStatuses={subAgentStatuses}
           enabledSubAgentIds={enabledSubAgentIds}
+          marketplaceEnabled={marketplaceEnabled}
+          marketplaceTripCommands={marketplaceTripCommands}
         />
 
-        <CanvasPortfolioBar portfolio={portfolio} isDemo={isDemo} />
+        <CanvasPortfolioBar
+          portfolio={portfolio}
+          isDemo={isDemo}
+          marketplace={marketplaceSummary}
+          cycleSpendSttWei={cycleSpendSttWei}
+        />
 
         <DraggableGridPanel
           id="nodes-legend"
@@ -358,6 +405,7 @@ export default function AgentsPage() {
           <PoolNodesLegend
             canvasPools={canvasPools}
             accountMode={canvasMode ?? undefined}
+            marketplaceEnabled={marketplaceEnabled}
           />
         </DraggableGridPanel>
 

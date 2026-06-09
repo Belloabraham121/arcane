@@ -8,6 +8,7 @@ import {
   loadMarketplaceUserContext,
 } from "../../../../services/marketplace/marketplace-context.service.js";
 import { deliverMarketplaceProductForUser } from "../../../../services/marketplace/marketplace-delivery.service.js";
+import { listRecentMarketplacePurchases } from "../../../../services/marketplace/purchase.repository.js";
 import { createSttPaywallMiddleware } from "../../../../services/marketplace/stt-paywall.js";
 import { fail, ok } from "../../../../utils/http-response.js";
 
@@ -80,6 +81,19 @@ marketplaceRouter.get(
   requireMarketplaceAuth,
   (_req, res) => {
     return ok(_req, res, buildMarketplaceCatalog());
+  },
+);
+
+marketplaceRouter.get(
+  "/api/v1/marketplace/purchases",
+  requireMarketplaceAuth,
+  async (req, res) => {
+    const limitRaw = Number(req.query.limit ?? 50);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(Math.floor(limitRaw), 1), 100)
+      : 50;
+    const purchases = await listRecentMarketplacePurchases(req.user.id, limit);
+    return ok(req, res, { purchases });
   },
 );
 

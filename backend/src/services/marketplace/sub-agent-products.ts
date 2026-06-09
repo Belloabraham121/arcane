@@ -15,6 +15,10 @@ export function marketplaceProductForSubAgent(
   return SUB_AGENT_PRODUCT_MAP[agentId] ?? null;
 }
 
+export function subAgentUsesMarketplaceData(agent: SubAgentConfigItem): boolean {
+  return agent.useMarketplaceData !== false;
+}
+
 export function enabledSubAgentsForMarketplace(
   subAgents: SubAgentConfigItem[],
 ): SubAgentConfigItem[] {
@@ -22,6 +26,7 @@ export function enabledSubAgentsForMarketplace(
     (agent) =>
       agent.enabled &&
       agent.id !== "root-orchestrator" &&
+      subAgentUsesMarketplaceData(agent) &&
       marketplaceProductForSubAgent(agent.id) != null,
   );
 }

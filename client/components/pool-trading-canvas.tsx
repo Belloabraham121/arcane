@@ -14,6 +14,13 @@ import {
   poolNodeIndex,
   type PoolNetworkNode,
 } from "@/lib/pool-network-layout"
+import {
+  defaultMarketplaceTrip,
+  MARKETPLACE_CANVAS_COLOR,
+  MARKETPLACE_CANVAS_POSITION,
+  type MarketplaceTripCommand,
+  type SubAgentMarketplaceTrip,
+} from "@/lib/marketplace-canvas"
 
 const SUB_AGENT_COLORS: Record<string, string> = {
   "signal-scout": "#3b82f6",
@@ -111,6 +118,94 @@ function ParticleRing({ radius, color, y }: { radius: number; color: string; y: 
   )
 }
 
+function MarketplaceNodeMesh() {
+  const meshRef = useRef<THREE.Mesh>(null)
+  const ringRef = useRef<THREE.Mesh>(null)
+
+  useFrame((_, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += delta * 0.35
+      meshRef.current.rotation.x += delta * 0.12
+    }
+    if (ringRef.current) {
+      ringRef.current.rotation.z += delta * 0.25
+    }
+  })
+
+  return (
+    <group position={MARKETPLACE_CANVAS_POSITION}>
+      <mesh ref={meshRef}>
+        <dodecahedronGeometry args={[2.4, 0]} />
+        <meshPhongMaterial
+          color={MARKETPLACE_CANVAS_COLOR}
+          emissive={MARKETPLACE_CANVAS_COLOR}
+          emissiveIntensity={0.45}
+          wireframe
+          transparent
+          opacity={0.75}
+        />
+      </mesh>
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[3.6, 0.12, 8, 48]} />
+        <meshPhongMaterial
+          color={MARKETPLACE_CANVAS_COLOR}
+          emissive={MARKETPLACE_CANVAS_COLOR}
+          emissiveIntensity={0.55}
+          transparent
+          opacity={0.85}
+        />
+      </mesh>
+      <Html
+        center
+        distanceFactor={55}
+        position={[0, 3.2, 0]}
+        style={{ pointerEvents: "none", userSelect: "none" }}
+      >
+        <div className="whitespace-nowrap rounded border border-[#00ff88]/40 bg-card/90 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-[#00ff88] backdrop-blur">
+          Marketplace
+        </div>
+      </Html>
+    </group>
+  )
+}
+
+function MarketplaceDataPulse({
+  from,
+  to,
+  strength,
+}: {
+  from: [number, number, number]
+  to: [number, number, number]
+  strength: number
+}) {
+  const ref = useRef<THREE.Mesh>(null)
+
+  useFrame(() => {
+    if (!ref.current || strength <= 0) return
+    const t = (Math.sin(Date.now() * 0.012) + 1) / 2
+    ref.current.position.set(
+      from[0] + (to[0] - from[0]) * t,
+      from[1] + (to[1] - from[1]) * t,
+      from[2] + (to[2] - from[2]) * t,
+    )
+  })
+
+  if (strength <= 0) return null
+
+  return (
+    <mesh ref={ref}>
+      <sphereGeometry args={[0.35, 10, 10]} />
+      <meshPhongMaterial
+        color={MARKETPLACE_CANVAS_COLOR}
+        emissive={MARKETPLACE_CANVAS_COLOR}
+        emissiveIntensity={0.9}
+        transparent
+        opacity={0.55 * strength}
+      />
+    </mesh>
+  )
+}
+
 function PoolNodeMesh({ node }: { node: PoolNetworkNode }) {
   const meshRef = useRef<THREE.Mesh>(null)
   const ringRef = useRef<THREE.Mesh>(null)
@@ -166,16 +261,29 @@ const ORBIT_RING_RADIUS = 11.8
 const ORBIT_SPEED_BASE = 0.6
 const FOLLOW_TRAIL_OFFSET = 3.5
 
+function poolOrbitPosition(
+  pool: PoolNetworkNode,
+  angle: number,
+): [number, number, number] {
+  return [
+    pool.position[0] + Math.cos(angle) * ORBIT_RING_RADIUS,
+    pool.position[1] + 0.3,
+    pool.position[2] + Math.sin(angle) * ORBIT_RING_RADIUS,
+  ]
+}
+
 function SubAgentNodeMesh({
   node,
   agentMeshRef,
   tripRef,
   poolNodes,
+  marketplaceTripsRef,
 }: {
   node: SubAgentNode
   agentMeshRef: React.RefObject<THREE.Mesh | null>
   tripRef: React.RefObject<AgentTrip | null>
   poolNodes: PoolNetworkNode[]
+  marketplaceTripsRef: React.MutableRefObject<Record<string, SubAgentMarketplaceTrip>>
 }) {
   const groupRef = useRef<THREE.Group>(null)
   const coreRef = useRef<THREE.Mesh>(null)
@@ -188,6 +296,58 @@ function SubAgentNodeMesh({
 
   useFrame((_, delta) => {
     if (!groupRef.current || !agentMeshRef.current) return
+
+    const marketplaceTrip =
+      marketplaceTripsRef.current[node.agentId] ??
+      defaultMarketplaceTrip(0)
+    const marketPos = MARKETPLACE_CANVAS_POSITION
+    const homePool =
+      poolNodes[marketplaceTrip.homePoolIndex] ?? poolNodes[0]
+
+    if (marketplaceTrip.phase !== "idle" && homePool) {
+      const tripSpeed = 0.65
+      const homePos = poolOrbitPosition(homePool, angleRef.current)
+
+      if (marketplaceTrip.dataPulse > 0) {
+        marketplaceTrip.dataPulse = Math.max(
+          0,
+          marketplaceTrip.dataPulse - delta * 1.2,
+        )
+      }
+
+      if (marketplaceTrip.phase === "to_marketplace") {
+        marketplaceTrip.progress = Math.min(
+          1,
+          marketplaceTrip.progress + delta * tripSpeed,
+        )
+        const pos = interpolateArc(homePos, marketPos, marketplaceTrip.progress, 6)
+        groupRef.current.position.set(pos[0], pos[1], pos[2])
+        if (marketplaceTrip.progress >= 1) {
+          marketplaceTrip.phase = "at_marketplace"
+          marketplaceTrip.progress = 0
+        }
+        return
+      }
+
+      if (marketplaceTrip.phase === "at_marketplace") {
+        groupRef.current.position.set(marketPos[0], marketPos[1], marketPos[2])
+        return
+      }
+
+      if (marketplaceTrip.phase === "to_pool") {
+        marketplaceTrip.progress = Math.min(
+          1,
+          marketplaceTrip.progress + delta * tripSpeed,
+        )
+        const pos = interpolateArc(marketPos, homePos, marketplaceTrip.progress, 6)
+        groupRef.current.position.set(pos[0], pos[1], pos[2])
+        if (marketplaceTrip.progress >= 1) {
+          marketplaceTrip.phase = "idle"
+          marketplaceTrip.progress = 0
+        }
+        return
+      }
+    }
 
     const trip = tripRef.current
     const agentPos = agentMeshRef.current.position
@@ -441,11 +601,15 @@ function PoolTradingScene({
   routeCommand,
   subAgentStatuses,
   enabledSubAgentIds,
+  marketplaceEnabled,
+  marketplaceTripCommands,
 }: {
   nodes: PoolNetworkNode[]
   routeCommand: PoolRouteCommand | null
   subAgentStatuses: SubAgentStatus[]
   enabledSubAgentIds: string[]
+  marketplaceEnabled: boolean
+  marketplaceTripCommands: Record<string, MarketplaceTripCommand>
 }) {
   const [trip, setTrip] = useState<AgentTrip | null>(() =>
     nodes.length > 0
@@ -461,6 +625,39 @@ function PoolTradingScene({
     () => buildSubAgentNodes(subAgentStatuses, enabledSubAgentIds),
     [subAgentStatuses, enabledSubAgentIds],
   )
+
+  const marketplaceTripsRef = useRef<Record<string, SubAgentMarketplaceTrip>>({})
+
+  for (const node of subAgentNodes) {
+    if (!marketplaceTripsRef.current[node.agentId]) {
+      marketplaceTripsRef.current[node.agentId] = defaultMarketplaceTrip(0)
+    }
+  }
+
+  useEffect(() => {
+    const homeIndex = trip?.targetIndex ?? 0
+    for (const [agentId, cmd] of Object.entries(marketplaceTripCommands)) {
+      const current =
+        marketplaceTripsRef.current[agentId] ??
+        defaultMarketplaceTrip(homeIndex)
+      if (cmd.phase === "idle") {
+        current.phase = "idle"
+        current.progress = 0
+        current.dataPulse = 0
+      } else if (cmd.phase !== current.phase) {
+        current.phase = cmd.phase
+        current.progress = 0
+        current.homePoolIndex = cmd.homePoolIndex ?? homeIndex
+        current.productId = cmd.productId
+        if (cmd.triggerDataPulse) {
+          current.dataPulse = 1
+        }
+      } else if (cmd.triggerDataPulse) {
+        current.dataPulse = 1
+      }
+      marketplaceTripsRef.current[agentId] = current
+    }
+  }, [marketplaceTripCommands, trip?.targetIndex])
 
   useEffect(() => {
     if (!routeCommand || nodes.length === 0) return
@@ -507,6 +704,8 @@ function PoolTradingScene({
         <PoolNodeMesh key={node.id} node={node} />
       ))}
 
+      {marketplaceEnabled && <MarketplaceNodeMesh />}
+
       {subAgentNodes.map((node) => (
         <SubAgentNodeMesh
           key={node.agentId}
@@ -514,8 +713,26 @@ function PoolTradingScene({
           agentMeshRef={agentMeshRef}
           tripRef={tripRef}
           poolNodes={nodes}
+          marketplaceTripsRef={marketplaceTripsRef}
         />
       ))}
+
+      {marketplaceEnabled &&
+        subAgentNodes.map((node) => {
+          const agentTrip = marketplaceTripsRef.current[node.agentId]
+          if (!agentTrip || agentTrip.dataPulse <= 0) return null
+          const pool = nodes[agentTrip.homePoolIndex] ?? nodes[0]
+          if (!pool) return null
+          const homePos = poolOrbitPosition(pool, 0)
+          return (
+            <MarketplaceDataPulse
+              key={`pulse-${node.agentId}`}
+              from={MARKETPLACE_CANVAS_POSITION}
+              to={homePos}
+              strength={agentTrip.dataPulse}
+            />
+          )
+        })}
 
       <TravelingAgent nodes={nodes} trip={trip} meshRef={agentMeshRef} tripRef={tripRef} />
       <GridFloor />
@@ -529,6 +746,8 @@ type PoolTradingCanvasProps = {
   accountMode?: AccountMode
   subAgentStatuses?: SubAgentStatus[]
   enabledSubAgentIds?: string[]
+  marketplaceEnabled?: boolean
+  marketplaceTripCommands?: Record<string, MarketplaceTripCommand>
 }
 
 export function PoolTradingCanvas({
@@ -537,6 +756,8 @@ export function PoolTradingCanvas({
   accountMode,
   subAgentStatuses = [],
   enabledSubAgentIds = [],
+  marketplaceEnabled = false,
+  marketplaceTripCommands = {},
 }: PoolTradingCanvasProps) {
   const nodes = useMemo(
     () => buildPoolNetworkNodes(canvasPools),
@@ -578,6 +799,8 @@ export function PoolTradingCanvas({
           routeCommand={routeCommand}
           subAgentStatuses={subAgentStatuses}
           enabledSubAgentIds={enabledSubAgentIds}
+          marketplaceEnabled={marketplaceEnabled}
+          marketplaceTripCommands={marketplaceTripCommands}
         />
       </Canvas>
 
@@ -635,6 +858,13 @@ export function PoolTradingCanvas({
             <span className="mx-2">·</span>
             <span className="inline-block h-1.5 w-1.5 rotate-45 bg-[#3b82f6]" />
             <span className="ml-1">Sub-agents orbit the pool ring</span>
+          </>
+        )}
+        {marketplaceEnabled && (
+          <>
+            <span className="mx-2">·</span>
+            <span className="inline-block h-2 w-2 rounded-sm bg-[#00ff88]" />
+            <span className="ml-1">Marketplace — shared data hub (x402 · STT)</span>
           </>
         )}
       </div>

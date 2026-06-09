@@ -99,6 +99,13 @@ export type SubAgentFeedData = {
   durationMs?: number
 }
 
+export type MarketplaceFeedData = {
+  productId: string
+  amountSttWei: string
+  agentId?: string
+  agentName?: string
+}
+
 export type LiveTradingFeedItem = {
   id: string
   at: string
@@ -112,4 +119,6 @@ export type LiveTradingFeedItem = {
   llmResponse?: string | null
   /** Present when this feed item represents a sub-agent analysis. */
   subAgent?: SubAgentFeedData
+  /** Present when this feed item represents an x402 Marketplace purchase. */
+  marketplace?: MarketplaceFeedData
 }

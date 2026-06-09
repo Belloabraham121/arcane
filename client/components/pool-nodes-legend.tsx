@@ -6,11 +6,13 @@ import type { StrategyCanvasPool } from "@/lib/pool-resolve"
 type PoolNodesLegendProps = {
   canvasPools: StrategyCanvasPool[]
   accountMode?: AccountMode
+  marketplaceEnabled?: boolean
 }
 
 export function PoolNodesLegend({
   canvasPools,
   accountMode,
+  marketplaceEnabled = false,
 }: PoolNodesLegendProps) {
   const isDemo = accountMode === "demo"
 
@@ -53,6 +55,12 @@ export function PoolNodesLegend({
             ? "demo fork swap events — sub-agents follow"
             : "live mainnet swap events — sub-agents follow"}
         </p>
+        {marketplaceEnabled && (
+          <p>
+            • Green cube = Marketplace — sub-agents travel here to buy data via
+            x402 (STT only)
+          </p>
+        )}
       </div>
     </div>
   )

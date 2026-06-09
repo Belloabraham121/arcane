@@ -23,6 +23,7 @@ import {
 import { POOL_LABELS } from "@/lib/strategy-presets"
 import { tradingSocketEventMatchesMode } from "@/lib/trading-socket-mode"
 import { formatReason } from "@/lib/trading-helpers"
+import type { MarketplaceTripCommand } from "@/lib/marketplace-canvas"
 
 export type { PoolRouteCommand } from "@/lib/trading-feed-helpers"
 
@@ -80,8 +81,14 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
   const [liveRoute, setLiveRoute] = useState<PoolRouteCommand | null>(null)
   const [cycleActive, setCycleActive] = useState(false)
   const [subAgentStatuses, setSubAgentStatuses] = useState<SubAgentStatus[]>([])
+  const [marketplaceTripCommands, setMarketplaceTripCommands] = useState<
+    Record<string, MarketplaceTripCommand>
+  >({})
   const [historyLoading, setHistoryLoading] = useState(false)
   const socketRef = useRef<Socket | null>(null)
+  const marketplaceReturnTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  )
   const optionsRef = useRef(options)
   optionsRef.current = options
 
@@ -103,6 +110,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
     setLiveRoute(null)
     setCycleActive(false)
     setSubAgentStatuses([])
+    setMarketplaceTripCommands({})
   }, [accountMode])
 
   useEffect(() => {
@@ -159,6 +167,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
       }
       setCycleActive(true)
       setSubAgentStatuses([])
+      setMarketplaceTripCommands({})
       pushLiveFeed({
         id: `start-${event.cycleId}`,
         at: event.startedAt,
@@ -255,7 +264,22 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
           headline: `${event.agentName} → Marketplace`,
           detail: `Buying ${event.productId} (${event.amountSttWei} STT wei)`,
           status: "running",
+          cycleId: event.cycleId,
+          marketplace: {
+            productId: event.productId,
+            amountSttWei: event.amountSttWei,
+            agentId: event.agentId,
+            agentName: event.agentName,
+          },
         })
+        setMarketplaceTripCommands((prev) => ({
+          ...prev,
+          [event.agentId]: {
+            phase: "to_marketplace",
+            homePoolIndex: prev[event.agentId]?.homePoolIndex ?? 0,
+            productId: event.productId,
+          },
+        }))
       },
     )
 
@@ -276,7 +300,51 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
             : (event.error ?? "Purchase failed"),
           txHash: event.txHash ?? null,
           status: event.success ? "completed" : "failed",
+          cycleId: event.cycleId,
+          marketplace: {
+            productId: event.productId,
+            amountSttWei: event.amountSttWei,
+            agentId: event.agentId,
+            agentName: event.agentName,
+          },
         })
+
+        const existingTimer = marketplaceReturnTimers.current.get(event.agentId)
+        if (existingTimer) {
+          clearTimeout(existingTimer)
+        }
+
+        if (event.success) {
+          setMarketplaceTripCommands((prev) => ({
+            ...prev,
+            [event.agentId]: {
+              phase: "at_marketplace",
+              homePoolIndex: prev[event.agentId]?.homePoolIndex ?? 0,
+              productId: event.productId,
+            },
+          }))
+          const timer = setTimeout(() => {
+            setMarketplaceTripCommands((prev) => ({
+              ...prev,
+              [event.agentId]: {
+                phase: "to_pool",
+                homePoolIndex: prev[event.agentId]?.homePoolIndex ?? 0,
+                productId: event.productId,
+                triggerDataPulse: true,
+              },
+            }))
+            marketplaceReturnTimers.current.delete(event.agentId)
+          }, 700)
+          marketplaceReturnTimers.current.set(event.agentId, timer)
+        } else {
+          setMarketplaceTripCommands((prev) => ({
+            ...prev,
+            [event.agentId]: {
+              phase: "idle",
+              homePoolIndex: prev[event.agentId]?.homePoolIndex ?? 0,
+            },
+          }))
+        }
       },
     )
 
@@ -323,6 +391,10 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
     )
 
     return () => {
+      for (const timer of marketplaceReturnTimers.current.values()) {
+        clearTimeout(timer)
+      }
+      marketplaceReturnTimers.current.clear()
       socket.disconnect()
       socketRef.current = null
     }
@@ -334,6 +406,7 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
     feedItems,
     routeCommand,
     subAgentStatuses,
+    marketplaceTripCommands,
     historyLoading,
   }
 }

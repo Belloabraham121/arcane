@@ -23,6 +23,7 @@ const upsertSchema = z.object({
       name: z.string().min(1),
       systemPrompt: z.string().min(1),
       enabled: z.boolean(),
+      useMarketplaceData: z.boolean().optional(),
       limits: z
         .object({
           maxSwapPortfolioPercent: z.number().positive().max(100).optional(),
@@ -50,6 +51,7 @@ const patchSubAgentsSchema = z.object({
       name: z.string().min(1),
       systemPrompt: z.string().min(1),
       enabled: z.boolean(),
+      useMarketplaceData: z.boolean().optional(),
       limits: z
         .object({
           maxSwapPortfolioPercent: z.number().positive().max(100).optional(),

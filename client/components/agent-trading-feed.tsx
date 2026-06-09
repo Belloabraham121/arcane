@@ -6,7 +6,7 @@ import type { AccountMode } from "@/lib/api/auth"
 import type { LiveTradingFeedItem } from "@/lib/api/trading-socket-types"
 import { cn } from "@/lib/utils"
 
-type FeedFilter = "all" | "trades" | "sub-agents"
+type FeedFilter = "all" | "trades" | "sub-agents" | "marketplace"
 
 type AgentTradingFeedProps = {
   accountMode: AccountMode
@@ -28,8 +28,12 @@ function isSubAgentItem(item: LiveTradingFeedItem): boolean {
   return item.subAgent != null
 }
 
+function isMarketplaceItem(item: LiveTradingFeedItem): boolean {
+  return item.marketplace != null
+}
+
 function isTradeItem(item: LiveTradingFeedItem): boolean {
-  return !isSubAgentItem(item)
+  return !isSubAgentItem(item) && !isMarketplaceItem(item)
 }
 
 function SubAgentThoughtView({
@@ -106,11 +110,13 @@ export function AgentTradingFeed({
   const filteredItems = items.filter((item) => {
     if (filter === "trades") return isTradeItem(item)
     if (filter === "sub-agents") return isSubAgentItem(item)
+    if (filter === "marketplace") return isMarketplaceItem(item)
     return true
   })
 
   const subAgentCount = items.filter(isSubAgentItem).length
   const tradeCount = items.filter(isTradeItem).length
+  const marketplaceCount = items.filter(isMarketplaceItem).length
 
   return (
     <aside className={cn("flex w-full flex-col font-mono text-xs", className)}>
@@ -148,6 +154,7 @@ export function AgentTradingFeed({
             { key: "all", label: "All", count: items.length },
             { key: "trades", label: "Trades", count: tradeCount },
             { key: "sub-agents", label: "Sub-agents", count: subAgentCount },
+            { key: "marketplace", label: "Marketplace", count: marketplaceCount },
           ] as const
         ).map((tab) => (
           <button
@@ -172,7 +179,9 @@ export function AgentTradingFeed({
       <div className="max-h-[min(50vh,360px)] overflow-y-auto">
         {filteredItems.length === 0 ? (
           <p className="px-3 py-4 text-[10px] text-muted-foreground">
-            {filter === "sub-agents"
+            {filter === "marketplace"
+              ? "No Marketplace purchases yet. Sub-agents buy data via x402 (STT) when enabled."
+              : filter === "sub-agents"
               ? "No sub-agent activity yet. Sub-agents analyze portfolios at the start of each cycle."
               : filter === "trades"
                 ? "No trade activity yet. Trades appear when the agent executes swaps."
@@ -185,7 +194,10 @@ export function AgentTradingFeed({
             const showAgentButton =
               onViewAgentResponse != null && isCycleSummaryItem(item)
             const isSubAgent = isSubAgentItem(item)
-            const dotColor = isSubAgent
+            const isMarketplace = isMarketplaceItem(item)
+            const dotColor = isMarketplace
+              ? "#00ff88"
+              : isSubAgent
               ? SUB_AGENT_DOT_COLORS[item.subAgent?.agentId ?? ""] ?? "#6366f1"
               : undefined
 
@@ -196,7 +208,7 @@ export function AgentTradingFeed({
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
-                    {isSubAgent && (
+                    {(isSubAgent || isMarketplace) && (
                       <span
                         className={cn(
                           "h-1.5 w-1.5 shrink-0 rounded-full",

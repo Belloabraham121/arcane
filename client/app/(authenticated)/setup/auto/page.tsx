@@ -7,12 +7,22 @@ import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy";
 import type { PoolSortField } from "@/lib/api/quickswap-types";
 import {
   DEFAULT_DEMO_DEPOSIT_AMOUNT,
+  type MarketplaceSummary,
   type PoolAllocations,
   type SubAgentConfigItem,
 } from "@/lib/api/strategy-types";
+import { sttInputToWei } from "@/lib/marketplace-display";
+import {
+  fetchMarketplaceCatalog,
+  marketplaceSummaryFromCatalog,
+} from "@/lib/api/marketplace";
 import { DepositAddressCard } from "@/components/setup/deposit-address-card";
 import { PoolAllocationEditor } from "@/components/setup/pool-allocation-editor";
 import { SetupNav } from "@/components/setup/setup-nav";
+import {
+  MarketplaceSetupSection,
+  resolveMarketplaceBudgetInput,
+} from "@/components/setup/marketplace-setup-section";
 import { SubAgentEditor } from "@/components/setup/sub-agent-editor";
 import {
   DepositAddressCardSkeleton,
@@ -75,6 +85,10 @@ function AutoSetupContent() {
   const [subAgents, setSubAgents] = useState<SubAgentConfigItem[]>(
     toSubAgentsFromPresets(),
   );
+  const [marketplace, setMarketplace] = useState<MarketplaceSummary | null>(
+    null,
+  );
+  const [budgetSttInput, setBudgetSttInput] = useState("");
   const [strategyReady, setStrategyReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,9 +164,24 @@ function AutoSetupContent() {
     let cancelled = false;
 
     async function loadStrategy() {
-      const strategyResult = await getAgentStrategy(accountMode ?? undefined);
+      const [strategyResult, catalogResult] = await Promise.all([
+        getAgentStrategy(accountMode ?? undefined),
+        fetchMarketplaceCatalog(),
+      ]);
       if (cancelled) {
         return;
+      }
+
+      if (catalogResult.success && catalogResult.data) {
+        setMarketplace(marketplaceSummaryFromCatalog(catalogResult.data));
+        if (!budgetSttInput) {
+          setBudgetSttInput(
+            resolveMarketplaceBudgetInput(
+              marketplaceSummaryFromCatalog(catalogResult.data),
+              null,
+            ),
+          );
+        }
       }
 
       if (strategyResult.success && strategyResult.data?.strategy) {
@@ -166,6 +195,13 @@ function AutoSetupContent() {
           return;
         }
         setSubAgents(strategy.subAgents);
+        setMarketplace(strategy.marketplace ?? null);
+        setBudgetSttInput(
+          resolveMarketplaceBudgetInput(
+            strategy.marketplace,
+            strategy.subAgentX402BudgetSttWei,
+          ),
+        );
         const setupDeposit = strategyDepositForSetup(
           accountMode,
           strategy.depositAmount,
@@ -243,6 +279,16 @@ function AutoSetupContent() {
       }
     }
 
+    let subAgentX402BudgetSttWei: string | null | undefined;
+    if (accountMode === "live" && marketplace?.enabled) {
+      const wei = sttInputToWei(budgetSttInput);
+      if (!wei) {
+        setError("Enter a valid per-cycle STT budget (e.g. 0.1).");
+        return;
+      }
+      subAgentX402BudgetSttWei = wei;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -252,6 +298,7 @@ function AutoSetupContent() {
       depositAmount: amount,
       poolAllocations: allocations,
       subAgents,
+      subAgentX402BudgetSttWei,
     });
 
     setSaving(false);
@@ -340,11 +387,22 @@ function AutoSetupContent() {
         {!strategyReady ? (
           <SubAgentEditorSkeleton rows={2} />
         ) : (
-          <SubAgentEditor
-            agents={subAgents}
-            onChange={setSubAgents}
-            title="Sub-agents & system prompts"
-          />
+          <>
+            {accountMode != null && (
+              <MarketplaceSetupSection
+                accountMode={accountMode}
+                marketplace={marketplace}
+                budgetSttInput={budgetSttInput}
+                onBudgetSttInputChange={setBudgetSttInput}
+              />
+            )}
+            <SubAgentEditor
+              agents={subAgents}
+              onChange={setSubAgents}
+              title="Sub-agents & system prompts"
+              marketplace={marketplace}
+            />
+          </>
         )}
 
         <button

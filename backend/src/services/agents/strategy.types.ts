@@ -40,6 +40,8 @@ export type SubAgentConfigItem = {
   name: string;
   systemPrompt: string;
   enabled: boolean;
+  /** When false, sub-agent skips x402 Marketplace purchases (default true). */
+  useMarketplaceData?: boolean;
   /** Optional hard limits (typically on risk-manager). */
   limits?: SubAgentRiskLimits;
 };

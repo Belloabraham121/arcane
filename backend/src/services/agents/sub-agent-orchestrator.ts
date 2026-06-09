@@ -7,7 +7,10 @@ import type { WalletBalancesResult } from "../wallet/token-balance.service.js";
 import type { PoolAllocationDrift } from "./trading.types.js";
 import type { EffectiveRiskLimits } from "./risk-controls.types.js";
 import { getMarketplaceEnv } from "../../config/marketplace.js";
-import { marketplaceProductForSubAgent } from "../marketplace/sub-agent-products.js";
+import {
+  marketplaceProductForSubAgent,
+  subAgentUsesMarketplaceData,
+} from "../marketplace/sub-agent-products.js";
 import type { MarketplaceCyclePurchases } from "../marketplace/x402-buyer.js";
 
 const log = createLogger("sub-agent-orchestrator");
@@ -166,6 +169,10 @@ async function fetchMarketplaceDataForAgent(
   purchaseMeta?: SubAgentOutput["marketplacePurchase"];
   productId?: string;
 }> {
+  if (!subAgentUsesMarketplaceData(agent)) {
+    return {};
+  }
+
   const productId = marketplaceProductForSubAgent(agent.id);
   if (!productId) {
     return {};

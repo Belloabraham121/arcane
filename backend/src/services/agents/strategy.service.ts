@@ -210,11 +210,23 @@ export function parseSubAgents(
       }
     }
 
+    let useMarketplaceData: boolean | undefined;
+    if (record.useMarketplaceData != null) {
+      if (typeof record.useMarketplaceData !== "boolean") {
+        throw new StrategyError(
+          "VALIDATION_ERROR",
+          `subAgents[${index}].useMarketplaceData must be a boolean`,
+        );
+      }
+      useMarketplaceData = record.useMarketplaceData;
+    }
+
     return {
       id: id.trim(),
       name: name.trim(),
       systemPrompt: systemPrompt.trim(),
       enabled,
+      ...(useMarketplaceData !== undefined ? { useMarketplaceData } : {}),
       ...(limits ? { limits } : {}),
     };
   });

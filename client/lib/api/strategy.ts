@@ -23,6 +23,7 @@ export async function upsertAgentStrategy(input: {
   depositAmount?: number;
   poolAllocations?: PoolAllocations;
   subAgents?: SubAgentConfigItem[];
+  subAgentX402BudgetSttWei?: string | null;
 }) {
   return apiRequest<{ strategy: AgentStrategy }>("/api/v1/agents/strategy", {
     method: "PUT",

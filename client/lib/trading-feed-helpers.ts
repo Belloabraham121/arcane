@@ -60,6 +60,35 @@ function feedItemFromActionRecord(
   }
 }
 
+function feedItemFromSubAgent(
+  cycleId: string,
+  action: TradingActionRecord,
+): LiveTradingFeedItem | null {
+  const meta = action.metadata as Record<string, unknown> | null
+  if (!meta) return null
+
+  const agentId = typeof meta.agentId === "string" ? meta.agentId : action.toolName ?? "unknown"
+  const agentName = typeof meta.agentName === "string" ? meta.agentName : agentId
+  const summary = typeof meta.summary === "string" ? meta.summary : "Analysis complete."
+  const data = meta.data && typeof meta.data === "object" ? meta.data as Record<string, unknown> : undefined
+  const durationMs = typeof meta.durationMs === "number" ? meta.durationMs : undefined
+
+  return {
+    id: `history-sub-${cycleId}-${action.id}`,
+    at: action.createdAt,
+    headline: `${agentName} complete`,
+    detail: summary,
+    status: "completed",
+    subAgent: {
+      agentId,
+      agentName,
+      summary,
+      data,
+      durationMs,
+    },
+  }
+}
+
 function feedItemsFromCycleDetail(detail: TradingHistoryDetail): LiveTradingFeedItem[] {
   const items: LiveTradingFeedItem[] = [
     {
@@ -78,6 +107,11 @@ function feedItemsFromCycleDetail(detail: TradingHistoryDetail): LiveTradingFeed
   )
 
   for (const action of actions) {
+    if (action.type === "sub_agent") {
+      const subItem = feedItemFromSubAgent(detail.id, action)
+      if (subItem) items.push(subItem)
+      continue
+    }
     if (
       action.type === "quote" ||
       action.type === "tool" ||

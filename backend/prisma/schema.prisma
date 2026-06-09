@@ -33,6 +33,7 @@ enum TradingActionType {
   rebalance
   quote
   tool
+  sub_agent
 }
 
 enum TradingActionStatus {

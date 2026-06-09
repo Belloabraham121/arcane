@@ -41,8 +41,9 @@ function subAgentColor(agentId: string, index: number): string {
 type SubAgentNode = {
   agentId: string
   agentName: string
-  position: [number, number, number]
   color: string
+  orbitIndex: number
+  orbitTotal: number
   status: "idle" | "running" | "completed"
   summary?: string
 }
@@ -161,22 +162,53 @@ function PoolNodeMesh({ node }: { node: PoolNetworkNode }) {
   )
 }
 
+const ORBIT_RING_RADIUS = 11.8
+const ORBIT_SPEED_BASE = 0.6
+
 function SubAgentNodeMesh({
   node,
-  rootPosition,
+  poolNodes,
+  currentPoolIndex,
 }: {
   node: SubAgentNode
-  rootPosition: [number, number, number]
+  poolNodes: PoolNetworkNode[]
+  currentPoolIndex: number
 }) {
   const groupRef = useRef<THREE.Group>(null)
   const coreRef = useRef<THREE.Mesh>(null)
   const pulseRef = useRef<THREE.Mesh>(null)
-  const dataLineRef = useRef<THREE.Line>(null)
+  const angleRef = useRef(
+    (node.orbitIndex / Math.max(node.orbitTotal, 1)) * Math.PI * 2,
+  )
+
+  const targetPool = poolNodes[currentPoolIndex] ?? poolNodes[0]
+  const poolCenter = targetPool?.position ?? [0, 0, 0]
 
   useFrame((_, delta) => {
+    if (!groupRef.current) return
+
+    const orbitSpeed =
+      ORBIT_SPEED_BASE + node.orbitIndex * 0.15 +
+      (node.status === "running" ? 0.4 : 0)
+
+    angleRef.current += delta * orbitSpeed
+
+    const cx = poolCenter[0]
+    const cy = poolCenter[1]
+    const cz = poolCenter[2]
+
+    const ox = cx + Math.cos(angleRef.current) * ORBIT_RING_RADIUS
+    const oy = cy + 0.3
+    const oz = cz + Math.sin(angleRef.current) * ORBIT_RING_RADIUS
+
+    groupRef.current.position.lerp(
+      new THREE.Vector3(ox, oy, oz),
+      Math.min(1, delta * 3),
+    )
+
     if (coreRef.current) {
-      coreRef.current.rotation.x += delta * 1.2
-      coreRef.current.rotation.y += delta * 0.8
+      coreRef.current.rotation.x += delta * 1.5
+      coreRef.current.rotation.y += delta * 1.0
     }
 
     if (pulseRef.current) {
@@ -191,216 +223,71 @@ function SubAgentNodeMesh({
         pulseRef.current.visible = false
       }
     }
-
-    if (dataLineRef.current && (node.status === "running" || node.status === "completed")) {
-      const geom = dataLineRef.current.geometry as THREE.BufferGeometry
-      const positions = new Float32Array(6)
-      positions[0] = node.position[0]
-      positions[1] = node.position[1]
-      positions[2] = node.position[2]
-      positions[3] = rootPosition[0]
-      positions[4] = rootPosition[1]
-      positions[5] = rootPosition[2]
-      geom.setAttribute("position", new THREE.BufferAttribute(positions, 3))
-      geom.attributes.position!.needsUpdate = true
-      dataLineRef.current.visible = true
-
-      if (node.status === "running") {
-        const mat = dataLineRef.current.material as THREE.LineDashedMaterial
-        mat.dashSize = 0.6
-        mat.gapSize = 0.4
-        mat.opacity = 0.4 + Math.sin(Date.now() * 0.005) * 0.3
-      }
-    } else if (dataLineRef.current) {
-      dataLineRef.current.visible = false
-    }
-
-    if (groupRef.current) {
-      const hover = node.status !== "idle" ? 0.3 : 0
-      const bobble = Math.sin(Date.now() * 0.002 + node.position[0]) * 0.15
-      groupRef.current.position.y = node.position[1] + hover + bobble
-    }
   })
 
-  const lineGeom = useMemo(() => {
-    const geom = new THREE.BufferGeometry()
-    const positions = new Float32Array(6)
-    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3))
-    return geom
-  }, [])
-
   return (
-    <>
-      <group
-        ref={groupRef}
-        position={[node.position[0], node.position[1], node.position[2]]}
-      >
-        <mesh ref={coreRef}>
-          <tetrahedronGeometry args={[1.1, 0]} />
-          <meshPhongMaterial
-            color={node.color}
-            emissive={node.color}
-            emissiveIntensity={node.status === "idle" ? 0.2 : 0.6}
-            transparent
-            opacity={node.status === "idle" ? 0.6 : 0.95}
-          />
-        </mesh>
-
-        <mesh ref={pulseRef} visible={false}>
-          <sphereGeometry args={[1.6, 16, 16]} />
-          <meshPhongMaterial
-            color={node.color}
-            emissive={node.color}
-            emissiveIntensity={0.3}
-            transparent
-            opacity={0.15}
-            wireframe
-          />
-        </mesh>
-
-        {node.status !== "idle" && (
-          <Html
-            center
-            distanceFactor={55}
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          >
-            <div className="whitespace-nowrap rounded border border-border/50 bg-card/90 px-2 py-1 font-mono text-[9px] backdrop-blur">
-              <span style={{ color: node.color }} className="font-bold">
-                {node.agentName}
-              </span>
-              {node.status === "running" && (
-                <span className="ml-1 animate-pulse text-muted-foreground">
-                  analyzing…
-                </span>
-              )}
-              {node.status === "completed" && node.summary && (
-                <span className="ml-1 text-muted-foreground">
-                  {node.summary.slice(0, 50)}
-                  {node.summary.length > 50 ? "…" : ""}
-                </span>
-              )}
-            </div>
-          </Html>
-        )}
-      </group>
-
-      <line ref={dataLineRef} geometry={lineGeom} visible={false}>
-        <lineDashedMaterial
+    <group ref={groupRef} position={[poolCenter[0] + ORBIT_RING_RADIUS, poolCenter[1], poolCenter[2]]}>
+      <mesh ref={coreRef}>
+        <tetrahedronGeometry args={[0.9, 0]} />
+        <meshPhongMaterial
           color={node.color}
-          dashSize={0.6}
-          gapSize={0.4}
+          emissive={node.color}
+          emissiveIntensity={node.status === "idle" ? 0.25 : 0.7}
           transparent
-          opacity={0.5}
-        />
-      </line>
-    </>
-  )
-}
-
-function DataPulse({
-  from,
-  to,
-  color,
-  active,
-}: {
-  from: [number, number, number]
-  to: [number, number, number]
-  color: string
-  active: boolean
-}) {
-  const ref = useRef<THREE.Mesh>(null)
-  const progressRef = useRef(0)
-
-  useFrame((_, delta) => {
-    if (!ref.current || !active) {
-      if (ref.current) ref.current.visible = false
-      return
-    }
-    ref.current.visible = true
-    progressRef.current += delta * 0.8
-    if (progressRef.current > 1) progressRef.current = 0
-
-    const pos = interpolateArc(from, to, progressRef.current, 2)
-    ref.current.position.set(pos[0], pos[1], pos[2])
-    const s = 0.3 + Math.sin(progressRef.current * Math.PI) * 0.2
-    ref.current.scale.set(s, s, s)
-  })
-
-  return (
-    <mesh ref={ref} visible={false}>
-      <sphereGeometry args={[0.5, 8, 8]} />
-      <meshPhongMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={0.8}
-        transparent
-        opacity={0.9}
-      />
-    </mesh>
-  )
-}
-
-function RootAgentMesh({
-  position,
-}: {
-  position: [number, number, number]
-}) {
-  const ref = useRef<THREE.Mesh>(null)
-  const glowRef = useRef<THREE.Mesh>(null)
-
-  useFrame((_, delta) => {
-    if (ref.current) {
-      ref.current.rotation.y += delta * 2
-      ref.current.rotation.x += delta * 0.5
-    }
-    if (glowRef.current) {
-      const s = 1 + Math.sin(Date.now() * 0.003) * 0.15
-      glowRef.current.scale.set(s, s, s)
-    }
-  })
-
-  return (
-    <group position={position}>
-      <mesh ref={glowRef}>
-        <sphereGeometry args={[2.2, 16, 16]} />
-        <meshPhongMaterial
-          color="#ea580c"
-          emissive="#ea580c"
-          emissiveIntensity={0.15}
-          transparent
-          opacity={0.1}
+          opacity={node.status === "idle" ? 0.7 : 0.95}
         />
       </mesh>
-      <mesh ref={ref}>
-        <octahedronGeometry args={[1.4, 0]} />
+
+      <mesh ref={pulseRef} visible={false}>
+        <sphereGeometry args={[1.4, 12, 12]} />
         <meshPhongMaterial
-          color="#ea580c"
-          emissive="#ea580c"
-          emissiveIntensity={0.6}
+          color={node.color}
+          emissive={node.color}
+          emissiveIntensity={0.3}
+          transparent
+          opacity={0.15}
+          wireframe
         />
       </mesh>
-      <Html
-        center
-        distanceFactor={55}
-        position={[0, -2.5, 0]}
-        style={{ pointerEvents: "none", userSelect: "none" }}
-      >
-        <div className="whitespace-nowrap font-mono text-[9px] font-bold text-[#ea580c] opacity-80">
-          ROOT AGENT
-        </div>
-      </Html>
+
+      {node.status !== "idle" && (
+        <Html
+          center
+          distanceFactor={55}
+          style={{ pointerEvents: "none", userSelect: "none" }}
+        >
+          <div className="whitespace-nowrap rounded border border-border/50 bg-card/90 px-2 py-1 font-mono text-[9px] backdrop-blur">
+            <span style={{ color: node.color }} className="font-bold">
+              {node.agentName}
+            </span>
+            {node.status === "running" && (
+              <span className="ml-1 animate-pulse text-muted-foreground">
+                analyzing…
+              </span>
+            )}
+            {node.status === "completed" && node.summary && (
+              <span className="ml-1 text-muted-foreground">
+                {node.summary.slice(0, 40)}
+                {(node.summary.length ?? 0) > 40 ? "…" : ""}
+              </span>
+            )}
+          </div>
+        </Html>
+      )}
     </group>
   )
 }
 
+
 function TravelingAgent({
   nodes,
   trip,
+  meshRef,
 }: {
   nodes: PoolNetworkNode[]
   trip: AgentTrip | null
+  meshRef: React.RefObject<THREE.Mesh | null>
 }) {
-  const meshRef = useRef<THREE.Mesh>(null)
   const trailRef = useRef<THREE.Points>(null)
   const tripRef = useRef(trip)
   tripRef.current = trip
@@ -487,26 +374,20 @@ function GridFloor() {
 function buildSubAgentNodes(
   subAgents: SubAgentStatus[],
   enabledSubAgentIds: string[],
-  rootPos: [number, number, number],
 ): SubAgentNode[] {
   const ids = enabledSubAgentIds.filter((id) => id !== "root-orchestrator")
   if (ids.length === 0) return []
 
-  const radius = 8
   return ids.map((id, index) => {
-    const angle = (index / ids.length) * Math.PI * 2 - Math.PI / 2
     const status = subAgents.find((s) => s.agentId === id)
     const name = status?.agentName ?? id.replace(/-/g, " ")
 
     return {
       agentId: id,
       agentName: name,
-      position: [
-        rootPos[0] + Math.cos(angle) * radius,
-        rootPos[1] + 4,
-        rootPos[2] + Math.sin(angle) * radius,
-      ] as [number, number, number],
       color: subAgentColor(id, index),
+      orbitIndex: index,
+      orbitTotal: ids.length,
       status: status?.status ?? "idle",
       summary: status?.summary,
     }
@@ -530,10 +411,16 @@ function PoolTradingScene({
       : null,
   )
 
-  const rootPosition: [number, number, number] = [0, 3, 0]
+  const agentMeshRef = useRef<THREE.Mesh>(null)
+
+  const currentPoolIndex = trip
+    ? trip.progress >= 1 || trip.speed === 0
+      ? trip.targetIndex
+      : trip.sourceIndex
+    : 0
 
   const subAgentNodes = useMemo(
-    () => buildSubAgentNodes(subAgentStatuses, enabledSubAgentIds, rootPosition),
+    () => buildSubAgentNodes(subAgentStatuses, enabledSubAgentIds),
     [subAgentStatuses, enabledSubAgentIds],
   )
 
@@ -582,29 +469,16 @@ function PoolTradingScene({
         <PoolNodeMesh key={node.id} node={node} />
       ))}
 
-      {subAgentNodes.length > 0 && (
-        <RootAgentMesh position={rootPosition} />
-      )}
-
       {subAgentNodes.map((node) => (
         <SubAgentNodeMesh
           key={node.agentId}
           node={node}
-          rootPosition={rootPosition}
+          poolNodes={nodes}
+          currentPoolIndex={currentPoolIndex}
         />
       ))}
 
-      {subAgentNodes.map((node) => (
-        <DataPulse
-          key={`pulse-${node.agentId}`}
-          from={node.position}
-          to={rootPosition}
-          color={node.color}
-          active={node.status === "running"}
-        />
-      ))}
-
-      <TravelingAgent nodes={nodes} trip={trip} />
+      <TravelingAgent nodes={nodes} trip={trip} meshRef={agentMeshRef} />
       <GridFloor />
     </>
   )
@@ -716,16 +590,12 @@ export function PoolTradingCanvas({
         )}
       >
         <span className="mr-2 inline-block h-2 w-2 rounded-sm bg-[#ea580c]" />
-        Root agent (executor)
+        Agent (executor · inside pool)
         {enabledSubAgentIds.length > 0 && (
           <>
             <span className="mx-2">·</span>
             <span className="inline-block h-1.5 w-1.5 rotate-45 bg-[#3b82f6]" />
-            <span className="ml-1">Sub-agents (read-only data)</span>
-            <span className="mx-2">·</span>
-            <span className="text-muted-foreground/60">
-              Dashed = data flow · Solid arc = swap execution
-            </span>
+            <span className="ml-1">Sub-agents orbit the pool ring</span>
           </>
         )}
       </div>

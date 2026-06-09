@@ -33,6 +33,14 @@ export type SomniaAttestationSummary = {
   message: string;
 };
 
+export type SubAgentOutputSummary = {
+  agentId: string;
+  agentName: string;
+  summary: string;
+  data: Record<string, unknown>;
+  durationMs: number;
+};
+
 export type TradingCycleSummary = {
   cycleId: string;
   userId: string;
@@ -55,6 +63,7 @@ export type TradingCycleSummary = {
   llmProvider?: "openai";
   somniaAttestation?: SomniaAttestationSummary;
   toolActions?: TradingToolAction[];
+  subAgentOutputs?: SubAgentOutputSummary[];
 };
 
 export type TradingStatusResponse = {

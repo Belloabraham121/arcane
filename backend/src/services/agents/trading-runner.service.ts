@@ -595,6 +595,7 @@ export async function runTradingCycle(
     let llmPending = true;
     let llmProvider: TradingCycleSummary["llmProvider"];
     let somniaAttestation: TradingCycleSummary["somniaAttestation"];
+    let subAgentOutputs: TradingCycleSummary["subAgentOutputs"];
     let executionMessage: string | undefined;
 
     const subAgents = resolveSubAgents(
@@ -675,6 +676,13 @@ export async function runTradingCycle(
           message: llm.somniaAttestation.message,
         };
         executionMessage = llm.message;
+        subAgentOutputs = llm.subAgentOutputs?.map((o: { agentId: string; agentName: string; summary: string; data: Record<string, unknown>; durationMs: number }) => ({
+          agentId: o.agentId,
+          agentName: o.agentName,
+          summary: o.summary,
+          data: o.data,
+          durationMs: o.durationMs,
+        }));
 
         if (executedTransactions.length === 0) {
           try {
@@ -817,6 +825,7 @@ export async function runTradingCycle(
       llmProvider,
       somniaAttestation,
       toolActions: toolActions.length > 0 ? toolActions : undefined,
+      subAgentOutputs: subAgentOutputs && subAgentOutputs.length > 0 ? subAgentOutputs : undefined,
       message:
         executedTransactions.length > 0
           ? (executionMessage ?? "Trading actions executed by agent wallet.")

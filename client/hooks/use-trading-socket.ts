@@ -197,6 +197,11 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
           headline: `${event.agentName} analyzing`,
           detail: "Sub-agent reading portfolio data…",
           status: "running",
+          subAgent: {
+            agentId: event.agentId,
+            agentName: event.agentName,
+            summary: "Analyzing…",
+          },
         })
         optionsRef.current.onSubAgentStarted?.(event)
       },
@@ -225,6 +230,12 @@ export function useTradingSocket(options: UseTradingSocketOptions = {}) {
           headline: `${event.agentName} complete`,
           detail: event.summary,
           status: "completed",
+          subAgent: {
+            agentId: event.agentId,
+            agentName: event.agentName,
+            summary: event.summary,
+            durationMs: event.durationMs,
+          },
         })
         optionsRef.current.onSubAgentCompleted?.(event)
       },

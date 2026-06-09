@@ -67,6 +67,14 @@ export type SubAgentStatus = {
   summary?: string
 }
 
+export type SubAgentFeedData = {
+  agentId: string
+  agentName: string
+  summary: string
+  data?: Record<string, unknown>
+  durationMs?: number
+}
+
 export type LiveTradingFeedItem = {
   id: string
   at: string
@@ -78,4 +86,6 @@ export type LiveTradingFeedItem = {
   status: string
   cycleId?: string
   llmResponse?: string | null
+  /** Present when this feed item represents a sub-agent analysis. */
+  subAgent?: SubAgentFeedData
 }

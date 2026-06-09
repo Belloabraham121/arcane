@@ -44,15 +44,14 @@ export function PoolNodesLegend({
         ))}
       </div>
       <div className="border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
-        <p>• Orange octahedron = root agent (executes swaps between pools)</p>
+        <p>• Orange octahedron = agent (executes swaps, sits inside pool node)</p>
         <p>• Colored wireframe spheres = QuickSwap pools from your strategy</p>
-        <p>• Colored tetrahedrons = sub-agents (read-only data advisors)</p>
-        <p>• Dashed lines = data flow from sub-agents → root agent</p>
+        <p>• Colored tetrahedrons = sub-agents orbiting the pool ring</p>
         <p>
-          • Root agent animates pool → pool on{" "}
+          • Agent moves pool → pool on{" "}
           {isDemo
-            ? "demo fork swap events (paper trading)"
-            : "live mainnet swap events"}
+            ? "demo fork swap events — sub-agents follow"
+            : "live mainnet swap events — sub-agents follow"}
         </p>
       </div>
     </div>

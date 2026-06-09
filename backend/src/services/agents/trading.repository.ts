@@ -5,6 +5,7 @@ import type {
   ExecutedTransaction,
   PoolAllocationDrift,
   SomniaAttestationSummary,
+  SubAgentOutputSummary,
   TradingCyclePhase,
   TradingCycleSummary,
   TradingToolAction,
@@ -125,6 +126,21 @@ export async function persistTradingCycle(
       status:
         summary.somniaAttestation.status === "failed" ? "failed" : "success",
       metadata: summary.somniaAttestation as Prisma.InputJsonValue,
+    });
+  }
+
+  for (const sa of summary.subAgentOutputs ?? []) {
+    actions.push({
+      type: "sub_agent",
+      toolName: sa.agentId,
+      status: "success",
+      metadata: {
+        agentId: sa.agentId,
+        agentName: sa.agentName,
+        summary: sa.summary,
+        data: sa.data,
+        durationMs: sa.durationMs,
+      } as Prisma.InputJsonValue,
     });
   }
 

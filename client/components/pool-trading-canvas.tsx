@@ -7,6 +7,7 @@ import * as THREE from "three"
 import type { AccountMode } from "@/lib/api/auth"
 import type { PoolRouteCommand } from "@/lib/trading-feed-helpers"
 import { cn } from "@/lib/utils"
+import type { StrategyCanvasPool } from "@/lib/pool-resolve"
 import {
   buildPoolNetworkNodes,
   poolNodeIndex,
@@ -182,20 +183,23 @@ function PoolTradingScene({
 }
 
 type PoolTradingCanvasProps = {
-  poolIds: string[]
+  canvasPools: StrategyCanvasPool[]
   routeCommand?: PoolRouteCommand | null
   accountMode?: AccountMode
 }
 
 export function PoolTradingCanvas({
-  poolIds,
+  canvasPools,
   routeCommand = null,
   accountMode,
 }: PoolTradingCanvasProps) {
-  const nodes = useMemo(() => buildPoolNetworkNodes(poolIds), [poolIds])
+  const nodes = useMemo(
+    () => buildPoolNetworkNodes(canvasPools),
+    [canvasPools],
+  )
   const isDemo = accountMode === "demo"
 
-  if (poolIds.length === 0) {
+  if (canvasPools.length === 0) {
     return (
       <div className="flex h-full items-center justify-center font-mono text-xs text-muted-foreground">
         No active pools — assign capital in setup to see pool nodes.
@@ -235,8 +239,8 @@ export function PoolTradingCanvas({
         )}
       >
         {isDemo
-          ? "Orange agent = demo wallet · nodes = QuickSwap pools on the Anvil fork"
-          : "Orange agent = your agent wallet · nodes = QuickSwap pools on Somnia mainnet"}
+          ? "Orange agent · nodes = strategy pools on the Anvil fork"
+          : "Orange agent · nodes = strategy pools on Somnia mainnet"}
       </div>
     </div>
   )

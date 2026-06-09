@@ -22,6 +22,7 @@ import { WalletBalancesList } from "@/components/setup/wallet-balances-list"
 import { ActivePoolsPanel } from "@/components/dashboard/active-pools-panel"
 import { AgentStatusBadge } from "@/components/dashboard/agent-status-badge"
 import { DemoDepositModal } from "@/components/dashboard/demo-deposit-modal"
+import { ViewAgentsLink } from "@/components/dashboard/view-agents-link"
 import { LastTradeCard } from "@/components/dashboard/last-trade-card"
 import { PoolMetricsStrip } from "@/components/dashboard/pool-metrics-strip"
 import {
@@ -743,12 +744,15 @@ export default function DashboardPage() {
                     ? "Your demo agent network trades on the Anvil fork (paper trading)."
                     : "Your agent network is active on Somnia mainnet."}
                 </p>
-                <Link
-                  href={APP_ROUTES.agentCanvas}
-                  className="shrink-0 border border-[#ea580c] px-4 py-2 font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:bg-[#ea580c]/10"
-                >
-                  {isDemoView ? "View demo agents" : "View live agents"}
-                </Link>
+                {viewMode ? (
+                  <ViewAgentsLink
+                    mode={viewMode}
+                    label={
+                      isDemoView ? "View demo agents" : "View live agents"
+                    }
+                    className="shrink-0 border border-[#ea580c] px-4 py-2 font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:bg-[#ea580c]/10"
+                  />
+                ) : null}
               </div>
               <ul className="space-y-2 font-mono text-sm text-foreground">
                 <li>• Rebalance across QuickSwap liquidity pools</li>

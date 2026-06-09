@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AccountModeBadge } from "@/components/layout/account-mode-badge";
 import { PageSubBar } from "@/components/layout/page-sub-bar";
 import { AgentsCanvasSkeleton } from "@/components/skeletons/content-skeletons";
@@ -10,6 +10,8 @@ import { AgentTradingFeed } from "@/components/agent-trading-feed";
 import { PoolNodesLegend } from "@/components/pool-nodes-legend";
 import { PoolTradingCanvas } from "@/components/pool-trading-canvas";
 import { useTradingSocket } from "@/hooks/use-trading-socket";
+import { fetchPools } from "@/lib/api/quickswap";
+import type { QuickSwapPool } from "@/lib/api/quickswap-types";
 import { getAgentStrategy } from "@/lib/api/strategy";
 import type { AccountMode } from "@/lib/api/auth";
 import { useSession } from "@/providers/session-provider";
@@ -17,12 +19,15 @@ import {
   DEFAULT_POOL_ALLOCATIONS,
   type PoolAllocations,
 } from "@/lib/api/strategy-types";
-import { POOL_LABELS } from "@/lib/strategy-presets";
-import { activePoolIds } from "@/lib/pool-network-layout";
+import {
+  largestResolvablePoolId,
+  resolveStrategyCanvasPools,
+} from "@/lib/pool-resolve";
 import {
   idleRouteForPool,
-  largestAllocationPoolId,
+  normalizePoolRouteCommand,
 } from "@/lib/trading-feed-helpers";
+import { resolveAgentCanvasMode } from "@/lib/routing/agent-canvas-route";
 import { APP_ROUTES } from "@/lib/routing/app-routes";
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth";
 import {
@@ -35,38 +40,52 @@ import {
 
 export default function AgentsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { sessionReady, accountMode } = useSession();
-  const isDemo = accountMode === "demo";
+  const { canvasMode, modeOverride } = resolveAgentCanvasMode(
+    accountMode,
+    searchParams.get("mode"),
+  );
+  const isDemo = canvasMode === "demo";
   const [poolAmounts, setPoolAmounts] = useState<PoolAllocations>(
     DEFAULT_POOL_ALLOCATIONS,
   );
+  const [quickswapPools, setQuickswapPools] = useState<QuickSwapPool[]>([]);
   const [loading, setLoading] = useState(true);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const { layouts, updatePanel, toggleCollapsed, hydrated } =
-    usePanelLayout(accountMode);
+    usePanelLayout(canvasMode);
   const [defaultsAppliedFor, setDefaultsAppliedFor] = useState<
     AccountMode | null
   >(null);
 
-  const poolIds = useMemo(() => activePoolIds(poolAmounts), [poolAmounts]);
+  const canvasPools = useMemo(
+    () => resolveStrategyCanvasPools(poolAmounts, quickswapPools),
+    [poolAmounts, quickswapPools],
+  );
 
   const idlePoolRoute = useMemo(() => {
-    const poolId = largestAllocationPoolId(poolAmounts);
+    const poolId = largestResolvablePoolId(poolAmounts, quickswapPools);
     return idleRouteForPool(poolId);
-  }, [poolAmounts]);
+  }, [poolAmounts, quickswapPools]);
 
   const { connected, feedItems, routeCommand, cycleActive } = useTradingSocket({
-    accountMode: accountMode ?? undefined,
-    enabled: !loading && accountMode != null,
+    accountMode: canvasMode ?? undefined,
+    enabled: !loading && canvasMode != null,
     hydrateFromHistory: true,
   });
 
-  const displayRoute = routeCommand ?? idlePoolRoute;
+  const displayRoute = useMemo(() => {
+    const raw = routeCommand ?? idlePoolRoute;
+    return normalizePoolRouteCommand(raw, quickswapPools);
+  }, [routeCommand, idlePoolRoute, quickswapPools]);
 
   useEffect(() => {
     if (!sessionReady) {
       return;
     }
+
+    setLoading(true);
 
     async function load() {
       const route = await resolvePostAuthRoute();
@@ -75,28 +94,35 @@ export default function AgentsPage() {
         return;
       }
 
-      const strategyResult = await getAgentStrategy(accountMode ?? undefined);
+      const [strategyResult, poolsResult] = await Promise.all([
+        getAgentStrategy(canvasMode ?? undefined),
+        fetchPools(),
+      ]);
 
       if (strategyResult.success && strategyResult.data?.strategy) {
         setPoolAmounts(strategyResult.data.strategy.poolAllocations);
+      }
+
+      if (poolsResult.success && poolsResult.data?.pools) {
+        setQuickswapPools(poolsResult.data.pools);
       }
 
       setLoading(false);
     }
 
     void load();
-  }, [router, sessionReady, accountMode]);
+  }, [router, sessionReady, canvasMode]);
 
   useEffect(() => {
-    if (!hydrated || !accountMode || !workspaceRef.current) {
+    if (!hydrated || !canvasMode || !workspaceRef.current) {
       return;
     }
-    if (defaultsAppliedFor === accountMode) {
+    if (defaultsAppliedFor === canvasMode) {
       return;
     }
     const hasStoredLayout =
       typeof window !== "undefined" &&
-      !!localStorage.getItem(panelLayoutStorageKey(accountMode));
+      !!localStorage.getItem(panelLayoutStorageKey(canvasMode));
     if (!hasStoredLayout) {
       const h = workspaceRef.current.clientHeight;
       updatePanel("protocol-allocation", {
@@ -112,8 +138,8 @@ export default function AgentsPage() {
         y: snapToGrid(Math.max(24, h - 120)),
       });
     }
-    setDefaultsAppliedFor(accountMode);
-  }, [hydrated, accountMode, defaultsAppliedFor, updatePanel]);
+    setDefaultsAppliedFor(canvasMode);
+  }, [hydrated, canvasMode, defaultsAppliedFor, updatePanel]);
 
   const setPosition = (id: PanelId) => (x: number, y: number) => {
     updatePanel(id, { x, y });
@@ -131,7 +157,18 @@ export default function AgentsPage() {
               ? "Demo Agent Network"
               : "QuickSwap Agent Network"
         }
-        badge={accountMode ? <AccountModeBadge mode={accountMode} /> : undefined}
+        badge={
+          canvasMode ? (
+            <div className="flex items-center gap-2">
+              <AccountModeBadge mode={canvasMode} />
+              {modeOverride ? (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  debug override
+                </span>
+              ) : null}
+            </div>
+          ) : undefined
+        }
         action={
           connected ? (
             <span
@@ -162,9 +199,9 @@ export default function AgentsPage() {
         }}
       >
         <PoolTradingCanvas
-          poolIds={poolIds}
+          canvasPools={canvasPools}
           routeCommand={displayRoute}
-          accountMode={accountMode ?? undefined}
+          accountMode={canvasMode ?? undefined}
         />
 
         <DraggableGridPanel
@@ -180,8 +217,8 @@ export default function AgentsPage() {
           contentClassName="py-2"
         >
           <PoolNodesLegend
-            poolIds={poolIds}
-            accountMode={accountMode ?? undefined}
+            canvasPools={canvasPools}
+            accountMode={canvasMode ?? undefined}
           />
         </DraggableGridPanel>
 
@@ -198,9 +235,9 @@ export default function AgentsPage() {
           alignRight
           contentClassName="p-0"
         >
-          {accountMode ? (
+          {canvasMode ? (
             <AgentTradingFeed
-              accountMode={accountMode}
+              accountMode={canvasMode}
               items={feedItems}
               connected={connected}
               className="max-h-[min(50vh,360px)] border-0 bg-transparent"
@@ -220,21 +257,30 @@ export default function AgentsPage() {
           width={300}
         >
           <div className="space-y-3">
-            {Object.entries(poolAmounts)
-              .filter(([, amount]) => amount > 0)
-              .map(([key, amount]) => (
+            {canvasPools.length === 0 ? (
+              <p className="font-mono text-[10px] text-muted-foreground">
+                No pools in strategy.
+              </p>
+            ) : (
+              canvasPools.map((pool) => (
                 <div
-                  key={key}
+                  key={pool.poolId}
                   className="flex items-center justify-between gap-3"
                 >
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    {POOL_LABELS[key] ?? key}
-                  </span>
-                  <span className="font-mono text-xs text-foreground">
-                    {(amount / 1_000_000).toFixed(0)}M
+                  <div className="min-w-0">
+                    <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {pool.label}
+                    </p>
+                    <p className="font-mono text-[10px] text-muted-foreground/80">
+                      {pool.pair}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-mono text-xs text-foreground">
+                    {(pool.allocationAmount / 1_000_000).toFixed(0)}M
                   </span>
                 </div>
-              ))}
+              ))
+            )}
           </div>
         </DraggableGridPanel>
 

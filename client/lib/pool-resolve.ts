@@ -1,5 +1,7 @@
 import type { QuickSwapPool } from "@/lib/api/quickswap-types"
 import type { PoolAllocations } from "@/lib/api/strategy-types"
+import { poolPairLabel } from "@/lib/pool-display"
+import { POOL_LABELS } from "@/lib/strategy-presets"
 
 /** Legacy strategy slugs → token symbols (order-independent). */
 const LEGACY_POOL_PAIRS: Record<string, readonly [string, string]> = {
@@ -67,4 +69,54 @@ export function activeResolvablePoolEntries(
   return Object.entries(poolAllocations)
     .filter(([, amount]) => amount > 0)
     .filter(([poolId]) => resolvePoolById(poolId, pools) != null)
+}
+
+export type StrategyCanvasPool = {
+  poolId: string
+  label: string
+  pair: string
+  allocationAmount: number
+}
+
+/** Strategy pools accepted in setup — one canvas node per entry. */
+export function resolveStrategyCanvasPools(
+  poolAllocations: PoolAllocations,
+  pools: readonly QuickSwapPool[],
+): StrategyCanvasPool[] {
+  return activeResolvablePoolEntries(poolAllocations, pools).map(
+    ([allocationId, allocationAmount]) => {
+      const pool = resolvePoolById(allocationId, pools)!
+      return {
+        poolId: pool.id,
+        label: pool.label || POOL_LABELS[allocationId] || poolPairLabel(pool),
+        pair: poolPairLabel(pool),
+        allocationAmount,
+      }
+    },
+  )
+}
+
+export function largestResolvablePoolId(
+  poolAllocations: PoolAllocations,
+  pools: readonly QuickSwapPool[],
+): string | null {
+  let bestId: string | null = null
+  let bestAmount = 0
+
+  for (const [allocationId, amount] of activeResolvablePoolEntries(
+    poolAllocations,
+    pools,
+  )) {
+    if (amount <= bestAmount) {
+      continue
+    }
+    const pool = resolvePoolById(allocationId, pools)
+    if (!pool) {
+      continue
+    }
+    bestAmount = amount
+    bestId = pool.id
+  }
+
+  return bestId
 }

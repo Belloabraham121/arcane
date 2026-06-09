@@ -7,6 +7,8 @@ import {
   type TradingHistoryDetail,
   type TradingHistoryListItem,
 } from "@/lib/api/trading"
+import type { QuickSwapPool } from "@/lib/api/quickswap-types"
+import { resolvePoolById } from "@/lib/pool-resolve"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 
 export type PoolRouteCommand = {
@@ -162,6 +164,32 @@ export function idleRouteForPool(poolId: string | null): PoolRouteCommand | null
     poolFrom: poolId,
     poolTo: poolId,
     replay: false,
+  }
+}
+
+export function normalizePoolRouteCommand(
+  route: PoolRouteCommand | null,
+  quickswapPools: readonly QuickSwapPool[],
+): PoolRouteCommand | null {
+  if (!route) {
+    return null
+  }
+
+  const poolFrom = route.poolFrom
+    ? (resolvePoolById(route.poolFrom, quickswapPools)?.id ?? null)
+    : null
+  const poolTo = route.poolTo
+    ? (resolvePoolById(route.poolTo, quickswapPools)?.id ?? null)
+    : null
+
+  if (!poolFrom && !poolTo) {
+    return null
+  }
+
+  return {
+    ...route,
+    poolFrom,
+    poolTo,
   }
 }
 

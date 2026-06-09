@@ -130,8 +130,8 @@ flowchart TB
 ## Phase D — Dashboard & navigation integration
 
 ### D.1 Agents tab → canvas
-- [ ] “View demo agents” / “View live agents” already links to `/dashboard/agents` — verify session `accountMode` matches before navigation
-- [ ] Optional: pass `?mode=demo` query as override for debugging (read in agents page)
+- [x] “View demo agents” / “View live agents” — `ViewAgentsLink` syncs session mode before navigate; href includes `?mode=`
+- [x] Agents page reads `?mode=demo|live` as debug override (`resolveAgentCanvasMode`)
 
 ### D.2 Account mode switch consistency
 - [x] Dashboard `AccountModeSwitch` (demo \| live toggle)

@@ -57,7 +57,7 @@ export default function AgentsPage() {
         return;
       }
 
-      const strategyResult = await getAgentStrategy();
+      const strategyResult = await getAgentStrategy(accountMode ?? undefined);
 
       if (strategyResult.success && strategyResult.data?.strategy) {
         setPoolAmounts(strategyResult.data.strategy.poolAllocations);
@@ -67,7 +67,7 @@ export default function AgentsPage() {
     }
 
     void load();
-  }, [router, sessionReady]);
+  }, [router, sessionReady, accountMode]);
 
   useEffect(() => {
     if (!hydrated || defaultsApplied || !workspaceRef.current) return;

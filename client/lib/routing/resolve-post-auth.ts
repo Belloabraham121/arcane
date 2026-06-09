@@ -20,7 +20,7 @@ export async function resolvePostAuthRoute(): Promise<string> {
     return accountModeRoute
   }
 
-  const strategyResult = await getAgentStrategy()
+  const strategyResult = await getAgentStrategy(meResult.data.user.accountMode!)
   if (!strategyResult.success || !strategyResult.data?.strategy) {
     return APP_ROUTES.strategyOnboarding
   }

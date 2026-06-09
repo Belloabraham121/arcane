@@ -393,21 +393,23 @@ export async function listActiveStrategiesForWorker(): Promise<
     },
   });
 
-  return rows.map((row) => ({
-    userId: row.user.id,
-    strategyId: row.id,
-    strategyType: row.strategyType,
-    accountMode: row.user.accountMode,
-    walletAddress: row.user.walletAddress,
-    depositAmount: row.depositAmount,
-    lastCycleAt: row.lastCycleAt,
-    tradingEnabledAt: row.tradingEnabledAt,
-    cycleIntervalMinutes: row.cycleIntervalMinutes,
-    lastObservedBalanceFingerprint: row.lastObservedBalanceFingerprint,
-    poolIds: row.poolAllocations
-      .filter((allocation) => allocation.amount > 0)
-      .map((allocation) => allocation.poolId),
-  }));
+  return rows
+    .filter((row) => row.user.accountMode === row.accountMode)
+    .map((row) => ({
+      userId: row.user.id,
+      strategyId: row.id,
+      strategyType: row.strategyType,
+      accountMode: row.accountMode,
+      walletAddress: row.user.walletAddress,
+      depositAmount: row.depositAmount,
+      lastCycleAt: row.lastCycleAt,
+      tradingEnabledAt: row.tradingEnabledAt,
+      cycleIntervalMinutes: row.cycleIntervalMinutes,
+      lastObservedBalanceFingerprint: row.lastObservedBalanceFingerprint,
+      poolIds: row.poolAllocations
+        .filter((allocation) => allocation.amount > 0)
+        .map((allocation) => allocation.poolId),
+    }));
 }
 
 export async function updateBalanceFingerprint(

@@ -148,7 +148,10 @@ export async function runTradingWorkerTick(): Promise<void> {
           intervalMinutes,
         })
       ) {
-        const fullStrategy = await findStrategyByUserId(strategy.userId);
+        const fullStrategy = await findStrategyByUserId(
+          strategy.userId,
+          strategy.accountMode,
+        );
         const subAgents = resolveSubAgents(
           strategy.strategyType as "auto" | "custom",
           fullStrategy?.subAgentConfig,

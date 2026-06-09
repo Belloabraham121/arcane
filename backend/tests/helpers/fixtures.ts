@@ -95,7 +95,7 @@ export async function createActiveStrategyFixture(): Promise<TestUserFixture> {
   });
 
   const poolId = "0xd1f1f7b4354bd07e2035d95c12e3192017928054";
-  const strategy = await upsertStrategy(user.id, {
+  const strategy = await upsertStrategy(user.id, "live", {
     strategyType: "custom",
     status: "active",
     depositAmount: 1000,

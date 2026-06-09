@@ -6,6 +6,7 @@ import { Check, Copy } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { AccountModeBadge } from "@/components/layout/account-mode-badge"
+import { AccountModeSwitch } from "@/components/layout/account-mode-switch"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
 import { getAgentStrategy } from "@/lib/api/strategy"
 import {
@@ -55,9 +56,13 @@ const ease = [0.22, 1, 0.36, 1] as const
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { sessionReady, accountMode, demoWalletAddress, tradingWalletAddress } =
-    useSession()
-  const [previewDemo, setPreviewDemo] = useState(false)
+  const {
+    sessionReady,
+    accountMode,
+    demoWalletAddress,
+    tradingWalletAddress,
+    refreshSession,
+  } = useSession()
   const [addressCopied, setAddressCopied] = useState(false)
   const [demoDepositOpen, setDemoDepositOpen] = useState(false)
   const [strategy, setStrategy] = useState<AgentStrategy | null>(null)
@@ -86,18 +91,37 @@ export default function DashboardPage() {
         return
       }
 
-      const strategyResult = await getAgentStrategy()
+      const strategyResult = await getAgentStrategy(accountMode ?? undefined)
       if (cancelled) {
         return
       }
       if (strategyResult.success && strategyResult.data?.strategy) {
         setStrategy(strategyResult.data.strategy)
+      } else {
+        setStrategy(null)
       }
       setStrategyLoading(false)
     }
 
     void loadStrategy()
-  }, [router, sessionReady])
+  }, [router, sessionReady, accountMode])
+
+  async function handleAccountModeSwitched(mode: AccountMode) {
+    setStrategyLoading(true)
+    setStrategy(null)
+    await refreshSession()
+    const strategyResult = await getAgentStrategy(mode)
+    if (strategyResult.success && strategyResult.data?.strategy) {
+      setStrategy(strategyResult.data.strategy)
+      setStrategyLoading(false)
+      return
+    }
+    setStrategyLoading(false)
+    const route = await resolvePostAuthRoute()
+    if (route !== APP_ROUTES.dashboard) {
+      router.replace(route)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -122,10 +146,7 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const viewMode: AccountMode | undefined =
-    accountMode === "live" && previewDemo
-      ? "demo"
-      : accountMode ?? undefined
+  const viewMode: AccountMode | undefined = accountMode ?? undefined
 
   const portfolioEnabled =
     Boolean(strategy?.status === "active" && viewMode != null)
@@ -303,36 +324,22 @@ export default function DashboardPage() {
         }
         badge={viewMode ? <AccountModeBadge mode={viewMode} /> : undefined}
         action={
-          strategy && !strategyLoading ? (
+          sessionReady ? (
             <div className="flex shrink-0 items-center gap-4">
-              {accountMode === "live" && (
-                previewDemo ? (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewDemo(false)}
-                    className="font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    Back to live
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewDemo(true)}
-                    className="font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    Preview demo
-                  </button>
-                )
-              )}
-              <button
-                type="button"
-                onClick={() =>
-                  router.push(`${setupRouteFor(strategy.strategyType)}?edit=1`)
-                }
-                className="font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:text-[#ff7a2a]"
-              >
-                Edit setup
-              </button>
+              <AccountModeSwitch
+                onSwitched={(mode) => void handleAccountModeSwitched(mode)}
+              />
+              {strategy && !strategyLoading ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`${setupRouteFor(strategy.strategyType)}?edit=1`)
+                  }
+                  className="font-mono text-xs uppercase tracking-widest text-[#ea580c] transition-colors hover:text-[#ff7a2a]"
+                >
+                  Edit setup
+                </button>
+              ) : null}
             </div>
           ) : undefined
         }
@@ -348,13 +355,6 @@ export default function DashboardPage() {
             transition={{ duration: 0.5, ease }}
             className="space-y-8"
           >
-            {accountMode === "live" && previewDemo && (
-              <p className="border border-amber-500/30 bg-amber-500/5 px-4 py-3 font-mono text-xs text-amber-700 dark:text-amber-400">
-                Previewing demo portfolio metrics. Your account trades on live
-                mainnet — demo numbers are illustrative only.
-              </p>
-            )}
-
             {portfolioError && (
               <p className="border border-[#ea580c]/30 bg-[#ea580c]/5 px-4 py-3 font-mono text-xs text-[#ea580c]">
                 {portfolioError}

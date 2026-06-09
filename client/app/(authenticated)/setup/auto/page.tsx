@@ -151,7 +151,7 @@ function AutoSetupContent() {
     let cancelled = false;
 
     async function loadStrategy() {
-      const strategyResult = await getAgentStrategy();
+      const strategyResult = await getAgentStrategy(accountMode ?? undefined);
       if (cancelled) {
         return;
       }
@@ -202,7 +202,7 @@ function AutoSetupContent() {
       return;
     }
 
-    void getAgentStrategy().then((strategyResult) => {
+    void getAgentStrategy(accountMode ?? undefined).then((strategyResult) => {
       const saved =
         strategyResult.success && strategyResult.data?.strategy
           ? strategyResult.data.strategy.poolAllocations
@@ -216,7 +216,7 @@ function AutoSetupContent() {
       );
       poolsHydratedRef.current = true;
     });
-  }, [pools, autoMeta, autoMetaLoading]);
+  }, [pools, autoMeta, autoMetaLoading, accountMode]);
 
   async function saveSetup() {
     const amount = Number(depositInput);

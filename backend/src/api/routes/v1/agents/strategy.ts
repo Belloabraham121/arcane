@@ -59,11 +59,27 @@ const patchSubAgentsSchema = z.object({
   ),
 });
 
+const strategyQuerySchema = z.object({
+  mode: z.enum(["demo", "live"]).optional(),
+});
+
 export const agentStrategyRouter = Router();
 
 agentStrategyRouter.get("/api/v1/agents/strategy", requireAuth, async (req, res) => {
+  const parsedQuery = strategyQuerySchema.safeParse(req.query);
+  if (!parsedQuery.success) {
+    return fail(req, res, 400, {
+      code: "VALIDATION_ERROR",
+      message: "Invalid strategy query",
+      details: parsedQuery.error.flatten().fieldErrors,
+    });
+  }
+
   try {
-    const strategy = await getUserStrategy(req.user.id);
+    const strategy = await getUserStrategy(
+      req.user.id,
+      parsedQuery.data.mode,
+    );
     if (!strategy) {
       return fail(req, res, 404, {
         code: "STRATEGY_NOT_FOUND",

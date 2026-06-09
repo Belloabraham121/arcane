@@ -36,7 +36,7 @@ export default function StrategyOnboardingPage() {
           return;
         }
 
-        const strategyResult = await getAgentStrategy();
+        const strategyResult = await getAgentStrategy(accountMode ?? undefined);
         if (strategyResult.success && strategyResult.data?.strategy) {
           const { strategy } = strategyResult.data;
           if (strategy.status === "active" && strategy.depositAmount > 0) {

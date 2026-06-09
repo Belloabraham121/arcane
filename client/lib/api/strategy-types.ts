@@ -22,6 +22,7 @@ export type SubAgentConfigItem = {
 
 export type AgentStrategy = {
   id: string;
+  accountMode: "demo" | "live";
   strategyType: StrategyType;
   status: "draft" | "active";
   depositAmount: number;

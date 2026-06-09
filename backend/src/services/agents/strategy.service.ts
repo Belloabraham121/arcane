@@ -1,3 +1,4 @@
+import type { AccountMode } from "@prisma/client";
 import { createLogger } from "../../shared/logger";
 import { findUserById } from "../auth/user.repository";
 import { handleStrategyActivation } from "../portfolio/activation.service";
@@ -276,12 +277,29 @@ function parseCycleIntervalMinutes(
   return Math.round(value);
 }
 
+async function resolveStrategyAccountMode(
+  userId: string,
+  modeOverride?: AccountMode,
+): Promise<AccountMode> {
+  const user = await findUserById(userId);
+  const mode = modeOverride ?? user?.accountMode ?? null;
+  if (!mode) {
+    throw new StrategyError(
+      "ACCOUNT_MODE_REQUIRED",
+      "Choose demo or live before configuring a strategy",
+      400,
+    );
+  }
+  return mode;
+}
+
 function toResponse(
   strategy: NonNullable<Awaited<ReturnType<typeof repo.findStrategyByUserId>>>,
 ): AgentStrategyResponse {
   const strategyType = strategy.strategyType as StrategyType;
   return {
     id: strategy.id,
+    accountMode: strategy.accountMode,
     strategyType,
     status: strategy.status as AgentStrategyResponse["status"],
     depositAmount: strategy.depositAmount,
@@ -297,8 +315,10 @@ function toResponse(
 
 export async function getUserStrategy(
   userId: string,
+  modeOverride?: AccountMode,
 ): Promise<AgentStrategyResponse | null> {
-  const strategy = await repo.findStrategyByUserId(userId);
+  const accountMode = await resolveStrategyAccountMode(userId, modeOverride);
+  const strategy = await repo.findStrategyByUserId(userId, accountMode);
   if (!strategy) {
     return null;
   }
@@ -317,8 +337,8 @@ export async function upsertUserStrategy(
   },
 ): Promise<AgentStrategyResponse> {
   const status = input.status ?? "draft";
-  const user = await findUserById(userId);
-  const isDemo = user?.accountMode === "demo";
+  const accountMode = await resolveStrategyAccountMode(userId);
+  const isDemo = accountMode === "demo";
 
   let depositAmount =
     input.depositAmount ?? (status === "active" ? DEFAULT_DEPOSIT_AMOUNT : 0);
@@ -378,7 +398,7 @@ export async function upsertUserStrategy(
     );
   }
 
-  const existing = await repo.findStrategyByUserId(userId);
+  const existing = await repo.findStrategyByUserId(userId, accountMode);
   const activating = status === "active" && existing?.status !== "active";
   const triggerFirstCycle = shouldTriggerCycleOnActivate(
     existing?.status,
@@ -387,7 +407,7 @@ export async function upsertUserStrategy(
     depositAmount,
   );
 
-  const strategy = await repo.upsertStrategy(userId, {
+  const strategy = await repo.upsertStrategy(userId, accountMode, {
     strategyType: input.strategyType,
     depositAmount,
     poolAllocations,
@@ -398,6 +418,7 @@ export async function upsertUserStrategy(
 
   log.info("Agent strategy saved", {
     userId,
+    accountMode,
     strategyType: input.strategyType,
     depositAmount,
     status,
@@ -427,7 +448,12 @@ export async function patchPoolAllocations(
   userId: string,
   poolAllocations: PoolAllocations,
 ): Promise<AgentStrategyResponse> {
-  const strategy = await repo.updatePoolAllocations(userId, poolAllocations);
+  const accountMode = await resolveStrategyAccountMode(userId);
+  const strategy = await repo.updatePoolAllocations(
+    userId,
+    accountMode,
+    poolAllocations,
+  );
   if (!strategy) {
     throw new StrategyError(
       "STRATEGY_NOT_FOUND",
@@ -453,7 +479,12 @@ export async function patchSubAgents(
     );
   }
 
-  const strategy = await repo.updateSubAgentConfig(userId, subAgents);
+  const accountMode = await resolveStrategyAccountMode(userId);
+  const strategy = await repo.updateSubAgentConfig(
+    userId,
+    accountMode,
+    subAgents,
+  );
   if (!strategy) {
     throw new StrategyError(
       "STRATEGY_NOT_FOUND",

@@ -116,6 +116,7 @@ export const DEFAULT_CUSTOM_SUB_AGENTS: SubAgentConfigItem[] = [
 
 export type AgentStrategyResponse = {
   id: string;
+  accountMode: "demo" | "live";
   strategyType: StrategyType;
   status: StrategyStatus;
   depositAmount: number;

@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import type { AccountMode } from "./auth";
 import type {
   AgentStrategy,
   PoolAllocations,
@@ -6,8 +7,14 @@ import type {
   SubAgentConfigItem,
 } from "./strategy-types";
 
-export async function getAgentStrategy() {
-  return apiRequest<{ strategy: AgentStrategy }>("/api/v1/agents/strategy");
+function strategyQuery(mode?: AccountMode): string {
+  return mode ? `?mode=${encodeURIComponent(mode)}` : "";
+}
+
+export async function getAgentStrategy(mode?: AccountMode) {
+  return apiRequest<{ strategy: AgentStrategy }>(
+    `/api/v1/agents/strategy${strategyQuery(mode)}`,
+  );
 }
 
 export async function upsertAgentStrategy(input: {
@@ -34,8 +41,11 @@ export async function patchPoolAllocations(poolAllocations: PoolAllocations) {
 }
 
 export async function patchSubAgents(subAgents: SubAgentConfigItem[]) {
-  return apiRequest<{ strategy: AgentStrategy }>("/api/v1/agents/strategy/sub-agents", {
-    method: "PATCH",
-    body: JSON.stringify({ subAgents }),
-  });
+  return apiRequest<{ strategy: AgentStrategy }>(
+    "/api/v1/agents/strategy/sub-agents",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ subAgents }),
+    },
+  );
 }

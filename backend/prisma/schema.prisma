@@ -54,7 +54,7 @@ model User {
   accountMode          AccountMode?   @map("account_mode")
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
-  agentStrategy        AgentStrategy?
+  agentStrategies      AgentStrategy[]
   portfolioSnapshots   PortfolioSnapshot[]
 
   @@map("user")
@@ -76,8 +76,10 @@ model PortfolioSnapshot {
 
 model AgentStrategy {
   id               String           @id @default(uuid()) @db.Uuid
-  userId           String           @unique @map("user_id") @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Separate strategy config per account mode (demo fork vs live mainnet).
+  accountMode      AccountMode      @default(live) @map("account_mode")
   strategyType     StrategyType     @map("strategy_type")
   status           StrategyStatus   @default(draft)
   depositAmount    Float            @default(0) @map("deposit_amount")
@@ -98,6 +100,7 @@ model AgentStrategy {
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
+  @@unique([userId, accountMode], map: "uk_agent_strategy_user_account_mode")
   @@map("agent_strategy")
 }
 

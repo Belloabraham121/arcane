@@ -138,7 +138,7 @@ function CustomSetupContent() {
     let cancelled = false
 
     async function loadStrategy() {
-      const strategyResult = await getAgentStrategy()
+      const strategyResult = await getAgentStrategy(accountMode ?? undefined)
       if (cancelled) {
         return
       }
@@ -183,7 +183,7 @@ function CustomSetupContent() {
       return
     }
 
-    void getAgentStrategy().then((strategyResult) => {
+    void getAgentStrategy(accountMode ?? undefined).then((strategyResult) => {
       const saved =
         strategyResult.success && strategyResult.data?.strategy
           ? strategyResult.data.strategy.poolAllocations
@@ -191,7 +191,7 @@ function CustomSetupContent() {
       setPoolAmounts(mergeStrategyPoolAllocations(saved, pools))
       poolsHydratedRef.current = true
     })
-  }, [pools])
+  }, [pools, accountMode])
 
   async function saveSetup() {
     const amount = Number(depositInput)

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { AccountMode, Prisma } from "@prisma/client";
 import type {
   PoolAllocations,
   StrategyStatus,
@@ -11,9 +11,14 @@ const strategyInclude = {
   poolAllocations: true,
 } as const;
 
-export async function findStrategyByUserId(userId: string) {
+export async function findStrategyByUserId(
+  userId: string,
+  accountMode: AccountMode,
+) {
   return prisma.agentStrategy.findUnique({
-    where: { userId },
+    where: {
+      userId_accountMode: { userId, accountMode },
+    },
     include: strategyInclude,
   });
 }
@@ -55,6 +60,7 @@ async function syncPoolAllocationRows(
 
 export async function upsertStrategy(
   userId: string,
+  accountMode: AccountMode,
   input: {
     strategyType: StrategyType;
     status?: StrategyStatus;
@@ -65,7 +71,9 @@ export async function upsertStrategy(
   },
 ) {
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.agentStrategy.findUnique({ where: { userId } });
+    const existing = await tx.agentStrategy.findUnique({
+      where: { userId_accountMode: { userId, accountMode } },
+    });
 
     const activating = input.status === "active";
     const tradingEnabledAt =
@@ -79,9 +87,10 @@ export async function upsertStrategy(
         : existing?.cycleIntervalMinutes ?? null;
 
     const strategy = await tx.agentStrategy.upsert({
-      where: { userId },
+      where: { userId_accountMode: { userId, accountMode } },
       create: {
         userId,
+        accountMode,
         strategyType: input.strategyType,
         status: input.status ?? "draft",
         depositAmount: input.depositAmount,
@@ -114,9 +123,10 @@ export async function upsertStrategy(
 
 export async function updatePoolAllocations(
   userId: string,
+  accountMode: AccountMode,
   poolAllocations: PoolAllocations,
 ) {
-  const existing = await findStrategyByUserId(userId);
+  const existing = await findStrategyByUserId(userId, accountMode);
   if (!existing) {
     return null;
   }
@@ -136,8 +146,12 @@ export async function updatePoolAllocations(
   });
 }
 
-export async function updateSubAgentConfig(userId: string, subAgentConfig: SubAgentConfigItem[]) {
-  const existing = await findStrategyByUserId(userId);
+export async function updateSubAgentConfig(
+  userId: string,
+  accountMode: AccountMode,
+  subAgentConfig: SubAgentConfigItem[],
+) {
+  const existing = await findStrategyByUserId(userId, accountMode);
   if (!existing) {
     return null;
   }

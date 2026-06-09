@@ -453,12 +453,10 @@ export async function getTradingStatusForUser(
   userId: string,
   modeOverride?: AccountMode,
 ): Promise<TradingStatusResponse> {
-  const [strategy, user] = await Promise.all([
-    repo.findStrategyByUserId(userId),
-    findUserById(userId),
-  ]);
+  const user = await findUserById(userId);
   const base = getTradingStatus(userId);
   const accountMode = modeOverride ?? user?.accountMode ?? "live";
+  const strategy = await repo.findStrategyByUserId(userId, accountMode);
   const demoAvailability = await getDemoTradingAvailability();
 
   const dbLastCycle =
@@ -516,7 +514,13 @@ export async function runTradingCycle(
   emitTradingCycleStarted(userId, { cycleId, reason, startedAt });
 
   try {
-    const strategy = await repo.findStrategyByUserId(userId);
+    const user = await findUserById(userId);
+    if (!user) {
+      throw new TradingError("USER_NOT_FOUND", "User not found", 404);
+    }
+
+    const accountMode = overrides?.accountMode ?? user.accountMode ?? "live";
+    const strategy = await repo.findStrategyByUserId(userId, accountMode);
     if (!strategy) {
       throw new TradingError("STRATEGY_NOT_FOUND", "No agent strategy found", 404);
     }
@@ -531,11 +535,6 @@ export async function runTradingCycle(
         "DEPOSIT_REQUIRED",
         "Deposit funds to the agent wallet before trading",
       );
-    }
-
-    const user = await findUserById(userId);
-    if (!user) {
-      throw new TradingError("USER_NOT_FOUND", "User not found", 404);
     }
 
     const effectiveAccountMode = resolveAccountModeForCycle(
@@ -839,17 +838,20 @@ export async function runTradingCycle(
     };
 
     try {
-      const strategy = await repo.findStrategyByUserId(userId);
-      if (strategy) {
-        failedSummary.strategyId = strategy.id;
-        failedSummary.depositAmount = strategy.depositAmount;
-        const user = await findUserById(userId);
-        if (user) {
+      const user = await findUserById(userId);
+      if (user?.accountMode) {
+        const strategy = await repo.findStrategyByUserId(
+          userId,
+          user.accountMode,
+        );
+        if (strategy) {
+          failedSummary.strategyId = strategy.id;
+          failedSummary.depositAmount = strategy.depositAmount;
           const failedTrading = resolveTradingWallet(user);
           failedSummary.accountMode = failedTrading.accountMode;
           failedSummary.walletAddress = failedTrading.walletAddress;
+          await persistTradingCycle(failedSummary);
         }
-        await persistTradingCycle(failedSummary);
       }
     } catch (persistErr) {
       const persistMessage =

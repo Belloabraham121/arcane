@@ -117,7 +117,7 @@ export async function getPortfolioSummary(
 
   await assertDemoRpcHealthy(resolved.rpcMode);
 
-  const strategy = await findStrategyByUserId(userId);
+  const strategy = await findStrategyByUserId(userId, accountMode);
   if (!strategy) {
     throw new PortfolioStrategyRequiredError();
   }

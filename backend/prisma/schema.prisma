@@ -55,8 +55,23 @@ model User {
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
   agentStrategy        AgentStrategy?
+  portfolioSnapshots   PortfolioSnapshot[]
 
   @@map("user")
+}
+
+model PortfolioSnapshot {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountMode   AccountMode @map("account_mode")
+  walletAddress String      @map("wallet_address") @db.Text
+  totalValueUsd Float       @map("total_value_usd")
+  balancesJson  Json        @map("balances_json")
+  capturedAt    DateTime    @default(now()) @map("captured_at") @db.Timestamptz
+
+  @@index([userId, capturedAt(sort: Desc)], map: "idx_portfolio_snapshot_user_captured")
+  @@map("portfolio_snapshot")
 }
 
 model AgentStrategy {
@@ -73,6 +88,11 @@ model AgentStrategy {
   cycleIntervalMinutes Int?         @map("cycle_interval_minutes")
   /// Fingerprint of last observed wallet balances (deposit detection).
   lastObservedBalanceFingerprint String? @map("last_observed_balance_fingerprint") @db.Text
+  /// First detected wallet value (USD) after activation.
+  detectedDepositUsd Float?       @map("detected_deposit_usd")
+  /// P&L baseline = max(manual depositAmount, detectedDepositUsd).
+  baselineUsd        Float?        @map("baseline_usd")
+  baselineSetAt      DateTime?     @map("baseline_set_at") @db.Timestamptz
   poolAllocations  PoolAllocation[]
   tradingCycles    TradingCycle[]
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz

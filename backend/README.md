@@ -72,6 +72,8 @@ Persist auto vs custom strategy and protocol allocation (Uniswap, AAVE, Compound
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/api/v1/portfolio/summary` | Real USD metrics (`?mode=demo\|live`) |
+| `GET` | `/api/v1/wallets/balances` | On-chain balances (`?mode=demo\|live`) |
 | `GET` | `/api/v1/agents/strategy` | Current user's strategy |
 | `PUT` | `/api/v1/agents/strategy` | Upsert `{ strategyType, depositAmount?, poolAllocations?, subAgents? }` |
 | `PATCH` | `/api/v1/agents/strategy/pool-allocations` | Update QuickSwap pool splits |

@@ -60,6 +60,7 @@ async function start() {
         "GET /api/v1/quickswap/pools",
         "GET /api/v1/quickswap/pools/:poolId",
         "GET /api/v1/quickswap/pools/:poolId/quote",
+        "GET /api/v1/portfolio/summary",
         "GET /api/v1/wallets/balances",
         "WS  /socket.io (trading:cycle_started|action_executed|cycle_completed)",
       ],

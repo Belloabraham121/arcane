@@ -1,4 +1,5 @@
 import { createLogger } from "../../shared/logger";
+import { handleStrategyActivation } from "../portfolio/activation.service";
 import {
   scheduleTradingCycle,
   shouldTriggerCycleOnActivate,
@@ -365,6 +366,7 @@ export async function upsertUserStrategy(
   }
 
   const existing = await repo.findStrategyByUserId(userId);
+  const activating = status === "active" && existing?.status !== "active";
   const triggerFirstCycle = shouldTriggerCycleOnActivate(
     existing?.status,
     existing?.lastCycleAt,
@@ -388,6 +390,18 @@ export async function upsertUserStrategy(
     status,
     triggerFirstCycle,
   });
+
+  if (activating) {
+    const activePoolIds = Object.entries(poolAllocations)
+      .filter(([, amount]) => amount > 0)
+      .map(([id]) => id);
+    void handleStrategyActivation({
+      userId,
+      strategyId: strategy.id,
+      manualDepositUsd: depositAmount,
+      poolIds: activePoolIds,
+    });
+  }
 
   if (triggerFirstCycle) {
     scheduleTradingCycle(userId, "activation");

@@ -11,6 +11,11 @@ import {
   pickSmartRebalancePair,
   proactiveDriftThresholdPercent,
 } from "./trading-recommendations";
+import { schedulePortfolioSnapshot } from "../portfolio/snapshot.service";
+import {
+  resolvePortfolioRpcMode,
+  resolvePortfolioWallet,
+} from "../portfolio/wallet-context.service";
 import { getWalletBalances } from "../wallet/token-balance.service";
 import * as repo from "./strategy.repository";
 import { persistTradingCycle } from "./trading.repository";
@@ -647,6 +652,18 @@ export async function runTradingCycle(
         message: persistMessage,
       });
     }
+
+    const resolvedWallet = resolvePortfolioWallet(
+      user.accountMode,
+      user.walletAddress as Address,
+    );
+    schedulePortfolioSnapshot({
+      userId,
+      accountMode: user.accountMode,
+      walletAddress: resolvedWallet.walletAddress,
+      poolIds: [...activePoolIds],
+      rpcMode: resolvePortfolioRpcMode(user.accountMode),
+    });
 
     lastCycleByUser.set(userId, summary);
 

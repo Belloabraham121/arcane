@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccountModeBadge } from "@/components/layout/account-mode-badge";
@@ -54,7 +54,7 @@ import {
   type PanelId,
 } from "@/hooks/use-panel-layout";
 
-export default function AgentsPage() {
+function AgentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { sessionReady, accountMode } = useSession();
@@ -522,5 +522,13 @@ export default function AgentsPage() {
         headline={isDemo ? "Demo agent response" : "Live agent response"}
       />
     </>
+  );
+}
+
+export default function AgentsPage() {
+  return (
+    <Suspense fallback={<AgentsCanvasSkeleton />}>
+      <AgentsPageContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AccountModeBadge } from "@/components/layout/account-mode-badge"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
@@ -286,7 +286,7 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
   )
 }
 
-export default function TradingHistoryPage() {
+function TradingHistoryContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { sessionReady, accountMode } = useSession()
@@ -591,5 +591,13 @@ export default function TradingHistoryPage() {
         )}
       </main>
     </>
+  )
+}
+
+export default function TradingHistoryPage() {
+  return (
+    <Suspense fallback={<TradingHistoryTableSkeleton rows={8} />}>
+      <TradingHistoryContent />
+    </Suspense>
   )
 }

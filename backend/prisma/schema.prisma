@@ -20,6 +20,7 @@ enum StrategyType {
 enum StrategyStatus {
   draft
   active
+  paused
 }
 
 enum TradingCycleStatus {

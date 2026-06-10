@@ -8,6 +8,8 @@ import {
   parseSubAgents,
   patchPoolAllocations,
   patchSubAgents,
+  pauseUserStrategy,
+  resumeUserStrategy,
   upsertUserStrategy,
 } from "../../../../services/agents/strategy.service";
 import { fail, ok } from "../../../../utils/http-response";
@@ -160,6 +162,62 @@ agentStrategyRouter.patch(
       }
 
       const strategy = await patchPoolAllocations(req.user.id, poolAllocations);
+      return ok(req, res, { strategy });
+    } catch (err) {
+      if (err instanceof StrategyError) {
+        return fail(req, res, err.status, { code: err.code, message: err.message });
+      }
+      throw err;
+    }
+  },
+);
+
+agentStrategyRouter.post(
+  "/api/v1/agents/strategy/pause",
+  requireAuth,
+  async (req, res) => {
+    const parsedQuery = strategyQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return fail(req, res, 400, {
+        code: "VALIDATION_ERROR",
+        message: "Invalid strategy query",
+        details: parsedQuery.error.flatten().fieldErrors,
+      });
+    }
+
+    try {
+      const strategy = await pauseUserStrategy(
+        req.user.id,
+        parsedQuery.data.mode,
+      );
+      return ok(req, res, { strategy });
+    } catch (err) {
+      if (err instanceof StrategyError) {
+        return fail(req, res, err.status, { code: err.code, message: err.message });
+      }
+      throw err;
+    }
+  },
+);
+
+agentStrategyRouter.post(
+  "/api/v1/agents/strategy/resume",
+  requireAuth,
+  async (req, res) => {
+    const parsedQuery = strategyQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return fail(req, res, 400, {
+        code: "VALIDATION_ERROR",
+        message: "Invalid strategy query",
+        details: parsedQuery.error.flatten().fieldErrors,
+      });
+    }
+
+    try {
+      const strategy = await resumeUserStrategy(
+        req.user.id,
+        parsedQuery.data.mode,
+      );
       return ok(req, res, { strategy });
     } catch (err) {
       if (err instanceof StrategyError) {

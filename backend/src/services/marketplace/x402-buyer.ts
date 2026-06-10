@@ -1,5 +1,6 @@
 import type { AccountMode } from "@prisma/client";
 import type { Address, Hash } from "viem";
+import { somniaAgentChain } from "../../config/somnia-chains.js";
 import { createLogger } from "../../shared/logger.js";
 import {
   getMarketplaceEnv,
@@ -11,7 +12,12 @@ import { deliverMarketplaceProductForUser } from "./marketplace-delivery.service
 import {
   createMarketplaceBuyerWalletClient,
   createMarketplaceTestnetPublicClient,
+  waitForMarketplaceTestnetReceipt,
 } from "./buyer-wallet.js";
+import {
+  assertMarketplaceSttPaymentReady,
+  MarketplacePaymentValidationError,
+} from "./payment-validation.js";
 import { encodeNativeSttPaymentSignature } from "./stt-payment.js";
 import type { MarketplaceSttPayment } from "./stt-paywall.js";
 
@@ -113,16 +119,29 @@ async function sendNativeSttPayment(input: {
   sellerAddress: Address;
   amountWei: bigint;
 }): Promise<{ txHash: Hash; payer: Address }> {
-  const { walletAddress, account, client } =
-    await createMarketplaceBuyerWalletClient(input.userId);
-  const txHash = await client.sendTransaction({
-    account,
-    to: input.sellerAddress,
-    value: input.amountWei,
+  const { buyerAddress } = await assertMarketplaceSttPaymentReady({
+    userId: input.userId,
+    sellerAddress: input.sellerAddress,
+    amountWei: input.amountWei,
   });
-  const publicClient = createMarketplaceTestnetPublicClient();
-  await publicClient.waitForTransactionReceipt({ hash: txHash });
-  return { txHash, payer: walletAddress };
+
+  const { account, client } = await createMarketplaceBuyerWalletClient(input.userId);
+  try {
+    const txHash = await client.sendTransaction({
+      account,
+      chain: somniaAgentChain,
+      to: input.sellerAddress,
+      value: input.amountWei,
+    });
+    const publicClient = createMarketplaceTestnetPublicClient();
+    await waitForMarketplaceTestnetReceipt(publicClient, txHash);
+    return { txHash, payer: buyerAddress };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new MarketplacePaymentValidationError(
+      `STT payment transaction failed: ${detail}`,
+    );
+  }
 }
 
 type PaymentRequiredBody = {

@@ -44,7 +44,7 @@ export type AgentStrategy = {
   id: string;
   accountMode: "demo" | "live";
   strategyType: StrategyType;
-  status: "draft" | "active";
+  status: "draft" | "active" | "paused";
   depositAmount: number;
   poolAllocations: PoolAllocations;
   subAgents: SubAgentConfigItem[];

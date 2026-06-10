@@ -11,7 +11,7 @@ export const POOL_IDS = LEGACY_POOL_IDS;
 export type PoolId = string;
 
 export type StrategyType = "auto" | "custom";
-export type StrategyStatus = "draft" | "active";
+export type StrategyStatus = "draft" | "active" | "paused";
 
 export type PoolAllocations = Record<string, number>;
 

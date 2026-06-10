@@ -500,6 +500,12 @@ export async function runTradingCycle(
     if (!strategy) {
       throw new TradingError("STRATEGY_NOT_FOUND", "No agent strategy found", 404);
     }
+    if (strategy.status === "paused") {
+      throw new TradingError(
+        "STRATEGY_PAUSED",
+        "Strategy is paused — resume agents to continue trading",
+      );
+    }
     if (strategy.status !== "active") {
       throw new TradingError(
         "STRATEGY_NOT_ACTIVE",

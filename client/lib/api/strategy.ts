@@ -50,3 +50,17 @@ export async function patchSubAgents(subAgents: SubAgentConfigItem[]) {
     },
   );
 }
+
+export async function pauseAgentStrategy(mode?: AccountMode) {
+  return apiRequest<{ strategy: AgentStrategy }>(
+    `/api/v1/agents/strategy/pause${strategyQuery(mode)}`,
+    { method: "POST" },
+  );
+}
+
+export async function resumeAgentStrategy(mode?: AccountMode) {
+  return apiRequest<{ strategy: AgentStrategy }>(
+    `/api/v1/agents/strategy/resume${strategyQuery(mode)}`,
+    { method: "POST" },
+  );
+}

@@ -70,6 +70,9 @@ export default function AgentsPage() {
   const [subAgentConfig, setSubAgentConfig] = useState<SubAgentConfigItem[]>([]);
   const [marketplaceSummary, setMarketplaceSummary] =
     useState<MarketplaceSummary | null>(null);
+  const [strategyStatus, setStrategyStatus] = useState<
+    "draft" | "active" | "paused" | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [cycleOutcome, setCycleOutcome] = useState<AgentCycleOutcome | null>(
     null,
@@ -116,7 +119,8 @@ export default function AgentsPage() {
     marketplaceTripCommands,
   } = useTradingSocket({
     accountMode: canvasMode ?? undefined,
-    enabled: !loading && canvasMode != null,
+    enabled:
+      !loading && canvasMode != null && strategyStatus === "active",
     hydrateFromHistory: true,
     onCycleStarted: (event) => {
       setCycleOutcome(runningOutcome(event.cycleId, event.reason));
@@ -174,11 +178,11 @@ export default function AgentsPage() {
       ]);
 
       if (strategyResult.success && strategyResult.data?.strategy) {
-        setPoolAmounts(strategyResult.data.strategy.poolAllocations);
-        setSubAgentConfig(strategyResult.data.strategy.subAgents ?? []);
-        setMarketplaceSummary(
-          strategyResult.data.strategy.marketplace ?? null,
-        );
+        const s = strategyResult.data.strategy;
+        setPoolAmounts(s.poolAllocations);
+        setSubAgentConfig(s.subAgents ?? []);
+        setMarketplaceSummary(s.marketplace ?? null);
+        setStrategyStatus(s.status);
       }
 
       if (poolsResult.success && poolsResult.data?.pools) {
@@ -282,13 +286,17 @@ export default function AgentsPage() {
     <>
       <PageSubBar
         title={
-          cycleActive
+          strategyStatus === "paused"
             ? isDemo
-              ? "Demo Agent Network · cycle active"
-              : "QuickSwap Agent Network · cycle active"
-            : isDemo
-              ? "Demo Agent Network"
-              : "QuickSwap Agent Network"
+              ? "Demo Agent Network · paused"
+              : "QuickSwap Agent Network · paused"
+            : cycleActive
+              ? isDemo
+                ? "Demo Agent Network · cycle active"
+                : "QuickSwap Agent Network · cycle active"
+              : isDemo
+                ? "Demo Agent Network"
+                : "QuickSwap Agent Network"
         }
         badge={
           canvasMode ? (
@@ -330,7 +338,11 @@ export default function AgentsPage() {
                   View agent
                 </button>
               ) : null}
-              {cycleActive ? (
+              {strategyStatus === "paused" ? (
+                <span className="font-mono text-[10px] uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                  Paused
+                </span>
+              ) : cycleActive ? (
                 <span className="font-mono text-[10px] uppercase tracking-widest text-[#ea580c]">
                   Cycle running
                 </span>

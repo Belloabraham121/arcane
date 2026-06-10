@@ -28,7 +28,10 @@ import { POOL_LABELS } from "@/lib/strategy-presets"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
 import { MarketplaceReceiptPanel } from "@/components/marketplace/marketplace-receipt-panel"
+import { MarketplaceX402SpendChart } from "@/components/marketplace/marketplace-x402-spend-chart"
 import { formatSttWei, marketplaceProductLabel } from "@/lib/marketplace-display"
+import { summarizeMarketplaceSpend } from "@/lib/marketplace-spend-chart"
+import { MarketplaceTxLink } from "@/components/trading/marketplace-tx-link"
 import { somniaTxUrl } from "@/lib/somnia-explorer"
 import { cn } from "@/lib/utils"
 
@@ -548,6 +551,9 @@ export default function ExplorerPage() {
     useSession()
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<ExplorerEntry[]>([])
+  const [marketplacePurchases, setMarketplacePurchases] = useState<
+    MarketplacePurchaseRecord[]
+  >([])
   const [search, setSearch] = useState("")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -603,15 +609,17 @@ export default function ExplorerPage() {
     }
 
     const purchasesResult = await fetchMarketplacePurchases(100)
-    if (purchasesResult.success && purchasesResult.data?.purchases) {
-      for (const purchase of purchasesResult.data.purchases) {
-        merged.push({
-          id: `marketplace-${purchase.id}`,
-          kind: "marketplace",
-          createdAt: purchase.createdAt,
-          purchase,
-        })
-      }
+    const purchases = purchasesResult.success
+      ? (purchasesResult.data?.purchases ?? [])
+      : []
+    setMarketplacePurchases(purchases)
+    for (const purchase of purchases) {
+      merged.push({
+        id: `marketplace-${purchase.id}`,
+        kind: "marketplace",
+        createdAt: purchase.createdAt,
+        purchase,
+      })
     }
 
     merged.sort(
@@ -702,6 +710,7 @@ export default function ExplorerPage() {
     (e) => e.kind === "action" && e.action?.type === "sub_agent",
   ).length
   const marketplaceCount = filtered.filter((e) => e.kind === "marketplace").length
+  const spend24h = summarizeMarketplaceSpend(marketplacePurchases, "24h")
 
   return (
     <>
@@ -771,6 +780,11 @@ export default function ExplorerPage() {
           <Stat label="Analyses" value={subAgentCount} />
           <Stat label="Marketplace" value={marketplaceCount} />
           <Stat
+            label="x402 · 24h"
+            value={formatSttWei(spend24h.totalSpendWei)}
+            text
+          />
+          <Stat
             label="Network"
             value={mode === "demo" ? "Anvil Fork" : "Somnia"}
             text
@@ -783,6 +797,14 @@ export default function ExplorerPage() {
             txs={filtered
               .filter((e) => e.kind === "action" && e.action)
               .map((e) => e.action!)}
+          />
+        )}
+
+        {/* ─── Marketplace x402 spend (full width) ─── */}
+        {!loading && (
+          <MarketplaceX402SpendChart
+            purchases={marketplacePurchases}
+            className="mt-6 w-full"
           />
         )}
 
@@ -851,6 +873,11 @@ export default function ExplorerPage() {
                           <div className="mt-0.5 text-[10px] text-muted-foreground">
                             Paid {formatSttWei(purchase.amountSttWei)} · STT
                           </div>
+                          {purchase.txHash ? (
+                            <div className="mt-1">
+                              <MarketplaceTxLink txHash={purchase.txHash} />
+                            </div>
+                          ) : null}
                         </div>
                         <div className="hidden shrink-0 sm:block">
                           {statusPill("success")}

@@ -4,7 +4,7 @@ import {
   formatSttWei,
   marketplaceProductLabel,
 } from "@/lib/marketplace-display"
-import { somniaTxUrl } from "@/lib/somnia-explorer"
+import { MarketplaceTxLink } from "@/components/trading/marketplace-tx-link"
 
 export type MarketplaceReceiptData = {
   productId: string
@@ -100,14 +100,12 @@ export function MarketplaceReceiptPanel({
 
         <DetailRow label="Payment Tx">
           {receipt.txHash ? (
-            <a
-              href={somniaTxUrl(receipt.txHash)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="break-all font-mono text-[10px] text-[#00ff88] hover:underline"
-            >
-              {receipt.txHash}
-            </a>
+            <div className="space-y-1">
+              <MarketplaceTxLink txHash={receipt.txHash} />
+              <code className="block break-all font-mono text-[9px] text-muted-foreground">
+                {receipt.txHash}
+              </code>
+            </div>
           ) : receipt.devBypass ? (
             <span className="font-mono text-[10px] text-muted-foreground">
               Dev bypass — no on-chain tx

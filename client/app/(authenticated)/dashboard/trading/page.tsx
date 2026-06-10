@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { AccountModeBadge } from "@/components/layout/account-mode-badge"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
 import { TradingHistoryTableSkeleton } from "@/components/skeletons/content-skeletons"
@@ -18,11 +18,15 @@ import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
 import { MarkdownContent } from "@/components/agent/markdown-content"
 import { TxHashDisplay } from "@/components/trading/tx-hash-display"
+import { MarketplaceTxLink } from "@/components/trading/marketplace-tx-link"
 import { somniaTxUrl } from "@/lib/somnia-explorer"
 import {
+  cycleMatchesExecutionFilter,
   formatReason,
   lastTradeFromHistoryDetail,
+  type HistoryExecutionFilter,
 } from "@/lib/trading-helpers"
+import { cn } from "@/lib/utils"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 import {
   MarketplaceReceiptPanel,
@@ -32,6 +36,23 @@ import { formatSttWei, marketplaceProductLabel } from "@/lib/marketplace-display
 import type { TradingActionRecord } from "@/lib/api/trading"
 
 const PAGE_SIZE = 15
+const EXECUTION_FILTERS: HistoryExecutionFilter[] = [
+  "all",
+  "executor",
+  "marketplace",
+]
+const FILTER_LABELS: Record<HistoryExecutionFilter, string> = {
+  all: "All",
+  executor: "Executor",
+  marketplace: "Marketplace · x402",
+}
+
+function parseExecutionFilter(raw: string | null): HistoryExecutionFilter {
+  if (raw === "executor" || raw === "marketplace") {
+    return raw
+  }
+  return "all"
+}
 
 function poolLabel(poolId: string | null): string {
   if (!poolId) {
@@ -244,6 +265,9 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
                     >
                       {action.status}
                     </span>
+                    {action.txHash && action.type === "marketplace_purchase" && (
+                      <MarketplaceTxLink txHash={action.txHash} />
+                    )}
                     {action.txHash && action.type !== "marketplace_purchase" && (
                       <TxHashDisplay
                         txHash={action.txHash}
@@ -264,8 +288,10 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
 
 export default function TradingHistoryPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { sessionReady, accountMode } = useSession()
   const historyMode = accountMode ?? undefined
+  const executionFilter = parseExecutionFilter(searchParams.get("filter"))
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<TradingHistoryListItem[]>([])
   const [pagination, setPagination] = useState<TradingHistoryPagination | null>(
@@ -278,6 +304,7 @@ export default function TradingHistoryPage() {
     {},
   )
   const [detailLoading, setDetailLoading] = useState<string | null>(null)
+  const [filterLoading, setFilterLoading] = useState(false)
 
   const loadPage = useCallback(async (nextPage: number) => {
     setError(null)
@@ -309,6 +336,70 @@ export default function TradingHistoryPage() {
 
     void init()
   }, [router, loadPage, sessionReady])
+
+  useEffect(() => {
+    if (executionFilter === "all" || items.length === 0) {
+      setFilterLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    async function hydrateForFilter() {
+      setFilterLoading(true)
+      const results = await Promise.all(
+        items.map((item) => fetchTradingCycleDetail(item.id)),
+      )
+      if (cancelled) {
+        return
+      }
+      setDetails((prev) => {
+        const next = { ...prev }
+        for (const result of results) {
+          if (result.success && result.data?.cycle) {
+            next[result.data.cycle.id] = result.data.cycle
+          }
+        }
+        return next
+      })
+      setFilterLoading(false)
+    }
+
+    void hydrateForFilter()
+
+    return () => {
+      cancelled = true
+    }
+  }, [executionFilter, items])
+
+  const visibleItems = useMemo(() => {
+    if (executionFilter === "all") {
+      return items
+    }
+    if (filterLoading) {
+      return []
+    }
+    return items.filter((item) => {
+      const detail = details[item.id]
+      return (
+        detail != null &&
+        cycleMatchesExecutionFilter(detail, executionFilter)
+      )
+    })
+  }, [items, details, executionFilter, filterLoading])
+
+  function setExecutionFilter(next: HistoryExecutionFilter) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (next === "all") {
+      params.delete("filter")
+    } else {
+      params.set("filter", next)
+    }
+    const query = params.toString()
+    router.replace(
+      query ? `${APP_ROUTES.tradingHistory}?${query}` : APP_ROUTES.tradingHistory,
+    )
+  }
 
   async function toggleExpand(cycleId: string) {
     if (expandedId === cycleId) {
@@ -348,11 +439,34 @@ export default function TradingHistoryPage() {
       />
 
       <main className="mx-auto max-w-7xl px-6 py-10 lg:px-12">
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {EXECUTION_FILTERS.map((filter) => (
+            <button
+              key={filter}
+              type="button"
+              onClick={() => setExecutionFilter(filter)}
+              className={cn(
+                "rounded border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                executionFilter === filter
+                  ? "border-foreground/30 bg-muted text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {FILTER_LABELS[filter]}
+            </button>
+          ))}
+          {filterLoading && executionFilter !== "all" ? (
+            <span className="font-mono text-[10px] text-muted-foreground">
+              Filtering…
+            </span>
+          ) : null}
+        </div>
+
         {error && (
           <p className="mb-6 font-mono text-xs text-[#ea580c]">{error}</p>
         )}
 
-        {loading ? (
+        {loading || (filterLoading && executionFilter !== "all") ? (
           <TradingHistoryTableSkeleton rows={8} />
         ) : items.length === 0 ? (
           <div className="border border-border p-8 text-center">
@@ -364,9 +478,19 @@ export default function TradingHistoryPage() {
               schedule, or deposit detection.
             </p>
           </div>
+        ) : visibleItems.length === 0 ? (
+          <div className="border border-border p-8 text-center">
+            <p className="font-mono text-sm text-muted-foreground">
+              No cycles match the {FILTER_LABELS[executionFilter]} filter on this
+              page.
+            </p>
+            <p className="mt-2 font-mono text-xs text-muted-foreground">
+              Try another filter or go to the next page.
+            </p>
+          </div>
         ) : (
           <div className="border border-border">
-            {items.map((cycle) => {
+            {visibleItems.map((cycle) => {
               const isOpen = expandedId === cycle.id
               const detail = details[cycle.id]
               return (
@@ -398,6 +522,13 @@ export default function TradingHistoryPage() {
                             LLM pending
                           </span>
                         )}
+                        {details[cycle.id]?.actions.some(
+                          (a) => a.type === "marketplace_purchase",
+                        ) ? (
+                          <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                            x402
+                          </span>
+                        ) : null}
                       </div>
                       <p className="font-mono text-[10px] text-muted-foreground">
                         {new Date(cycle.startedAt).toLocaleString()} →{" "}

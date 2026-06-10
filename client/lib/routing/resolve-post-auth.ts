@@ -26,7 +26,10 @@ export async function resolvePostAuthRoute(): Promise<string> {
   }
 
   const { strategy } = strategyResult.data
-  if (strategy.status === "active" && strategy.depositAmount > 0) {
+  if (
+    (strategy.status === "active" || strategy.status === "paused") &&
+    strategy.depositAmount > 0
+  ) {
     return APP_ROUTES.dashboard
   }
 

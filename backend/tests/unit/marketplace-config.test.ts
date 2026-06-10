@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import {
   buildMarketplaceSummary,
   getMarketplaceEnv,
+  parseMarketplaceAddressEnv,
   parseSubAgentX402BudgetSttWei,
 } from "../../src/config/marketplace.js";
 
@@ -49,6 +50,18 @@ describe("buildMarketplaceSummary", () => {
     assert.equal(summary.budgetSttWei, "100000000000000000");
     assert.equal(summary.remainingSttWei, summary.budgetSttWei);
     assert.equal(summary.productPricesSttWei["signals/spread"], "3000000000000000");
+  });
+});
+
+describe("parseMarketplaceAddressEnv", () => {
+  it("strips accidental literal \\n from .env values", () => {
+    const address = parseMarketplaceAddressEnv(
+      "0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e\\n",
+    );
+    assert.equal(
+      address,
+      "0xA4B8fEC2837AE227Fd64f344ef663c5a0bA4e46e",
+    );
   });
 });
 

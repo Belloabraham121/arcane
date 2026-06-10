@@ -8,7 +8,11 @@ import { motion } from "framer-motion"
 import { AccountModeBadge } from "@/components/layout/account-mode-badge"
 import { AccountModeSwitch } from "@/components/layout/account-mode-switch"
 import { PageSubBar } from "@/components/layout/page-sub-bar"
-import { getAgentStrategy } from "@/lib/api/strategy"
+import {
+  getAgentStrategy,
+  pauseAgentStrategy,
+  resumeAgentStrategy,
+} from "@/lib/api/strategy"
 import {
   fetchTradingStatus,
   type TradingStatus,
@@ -79,6 +83,8 @@ export default function DashboardPage() {
   const [recentTradesLoading, setRecentTradesLoading] = useState(false)
   const [agentDialogOpen, setAgentDialogOpen] = useState(false)
   const [pnlDetailOpen, setPnlDetailOpen] = useState(false)
+  const [pauseBusy, setPauseBusy] = useState(false)
+  const [pauseError, setPauseError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!sessionReady) {
@@ -154,8 +160,10 @@ export default function DashboardPage() {
 
   const viewMode: AccountMode | undefined = accountMode ?? undefined
 
-  const portfolioEnabled =
-    Boolean(strategy?.status === "active" && viewMode != null)
+  const strategyRunning =
+    strategy?.status === "active" || strategy?.status === "paused"
+
+  const portfolioEnabled = Boolean(strategyRunning && viewMode != null)
 
   const {
     summary: portfolio,
@@ -294,17 +302,50 @@ export default function DashboardPage() {
         )
       : null
   const enabledSubAgents = strategy?.subAgents.filter((agent) => agent.enabled) ?? []
-  const agentDisplayStatus = socketCycleActive
-    ? tradingStatus?.lastCycle?.executedTransactions?.length
-      ? "executing"
-      : "analyzing"
-    : strategy
-      ? deriveAgentDisplayStatus({
-          strategyActive: strategy.status === "active",
-          tradingStatus,
-          walletBalances: balances,
-        })
-      : "idle"
+  const agentDisplayStatus =
+    strategy?.status === "paused"
+      ? "paused"
+      : socketCycleActive
+        ? tradingStatus?.lastCycle?.executedTransactions?.length
+          ? "executing"
+          : "analyzing"
+        : strategy
+          ? deriveAgentDisplayStatus({
+              strategyActive: strategy.status === "active",
+              tradingStatus,
+              walletBalances: balances,
+            })
+          : "idle"
+
+  async function handlePauseAgents() {
+    if (!viewMode || pauseBusy) {
+      return
+    }
+    setPauseBusy(true)
+    setPauseError(null)
+    const result = await pauseAgentStrategy(viewMode)
+    if (result.success && result.data?.strategy) {
+      setStrategy(result.data.strategy)
+    } else {
+      setPauseError(result.error?.message ?? "Failed to pause agents")
+    }
+    setPauseBusy(false)
+  }
+
+  async function handleResumeAgents() {
+    if (!viewMode || pauseBusy) {
+      return
+    }
+    setPauseBusy(true)
+    setPauseError(null)
+    const result = await resumeAgentStrategy(viewMode)
+    if (result.success && result.data?.strategy) {
+      setStrategy(result.data.strategy)
+    } else {
+      setPauseError(result.error?.message ?? "Failed to resume agents")
+    }
+    setPauseBusy(false)
+  }
   const activePoolRows =
     strategy != null
       ? buildActivePoolRows(
@@ -321,7 +362,13 @@ export default function DashboardPage() {
         title={
           strategyLoading
             ? "Dashboard"
-            : `Dashboard — ${isAuto ? "Auto yield" : "Custom strategy"} (active)`
+            : `Dashboard — ${isAuto ? "Auto yield" : "Custom strategy"}${
+                strategy?.status === "paused"
+                  ? " (paused)"
+                  : strategy?.status === "active"
+                    ? " (active)"
+                    : ""
+              }`
         }
         badge={viewMode ? <AccountModeBadge mode={viewMode} /> : undefined}
         action={
@@ -813,13 +860,48 @@ export default function DashboardPage() {
 
           {activeTab === "agents" && (
             <div className="border border-border p-6 space-y-6">
-              <div className="flex items-center justify-between gap-4">
-                <p className="font-mono text-xs text-muted-foreground">
-                  {isDemoView
-                    ? "Your demo agent network trades on the Anvil fork (paper trading)."
-                    : "Your agent network is active on Somnia mainnet."}
-                </p>
-                <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {strategy?.status === "paused"
+                      ? isDemoView
+                        ? "Demo agents are paused — no scheduled cycles, sub-agent runs, or marketplace purchases."
+                        : "Live agents are paused — no scheduled cycles, sub-agent runs, or marketplace purchases."
+                      : isDemoView
+                        ? "Your demo agent network trades on the Anvil fork (paper trading)."
+                        : "Your agent network is active on Somnia mainnet."}
+                  </p>
+                  {strategy && strategy.status !== "draft" ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <AgentStatusBadge status={agentDisplayStatus} />
+                      {socketCycleActive && strategy.status === "active" ? (
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-[#ea580c]">
+                          Finishing current cycle…
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {strategy?.status === "active" ? (
+                    <button
+                      type="button"
+                      onClick={() => void handlePauseAgents()}
+                      disabled={pauseBusy}
+                      className="shrink-0 border border-amber-600/60 px-4 py-2 font-mono text-xs uppercase tracking-widest text-amber-700 transition-colors hover:bg-amber-500/10 disabled:opacity-50 dark:text-amber-400"
+                    >
+                      {pauseBusy ? "Pausing…" : "Pause agents"}
+                    </button>
+                  ) : strategy?.status === "paused" ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleResumeAgents()}
+                      disabled={pauseBusy}
+                      className="shrink-0 border border-[#16a34a]/60 px-4 py-2 font-mono text-xs uppercase tracking-widest text-[#16a34a] transition-colors hover:bg-[#16a34a]/10 disabled:opacity-50"
+                    >
+                      {pauseBusy ? "Resuming…" : "Resume agents"}
+                    </button>
+                  ) : null}
                   {viewMode ? (
                     <ViewAgentsLink
                       mode={viewMode}
@@ -839,6 +921,11 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
+              {pauseError ? (
+                <p className="border border-[#ea580c]/30 bg-[#ea580c]/5 px-4 py-3 font-mono text-xs text-[#ea580c]">
+                  {pauseError}
+                </p>
+              ) : null}
               <ul className="space-y-2 font-mono text-sm text-foreground">
                 <li>• Rebalance across QuickSwap liquidity pools</li>
                 <li>

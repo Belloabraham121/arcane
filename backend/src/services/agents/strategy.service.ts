@@ -565,3 +565,74 @@ export async function patchSubAgents(
 
   return await toResponse(strategy);
 }
+
+export async function pauseUserStrategy(
+  userId: string,
+  modeOverride?: AccountMode,
+): Promise<AgentStrategyResponse> {
+  const accountMode = await resolveStrategyAccountMode(userId, modeOverride);
+  const strategy = await repo.findStrategyByUserId(userId, accountMode);
+  if (!strategy) {
+    throw new StrategyError(
+      "STRATEGY_NOT_FOUND",
+      "No agent strategy found for user",
+      404,
+    );
+  }
+  if (strategy.status === "draft") {
+    throw new StrategyError(
+      "STRATEGY_NOT_ACTIVE",
+      "Activate your strategy before pausing agents",
+      400,
+    );
+  }
+  if (strategy.status === "paused") {
+    return await toResponse(strategy);
+  }
+
+  const updated = await repo.updateStrategyStatus(userId, accountMode, "paused");
+  if (!updated) {
+    throw new StrategyError(
+      "STRATEGY_NOT_FOUND",
+      "No agent strategy found for user",
+      404,
+    );
+  }
+
+  log.info("Agent strategy paused", { userId, accountMode });
+  return await toResponse(updated);
+}
+
+export async function resumeUserStrategy(
+  userId: string,
+  modeOverride?: AccountMode,
+): Promise<AgentStrategyResponse> {
+  const accountMode = await resolveStrategyAccountMode(userId, modeOverride);
+  const strategy = await repo.findStrategyByUserId(userId, accountMode);
+  if (!strategy) {
+    throw new StrategyError(
+      "STRATEGY_NOT_FOUND",
+      "No agent strategy found for user",
+      404,
+    );
+  }
+  if (strategy.status !== "paused") {
+    throw new StrategyError(
+      "STRATEGY_NOT_PAUSED",
+      "Strategy is not paused",
+      400,
+    );
+  }
+
+  const updated = await repo.updateStrategyStatus(userId, accountMode, "active");
+  if (!updated) {
+    throw new StrategyError(
+      "STRATEGY_NOT_FOUND",
+      "No agent strategy found for user",
+      404,
+    );
+  }
+
+  log.info("Agent strategy resumed", { userId, accountMode });
+  return await toResponse(updated);
+}

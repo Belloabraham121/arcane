@@ -3,8 +3,9 @@
  *
  * Prerequisites:
  *   MARKETPLACE_ENABLED=true
- *   MARKETPLACE_SELLER_ADDRESS=0x...
- *   MARKETPLACE_X402_DEV_BYPASS=true   # recommended for local smoke (no on-chain STT)
+ *   MARKETPLACE_SELLER_ADDRESS=0x...   # may equal the agent wallet (self-payment)
+ *   MARKETPLACE_X402_DEV_BYPASS=true   # optional — skip on-chain STT locally
+ *   PRIVATE_KEY=0x...                  # funds agent wallet with 30 STT when balance is 0
  *
  * Usage:
  *   npm run smoke:marketplace:purchase -- --email=you@signup-email.com
@@ -20,11 +21,22 @@
  */
 
 import "dotenv/config";
+import { randomUUID } from "node:crypto";
 import type { AccountMode } from "@prisma/client";
 import type { MarketplaceProductId } from "../src/config/marketplace.js";
 import { getMarketplaceEnv, MARKETPLACE_PRODUCT_IDS } from "../src/config/marketplace.js";
 import { prisma } from "../src/infrastructure/postgres/client";
 import { findUserByEmail, findUserById } from "../src/services/auth/user.repository";
+import { getAddress } from "viem";
+import { getMarketplaceBuyerSttBalanceWei } from "../src/services/marketplace/buyer-wallet.js";
+import {
+  DEFAULT_SMOKE_FUND_STT_WEI,
+  fundAgentWalletSttIfEmpty,
+} from "../src/services/marketplace/stt-funding.js";
+import {
+  assertMarketplaceSttPaymentReady,
+  MarketplacePaymentValidationError,
+} from "../src/services/marketplace/payment-validation.js";
 import {
   createMarketplaceBudgetTracker,
   purchaseMarketplaceProduct,
@@ -100,7 +112,7 @@ async function main(): Promise<void> {
 
   const productId = parseProductId();
   const { userId, accountMode } = await resolveUserAndMode();
-  const cycleId = `smoke-${Date.now()}`;
+  const cycleId = randomUUID();
 
   await prisma.$connect();
 
@@ -117,6 +129,27 @@ async function main(): Promise<void> {
 
   const priceWei = env.productPricesSttWei[productId];
   const devBypass = process.env.MARKETPLACE_X402_DEV_BYPASS === "true";
+  const sellerAddress = env.sellerAddress!;
+
+  if (!devBypass) {
+    const fundResult = await fundAgentWalletSttIfEmpty({ userId });
+    if (fundResult.funded) {
+      console.log("Funded empty agent wallet with STT");
+      console.log(`  agent:    ${fundResult.agentAddress}`);
+      console.log(
+        `  amount:   ${DEFAULT_SMOKE_FUND_STT_WEI.toString()} wei (30 STT)`,
+      );
+      console.log(`  tx:       ${fundResult.txHash}`);
+      console.log(
+        `  balance:  ${fundResult.balanceBeforeWei.toString()} → ${fundResult.balanceAfterWei.toString()} wei`,
+      );
+    } else {
+      console.log(`STT fund skipped: ${fundResult.reason}`);
+    }
+  }
+
+  const { walletAddress, balanceSttWei } =
+    await getMarketplaceBuyerSttBalanceWei(userId);
 
   console.log("Marketplace smoke purchase");
   console.log(`  user:     ${userId}`);
@@ -124,6 +157,25 @@ async function main(): Promise<void> {
   console.log(`  product:  ${productId}`);
   console.log(`  price:    ${priceWei.toString()} STT wei`);
   console.log(`  bypass:   ${devBypass ? "dev (no on-chain tx)" : "live STT payment"}`);
+  console.log(`  buyer:    ${walletAddress}`);
+  console.log(`  seller:   ${sellerAddress}`);
+  console.log(`  balance:  ${balanceSttWei.toString()} STT wei (Somnia testnet)`);
+
+  const selfPayment =
+    getAddress(walletAddress) === getAddress(sellerAddress);
+
+  if (!devBypass) {
+    if (selfPayment) {
+      console.log(
+        "  note:     seller = agent wallet (self-payment — gas STT only on-chain)",
+      );
+    }
+    await assertMarketplaceSttPaymentReady({
+      userId,
+      sellerAddress,
+      amountWei: priceWei,
+    });
+  }
 
   const tracker = createMarketplaceBudgetTracker({
     strategyBudgetSttWei: strategy.subAgentX402BudgetSttWei,

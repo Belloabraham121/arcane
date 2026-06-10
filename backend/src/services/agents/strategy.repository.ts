@@ -175,3 +175,20 @@ export async function touchLastCycleAt(strategyId: string, at: Date = new Date()
     include: strategyInclude,
   });
 }
+
+export async function updateStrategyStatus(
+  userId: string,
+  accountMode: AccountMode,
+  status: StrategyStatus,
+) {
+  const existing = await findStrategyByUserId(userId, accountMode);
+  if (!existing) {
+    return null;
+  }
+
+  return prisma.agentStrategy.update({
+    where: { id: existing.id },
+    data: { status },
+    include: strategyInclude,
+  });
+}

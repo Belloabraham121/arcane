@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hash } from "viem";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { getSomniaAgentEnv } from "../../config/env.js";
 import { somniaAgentChain } from "../../config/somnia-chains.js";
@@ -24,6 +24,22 @@ export function createMarketplaceTestnetPublicClient() {
   return createPublicClient({
     chain: somniaAgentChain,
     transport: http(rpcHttp),
+  });
+}
+
+export function marketplaceTxReceiptTimeoutMs(): number {
+  return Number(
+    process.env.MARKETPLACE_TX_RECEIPT_TIMEOUT_MS?.trim() ?? "300000",
+  );
+}
+
+export async function waitForMarketplaceTestnetReceipt(
+  publicClient: ReturnType<typeof createMarketplaceTestnetPublicClient>,
+  hash: Hash,
+) {
+  return publicClient.waitForTransactionReceipt({
+    hash,
+    timeout: marketplaceTxReceiptTimeoutMs(),
   });
 }
 

@@ -1,7 +1,32 @@
-import type { Address } from "viem";
+import { getAddress, type Address } from "viem";
 
 function optional(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
+}
+
+/** Strip whitespace and accidental literal `\\n` from .env address values. */
+export function parseMarketplaceAddressEnv(
+  raw: string | undefined,
+  envName = "MARKETPLACE_SELLER_ADDRESS",
+): Address | null {
+  if (raw == null) {
+    return null;
+  }
+  const cleaned = raw
+    .trim()
+    .replace(/\\n/g, "")
+    .replace(/\\r/g, "")
+    .replace(/\r?\n/g, "");
+  if (cleaned.length === 0) {
+    return null;
+  }
+  try {
+    return getAddress(cleaned);
+  } catch {
+    throw new Error(
+      `${envName} must be a valid EVM address. Got "${raw}"`,
+    );
+  }
 }
 
 function parseWeiEnv(name: string, fallback: string): bigint {
@@ -80,9 +105,9 @@ export function getMarketplaceEnv(): MarketplaceEnv {
   assertSttOnlyPaymentAsset();
 
   const enabled = optional("MARKETPLACE_ENABLED", "false") === "true";
-  const sellerRaw = process.env.MARKETPLACE_SELLER_ADDRESS?.trim();
-  const sellerAddress =
-    sellerRaw && sellerRaw.length > 0 ? (sellerRaw as Address) : null;
+  const sellerAddress = parseMarketplaceAddressEnv(
+    process.env.MARKETPLACE_SELLER_ADDRESS,
+  );
 
   if (enabled && !sellerAddress) {
     throw new Error(

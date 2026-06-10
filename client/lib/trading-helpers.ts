@@ -1,4 +1,7 @@
 import type { AccountMode } from "@/lib/api/auth"
+import type { MarketplacePurchaseRecord } from "@/lib/api/marketplace"
+import { fetchMarketplacePurchases } from "@/lib/api/marketplace"
+import { marketplaceProductLabel } from "@/lib/marketplace-display"
 import type { WalletTokenBalance } from "@/lib/api/wallet"
 import {
   fetchTradingCycleDetail,
@@ -22,18 +25,21 @@ import {
 import { poolColorForId, poolColorsForIds } from "@/lib/pool-node-colors"
 import { activeResolvablePoolEntries, resolvePoolById } from "@/lib/pool-resolve"
 import { POOL_LABELS } from "@/lib/strategy-presets"
+import { APP_ROUTES } from "@/lib/routing/app-routes"
 
 export type AgentDisplayStatus =
   | "idle"
   | "analyzing"
   | "executing"
   | "waiting_deposit"
+  | "paused"
 
 const AGENT_STATUS_LABELS: Record<AgentDisplayStatus, string> = {
   idle: "Idle",
   analyzing: "Analyzing",
   executing: "Executing",
   waiting_deposit: "Waiting for deposit",
+  paused: "Paused",
 }
 
 const AGENT_STATUS_COLORS: Record<AgentDisplayStatus, string> = {
@@ -41,6 +47,7 @@ const AGENT_STATUS_COLORS: Record<AgentDisplayStatus, string> = {
   analyzing: "text-[#ea580c] border-[#ea580c]/40 bg-[#ea580c]/5",
   executing: "text-[#16a34a] border-[#16a34a]/40 bg-[#16a34a]/5",
   waiting_deposit: "text-amber-600 border-amber-600/40 bg-amber-600/5",
+  paused: "text-amber-700 border-amber-600/50 bg-amber-500/10 dark:text-amber-400",
 }
 
 export function agentStatusLabel(status: AgentDisplayStatus): string {
@@ -149,8 +156,13 @@ export function buildActivePoolRows(
   })
 }
 
+export type ExecutionKind = "executor" | "marketplace"
+
+export type HistoryExecutionFilter = "all" | ExecutionKind
+
 export type LastTradeInfo = {
   kind: string
+  executionKind: ExecutionKind
   label: string
   amountIn: string | null
   amountOut: string | null
@@ -162,6 +174,8 @@ export type LastTradeInfo = {
   status: string
   at: string
   accountMode?: AccountMode | null
+  productId?: string
+  amountSttWei?: string
 }
 
 function poolLabel(poolId: string | null): string | null {
@@ -174,6 +188,7 @@ function poolLabel(poolId: string | null): string | null {
 function tradeFromExecuted(tx: ExecutedTransaction, at: string): LastTradeInfo {
   return {
     kind: tx.kind,
+    executionKind: "executor",
     label:
       tx.kind === "swap"
         ? `${tx.tokenIn ?? "?"} → ${tx.tokenOut ?? "?"}`
@@ -207,6 +222,7 @@ function tradeFromAction(action: TradingActionRecord): LastTradeInfo | null {
 
   return {
     kind: action.type,
+    executionKind: "executor",
     label,
     amountIn: action.amountIn,
     amountOut: action.amountOut,
@@ -267,33 +283,125 @@ export function lastTradeFromHistoryDetail(
   )
 }
 
+function tradeFromMarketplacePurchase(
+  purchase: MarketplacePurchaseRecord,
+  accountMode: AccountMode,
+): LastTradeInfo {
+  return {
+    kind: "marketplace_purchase",
+    executionKind: "marketplace",
+    label: `x402 · ${marketplaceProductLabel(purchase.productId)}`,
+    amountIn: null,
+    amountOut: null,
+    tokenIn: null,
+    tokenOut: null,
+    poolFrom: null,
+    poolTo: null,
+    txHash: purchase.txHash,
+    status: purchase.status,
+    at: purchase.createdAt,
+    accountMode,
+    productId: purchase.productId,
+    amountSttWei: purchase.amountSttWei,
+  }
+}
+
+export function marketplaceTradesFromHistoryDetail(
+  detail: TradingHistoryDetail,
+): LastTradeInfo[] {
+  return detail.actions
+    .filter((action) => action.type === "marketplace_purchase")
+    .map((action) => {
+      const meta =
+        action.metadata && typeof action.metadata === "object"
+          ? (action.metadata as Record<string, unknown>)
+          : null
+      const productId =
+        typeof meta?.productId === "string"
+          ? meta.productId
+          : (action.toolName ?? "unknown")
+      const amountSttWei =
+        typeof meta?.amountSttWei === "string" ? meta.amountSttWei : "0"
+      return {
+        kind: "marketplace_purchase",
+        executionKind: "marketplace" as const,
+        label: `x402 · ${marketplaceProductLabel(productId)}`,
+        amountIn: null,
+        amountOut: null,
+        tokenIn: null,
+        tokenOut: null,
+        poolFrom: null,
+        poolTo: null,
+        txHash: action.txHash,
+        status: action.status,
+        at: action.createdAt,
+        accountMode: detail.accountMode,
+        productId,
+        amountSttWei,
+      }
+    })
+}
+
+export function cycleMatchesExecutionFilter(
+  detail: TradingHistoryDetail,
+  filter: HistoryExecutionFilter,
+): boolean {
+  if (filter === "all") {
+    return true
+  }
+  if (filter === "marketplace") {
+    return detail.actions.some((action) => action.type === "marketplace_purchase")
+  }
+  return detail.actions.some(
+    (action) =>
+      action.type === "swap" ||
+      action.type === "rebalance" ||
+      action.type === "approve",
+  )
+}
+
 const RECENT_TRADE_LIMIT = 5
 
 export async function loadRecentTrades(
   accountMode: AccountMode,
   limit = RECENT_TRADE_LIMIT,
 ): Promise<LastTradeInfo[]> {
-  const historyResult = await fetchTradingHistory(1, 8, accountMode)
-  if (!historyResult.success || !historyResult.data?.items.length) {
-    return []
+  const [historyResult, purchasesResult] = await Promise.all([
+    fetchTradingHistory(1, 8, accountMode),
+    fetchMarketplacePurchases(20),
+  ])
+
+  const executorTrades: LastTradeInfo[] = []
+  if (historyResult.success && historyResult.data?.items.length) {
+    const detailResults = await Promise.all(
+      historyResult.data.items.map((item) => fetchTradingCycleDetail(item.id)),
+    )
+    executorTrades.push(
+      ...detailResults.flatMap((result) =>
+        result.success && result.data?.cycle
+          ? tradesFromHistoryDetail(result.data.cycle)
+          : [],
+      ),
+    )
   }
 
-  const detailResults = await Promise.all(
-    historyResult.data.items.map((item) => fetchTradingCycleDetail(item.id)),
-  )
+  const marketplaceTrades =
+    purchasesResult.success && purchasesResult.data?.purchases
+      ? purchasesResult.data.purchases.map((purchase) =>
+          tradeFromMarketplacePurchase(purchase, accountMode),
+        )
+      : []
 
-  const trades = detailResults
-    .flatMap((result) =>
-      result.success && result.data?.cycle
-        ? tradesFromHistoryDetail(result.data.cycle)
-        : [],
-    )
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+  const trades = [...executorTrades, ...marketplaceTrades].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+  )
 
   const seen = new Set<string>()
   const unique: LastTradeInfo[] = []
   for (const trade of trades) {
-    const key = trade.txHash ?? `${trade.label}-${trade.at}`
+    const key =
+      trade.txHash ??
+      `${trade.executionKind}-${trade.label}-${trade.at}`
     if (seen.has(key)) {
       continue
     }
@@ -305,6 +413,15 @@ export async function loadRecentTrades(
   }
 
   return unique
+}
+
+export function tradingHistoryFilterHref(
+  filter: HistoryExecutionFilter,
+): string {
+  if (filter === "all") {
+    return APP_ROUTES.tradingHistory
+  }
+  return `${APP_ROUTES.tradingHistory}?filter=${filter}`
 }
 
 export function formatReason(reason: string): string {

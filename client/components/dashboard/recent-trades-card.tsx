@@ -54,7 +54,7 @@ export function RecentTradesCard({
         <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
           Recent activity
           {mode === "demo" && (
-            <span className="ml-2 text-[10px] text-amber-600">(demo fork)</span>
+            <span className="ml-2 text-[10px] text-amber-600">(demo)</span>
           )}
         </p>
         <div className="flex items-center gap-2">

@@ -10,6 +10,7 @@ import { useSession } from "@/providers/session-provider";
 import { getAgentStrategy, upsertAgentStrategy } from "@/lib/api/strategy";
 import { DEFAULT_POOL_ALLOCATIONS } from "@/lib/api/strategy-types";
 import { APP_ROUTES, setupRouteFor } from "@/lib/routing/app-routes";
+import { resolveStrategyRoute } from "@/lib/routing/resolve-post-auth";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -39,7 +40,8 @@ export default function StrategyOnboardingPage() {
         const strategyResult = await getAgentStrategy(accountMode ?? undefined);
         if (strategyResult.success && strategyResult.data?.strategy) {
           const { strategy } = strategyResult.data;
-          if (strategy.status === "active" && strategy.depositAmount > 0) {
+          const home = resolveStrategyRoute(strategy, accountMode);
+          if (home === APP_ROUTES.dashboard) {
             router.replace(APP_ROUTES.dashboard);
             return;
           }

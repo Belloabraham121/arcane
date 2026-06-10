@@ -18,7 +18,7 @@ export function TxHashDisplay({
     return (
       <code
         className="block break-all font-mono text-[10px] text-muted-foreground"
-        title="Anvil fork transaction (local — not on Somnia mainnet)"
+        title="Demo transaction (simulation — not on Somnia mainnet)"
       >
         {txHash}
       </code>

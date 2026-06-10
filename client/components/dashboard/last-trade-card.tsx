@@ -19,7 +19,7 @@ export function LastTradeCard({ trade, accountMode }: LastTradeCardProps) {
         <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
           Last trade
           {mode === "demo" && (
-            <span className="ml-2 text-[10px] text-amber-600">(demo fork)</span>
+            <span className="ml-2 text-[10px] text-amber-600">(demo)</span>
           )}
         </p>
         <Link
@@ -60,7 +60,7 @@ export function LastTradeCard({ trade, accountMode }: LastTradeCardProps) {
           )}
           {mode === "demo" && trade.txHash && (
             <p className="text-[10px] text-muted-foreground">
-              Fork tx — local Anvil only, not on Somnia explorer.
+              Demo transaction — not on Somnia explorer.
             </p>
           )}
         </div>

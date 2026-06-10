@@ -11,7 +11,7 @@ const TOKENS: { symbol: DemoDepositSymbol; label: string; hint: string }[] = [
   { symbol: "USDCe", label: "USDCe", hint: "Stablecoin (~$1 via CoinGecko)" },
   { symbol: "WSOMI", label: "WSOMI", hint: "Wrapped SOMI (CoinGecko price)" },
   { symbol: "WETH", label: "WETH", hint: "Wrapped ETH" },
-  { symbol: "SOMI", label: "SOMI", hint: "Native gas token on fork" },
+  { symbol: "SOMI", label: "SOMI", hint: "Native gas token" },
 ]
 
 type DemoDepositModalProps = {
@@ -65,7 +65,7 @@ export function DemoDepositModal({
               Demo wallet deposit
             </p>
             <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-              Credit tokens on the Anvil fork — paper money only.
+              Credit tokens to your demo wallet — paper money only.
             </p>
           </div>
           <button

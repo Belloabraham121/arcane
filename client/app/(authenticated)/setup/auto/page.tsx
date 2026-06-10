@@ -40,7 +40,8 @@ import {
   allocatedPoolIds,
   tokensFromAllocatedPools,
 } from "@/lib/supported-tokens";
-import { APP_ROUTES } from "@/lib/routing/app-routes";
+import { APP_ROUTES, setupRouteFor } from "@/lib/routing/app-routes";
+import { resolveStrategyRoute } from "@/lib/routing/resolve-post-auth";
 import {
   activePoolAllocations,
   mergeStrategyPoolAllocations,
@@ -186,9 +187,13 @@ function AutoSetupContent() {
 
       if (strategyResult.success && strategyResult.data?.strategy) {
         const { strategy } = strategyResult.data;
-        if (strategy.status === "active" && !isEditing) {
-          router.replace(APP_ROUTES.dashboard);
-          return;
+        if (!isEditing && accountMode != null) {
+          const home = resolveStrategyRoute(strategy, accountMode);
+          const setupRoute = setupRouteFor(strategy.strategyType);
+          if (home !== setupRoute) {
+            router.replace(home);
+            return;
+          }
         }
         if (strategy.strategyType !== "auto") {
           router.replace(APP_ROUTES.setupCustom);

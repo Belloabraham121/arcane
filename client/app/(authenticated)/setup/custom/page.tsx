@@ -37,7 +37,8 @@ import {
   strategyDepositForSetup,
 } from "@/lib/setup-deposit"
 import { allocatedPoolIds, tokensFromAllocatedPools } from "@/lib/supported-tokens"
-import { APP_ROUTES } from "@/lib/routing/app-routes"
+import { APP_ROUTES, setupRouteFor } from "@/lib/routing/app-routes"
+import { resolveStrategyRoute } from "@/lib/routing/resolve-post-auth"
 import { activePoolAllocations, mergeStrategyPoolAllocations } from "@/lib/pool-allocations"
 import { DEFAULT_CUSTOM_SUB_AGENTS } from "@/lib/strategy-presets"
 
@@ -171,9 +172,13 @@ function CustomSetupContent() {
 
       if (strategyResult.success && strategyResult.data?.strategy) {
         const { strategy } = strategyResult.data
-        if (strategy.status === "active" && !isEditing) {
-          router.replace(APP_ROUTES.dashboard)
-          return
+        if (!isEditing && accountMode != null) {
+          const home = resolveStrategyRoute(strategy, accountMode)
+          const setupRoute = setupRouteFor(strategy.strategyType)
+          if (home !== setupRoute) {
+            router.replace(home)
+            return
+          }
         }
         if (strategy.strategyType !== "custom") {
           router.replace(APP_ROUTES.setupAuto)

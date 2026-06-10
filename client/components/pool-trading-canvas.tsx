@@ -782,7 +782,7 @@ export function PoolTradingCanvas({
     >
       {isDemo && (
         <div className="pointer-events-none absolute right-4 top-4 z-10 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-amber-700 backdrop-blur dark:text-amber-400">
-          Anvil fork
+          Demo
         </div>
       )}
       <Canvas>

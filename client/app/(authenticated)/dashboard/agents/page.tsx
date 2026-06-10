@@ -359,7 +359,7 @@ function AgentsPageContent() {
                       : "text-[#16a34a]"
                   }`}
                 >
-                  {isDemo ? "fork · connected" : "live · connected"}
+                  {isDemo ? "demo · connected" : "live · connected"}
                 </span>
               ) : (
                 <span className="font-mono text-[10px] text-muted-foreground">

@@ -602,7 +602,7 @@ export default function DashboardPage() {
                 <AgentStatusBadge status={agentDisplayStatus} />
                 {socketConnected && (
                   <span className="font-mono text-[10px] text-[#16a34a]">
-                    {isDemoView ? "fork" : "live"}
+                    {isDemoView ? "demo" : "live"}
                   </span>
                 )}
               </div>
@@ -633,7 +633,7 @@ export default function DashboardPage() {
               <p className="border border-amber-500/30 bg-amber-500/5 px-4 py-3 font-mono text-xs text-amber-700 dark:text-amber-400">
                 {tradingStatus.demoWalletNotice}
                 {!tradingStatus.demoTradingAvailable &&
-                  " — Anvil fork is offline; demo cycles are paused."}
+                  " — Demo trading is offline; cycles are paused."}
                 {tradingStatus.demoCycleBusy &&
                   " — A demo cycle is running; yours will queue."}
               </p>
@@ -661,12 +661,10 @@ export default function DashboardPage() {
             )}
             {isDemoView && tradingStatus?.lastCycle && (
               <p className="font-mono text-[10px] text-muted-foreground">
-                Last cycle: demo fork
+                Last cycle: demo
                 {tradingStatus.lastCycle.accountMode && (
                   <> · {tradingStatus.lastCycle.accountMode}</>
                 )}
-                {tradingStatus.lastCycle.executedTransactions.length > 0 &&
-                  " · swaps run on local Anvil"}
               </p>
             )}
             {tradingStatus?.lastCycle?.llmResponse && (
@@ -717,7 +715,7 @@ export default function DashboardPage() {
               </p>
               <p className="mb-4 font-mono text-[10px] text-muted-foreground">
                 {isDemoView
-                  ? `Fork balances for ${displayWalletAddress ?? "the shared demo wallet"} on the Anvil fork. Pre-seeded for paper trading — no real deposit required.`
+                  ? `Demo balances for ${displayWalletAddress ?? "the shared demo wallet"}. Pre-seeded for paper trading — no real deposit required.`
                   : "Live balances on Somnia mainnet for tokens in your selected pools. The agent signs and submits swaps automatically — you never approve transactions in a wallet."}
               </p>
               {displayWalletAddress && (
@@ -731,7 +729,7 @@ export default function DashboardPage() {
                 error={balancesError}
                 emptyLabel={
                   isDemoView
-                    ? "No fork balances yet — run npm run fork:anvil or activate your agent to auto-fund"
+                    ? "No demo balances yet — activate your agent to auto-fund"
                     : "No supported tokens in active pools"
                 }
               />
@@ -745,7 +743,7 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <p className="font-mono text-xs text-muted-foreground">
                 {isDemoView
-                  ? "QuickSwap pool catalog (mainnet reference). Your demo agent trades the same pools on the Anvil fork."
+                  ? "QuickSwap pool catalog (mainnet reference). Your demo agent trades the same pools in simulation."
                   : "Live QuickSwap pools on Somnia mainnet — allocation from your agent strategy."}
               </p>
               <p className="font-mono text-[10px] text-muted-foreground">
@@ -874,7 +872,7 @@ export default function DashboardPage() {
                         ? "Demo agents are paused — no scheduled cycles, sub-agent runs, or marketplace purchases."
                         : "Live agents are paused — no scheduled cycles, sub-agent runs, or marketplace purchases."
                       : isDemoView
-                        ? "Your demo agent network trades on the Anvil fork (paper trading)."
+                        ? "Your demo agent network runs in paper-trading mode."
                         : "Your agent network is active on Somnia mainnet."}
                   </p>
                   {strategy && strategy.status !== "draft" ? (
@@ -936,14 +934,14 @@ export default function DashboardPage() {
                 <li>• Rebalance across QuickSwap liquidity pools</li>
                 <li>
                   • Swap via Algebra V4 on{" "}
-                  {isDemoView ? "the Anvil fork (demo)" : "Somnia mainnet"}
+                  {isDemoView ? "demo (simulation)" : "Somnia mainnet"}
                 </li>
                 <li>• Monitor pool prices and migrate capital</li>
                 <li>• Execute moves with Somnia LLM inference agent</li>
               </ul>
               <p className="font-mono text-xs text-muted-foreground">
                 {isDemoView
-                  ? "Open the demo canvas to watch root and sub-agents move between pool nodes on the fork."
+                  ? "Open the demo canvas to watch root and sub-agents move between pool nodes."
                   : "Open the live canvas to watch root and sub-agents move between pool nodes in real time."}
               </p>
             </div>

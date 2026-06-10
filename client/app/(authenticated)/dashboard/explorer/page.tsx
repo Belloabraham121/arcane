@@ -343,7 +343,7 @@ function TxDetailPanel({ tx }: { tx: FlatTx }) {
 
       {isDemo && (
         <p className="text-[9px] text-amber-600 dark:text-amber-400">
-          Anvil fork transaction — not on Somnia mainnet.
+          Demo transaction — not on Somnia mainnet.
         </p>
       )}
     </div>
@@ -801,7 +801,7 @@ export default function ExplorerPage() {
             Arcane Agent Explorer
           </h1>
           <p className="mb-5 font-mono text-xs text-muted-foreground">
-            {mode === "demo" ? "Anvil Fork" : "Somnia Mainnet"} ·{" "}
+            {mode === "demo" ? "Demo" : "Somnia Mainnet"} ·{" "}
             Inspect agent & sub-agent transactions
           </p>
           <form onSubmit={handleSearch} className="relative max-w-2xl">
@@ -845,7 +845,7 @@ export default function ExplorerPage() {
           />
           <Stat
             label="Network"
-            value={mode === "demo" ? "Anvil Fork" : "Somnia"}
+            value={mode === "demo" ? "Demo" : "Somnia"}
             text
           />
         </div>
@@ -1104,7 +1104,7 @@ export default function ExplorerPage() {
             {filtered.length > 0
               ? `Showing ${pageStart}–${pageEnd} of ${filtered.length} transaction${filtered.length !== 1 ? "s" : ""}`
               : "No transactions"}{" "}
-            from {mode === "demo" ? "Anvil Fork (local)" : "Somnia Mainnet"}.
+            from {mode === "demo" ? "demo mode" : "Somnia Mainnet"}.
             {search && ` Filtered by "${search}".`}
           </p>
         </div>

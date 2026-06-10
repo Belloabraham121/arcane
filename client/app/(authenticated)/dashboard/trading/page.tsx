@@ -110,7 +110,7 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
     <div className="border-t border-border bg-muted/20 px-4 py-4 space-y-4">
       {isDemo && (
         <p className="font-mono text-[10px] text-amber-700 dark:text-amber-400">
-          Anvil fork transaction — not on Somnia mainnet.
+          Demo transaction — not on Somnia mainnet.
         </p>
       )}
 
@@ -439,8 +439,8 @@ function TradingHistoryContent() {
         title="Trading history"
         subtitle={
           accountMode === "demo"
-            ? "Demo fork cycles only — separate from live mainnet transactions"
-            : "Live mainnet cycles only — demo fork transactions are listed separately"
+            ? "Demo cycles only — separate from live mainnet transactions"
+            : "Live mainnet cycles only — demo transactions are listed separately"
         }
         badge={accountMode ? <AccountModeBadge mode={accountMode} /> : undefined}
         backHref={APP_ROUTES.dashboard}

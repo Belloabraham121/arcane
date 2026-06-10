@@ -26,6 +26,9 @@ import { poolColorForId, poolColorsForIds } from "@/lib/pool-node-colors"
 import { activeResolvablePoolEntries, resolvePoolById } from "@/lib/pool-resolve"
 import { POOL_LABELS } from "@/lib/strategy-presets"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
+import {
+  isSomniaAttestationAction,
+} from "@/lib/somnia-attestation"
 
 export type AgentDisplayStatus =
   | "idle"
@@ -156,7 +159,7 @@ export function buildActivePoolRows(
   })
 }
 
-export type ExecutionKind = "executor" | "marketplace"
+export type ExecutionKind = "executor" | "marketplace" | "attestation"
 
 export type HistoryExecutionFilter = "all" | ExecutionKind
 
@@ -306,6 +309,55 @@ function tradeFromMarketplacePurchase(
   }
 }
 
+export function attestationTradesFromHistoryDetail(
+  detail: TradingHistoryDetail,
+): LastTradeInfo[] {
+  const fromActions = detail.actions
+    .filter((action) => isSomniaAttestationAction(action) && action.txHash)
+    .map((action) => ({
+      kind: "somnia_attestation",
+      executionKind: "attestation" as const,
+      label: "Somnia LLM attestation",
+      amountIn: null,
+      amountOut: null,
+      tokenIn: null,
+      tokenOut: null,
+      poolFrom: null,
+      poolTo: null,
+      txHash: action.txHash,
+      status: action.status,
+      at: action.createdAt,
+      accountMode: detail.accountMode,
+    }))
+
+  if (fromActions.length > 0) {
+    return fromActions
+  }
+
+  const att = detail.somniaAttestation
+  if (!att?.txHash) {
+    return []
+  }
+
+  return [
+    {
+      kind: "somnia_attestation",
+      executionKind: "attestation",
+      label: "Somnia LLM attestation",
+      amountIn: null,
+      amountOut: null,
+      tokenIn: null,
+      tokenOut: null,
+      poolFrom: null,
+      poolTo: null,
+      txHash: att.txHash,
+      status: att.status === "failed" ? "failed" : "success",
+      at: detail.finishedAt,
+      accountMode: detail.accountMode,
+    },
+  ]
+}
+
 export function marketplaceTradesFromHistoryDetail(
   detail: TradingHistoryDetail,
 ): LastTradeInfo[] {
@@ -379,7 +431,10 @@ export async function loadRecentTrades(
     executorTrades.push(
       ...detailResults.flatMap((result) =>
         result.success && result.data?.cycle
-          ? tradesFromHistoryDetail(result.data.cycle)
+          ? [
+              ...tradesFromHistoryDetail(result.data.cycle),
+              ...attestationTradesFromHistoryDetail(result.data.cycle),
+            ]
           : [],
       ),
     )

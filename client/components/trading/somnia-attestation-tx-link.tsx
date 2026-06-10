@@ -1,27 +1,27 @@
-import { marketplaceTxUrl } from "@/lib/somnia-explorer"
+import { somniaAttestationTxUrl } from "@/lib/somnia-explorer"
 
-type MarketplaceTxLinkProps = {
+type SomniaAttestationTxLinkProps = {
   txHash: string
   className?: string
   label?: string
   showHash?: boolean
 }
 
-export function MarketplaceTxLink({
+export function SomniaAttestationTxLink({
   txHash,
   className = "inline-block font-mono text-[10px] text-[#ea580c] hover:underline",
-  label = "View transaction on-chain",
+  label = "View attestation on-chain",
   showHash = false,
-}: MarketplaceTxLinkProps) {
+}: SomniaAttestationTxLinkProps) {
   const short = `${txHash.slice(0, 10)}…${txHash.slice(-6)}`
 
   return (
     <a
-      href={marketplaceTxUrl(txHash)}
+      href={somniaAttestationTxUrl(txHash)}
       target="_blank"
       rel="noopener noreferrer"
       className={className}
-      title="Somnia testnet (ExploreMe)"
+      title="Somnia testnet LLM attestation (ExploreMe)"
     >
       {label} ↗{showHash ? ` · ${short}` : ""}
     </a>

@@ -27,6 +27,7 @@ import { DemoDepositModal } from "@/components/dashboard/demo-deposit-modal"
 import { ViewAgentsLink } from "@/components/dashboard/view-agents-link"
 import { AgentLlmResponseDialog } from "@/components/agent-llm-response-dialog"
 import { RecentTradesCard } from "@/components/dashboard/recent-trades-card"
+import { SomniaAttestationTxLink } from "@/components/trading/somnia-attestation-tx-link"
 import { PortfolioPnlDetailDialog } from "@/components/dashboard/portfolio-pnl-detail-dialog"
 import { SomniaLlmSummaryCard } from "@/components/dashboard/somnia-llm-summary-card"
 import { PoolAllocationStrip } from "@/components/dashboard/pool-allocation-strip"
@@ -644,13 +645,18 @@ export default function DashboardPage() {
               </p>
             )}
 
-            {!isDemoView &&
-              tradingStatus?.lastCycle?.somniaAttestation?.txHash && (
+            {tradingStatus?.lastCycle?.somniaAttestation?.txHash && (
               <p className="font-mono text-[10px] text-muted-foreground">
                 Somnia attestation:{" "}
                 <span className="text-foreground">
-                  request #{tradingStatus.lastCycle.somniaAttestation.requestId ?? "—"}
+                  request #
+                  {tradingStatus.lastCycle.somniaAttestation.requestId ?? "—"}
                 </span>
+                {" · "}
+                <SomniaAttestationTxLink
+                  txHash={tradingStatus.lastCycle.somniaAttestation.txHash}
+                  className="text-[10px] text-[#ea580c] hover:underline"
+                />
               </p>
             )}
             {isDemoView && tradingStatus?.lastCycle && (

@@ -32,7 +32,13 @@ import { MarketplaceX402SpendChart } from "@/components/marketplace/marketplace-
 import { formatSttWei, marketplaceProductLabel } from "@/lib/marketplace-display"
 import { summarizeMarketplaceSpend } from "@/lib/marketplace-spend-chart"
 import { MarketplaceTxLink } from "@/components/trading/marketplace-tx-link"
+import { SomniaAttestationTxLink } from "@/components/trading/somnia-attestation-tx-link"
+import { SomniaAttestationPanel } from "@/components/trading/somnia-attestation-panel"
 import { somniaTxUrl } from "@/lib/somnia-explorer"
+import {
+  attestationFromActionMetadata,
+  isSomniaAttestationAction,
+} from "@/lib/somnia-attestation"
 import { cn } from "@/lib/utils"
 
 const TX_PAGE_SIZE = 10
@@ -75,6 +81,7 @@ function agentLabel(tx: FlatTx): string {
 }
 
 function methodLabel(tx: FlatTx): string {
+  if (isSomniaAttestationAction(tx)) return "Somnia LLM Attestation"
   if (tx.type === "swap") return "Swap"
   if (tx.type === "rebalance") return "Rebalance"
   if (tx.type === "approve") return "Approve"
@@ -84,7 +91,9 @@ function methodLabel(tx: FlatTx): string {
   return tx.type
 }
 
-function typeIcon(type: string): string {
+function typeIcon(tx: FlatTx): string {
+  if (isSomniaAttestationAction(tx)) return "⛓"
+  const type = tx.type
   if (type === "swap" || type === "rebalance") return "↔"
   if (type === "approve") return "✓"
   if (type === "sub_agent") return "◈"
@@ -92,8 +101,9 @@ function typeIcon(type: string): string {
   return "⚙"
 }
 
-function typeColor(type: string): string {
-  switch (type) {
+function typeColor(tx: FlatTx): string {
+  if (isSomniaAttestationAction(tx)) return "text-cyan-400"
+  switch (tx.type) {
     case "swap":
     case "rebalance":
       return "text-[#ea580c]"
@@ -192,6 +202,8 @@ function TxDetailPanel({ tx }: { tx: FlatTx }) {
   const meta = tx.metadata as Record<string, unknown> | null
   const isDemo = tx.accountMode === "demo"
   const isSubAgent = tx.type === "sub_agent"
+  const isAttestation = isSomniaAttestationAction(tx)
+  const attestation = attestationFromActionMetadata(tx)
 
   return (
     <div className="border-t border-border/50 bg-muted/10 px-5 py-4 space-y-4">
@@ -199,7 +211,14 @@ function TxDetailPanel({ tx }: { tx: FlatTx }) {
         {/* Transaction Hash */}
         <DetailRow label="Transaction Hash">
           {tx.txHash ? (
-            isDemo ? (
+            isAttestation ? (
+              <div className="space-y-1">
+                <SomniaAttestationTxLink txHash={tx.txHash} />
+                <code className="block break-all text-[10px] text-muted-foreground">
+                  {tx.txHash}
+                </code>
+              </div>
+            ) : isDemo ? (
               <code className="break-all text-[10px] text-muted-foreground">
                 {tx.txHash}
               </code>
@@ -241,10 +260,10 @@ function TxDetailPanel({ tx }: { tx: FlatTx }) {
 
         {/* Method / Tool */}
         <DetailRow label="Method">
-          <span className={cn("text-[10px] font-semibold", typeColor(tx.type))}>
+          <span className={cn("text-[10px] font-semibold", typeColor(tx))}>
             {methodLabel(tx)}
           </span>
-          {tx.toolName && tx.type !== "sub_agent" && (
+          {tx.toolName && tx.type !== "sub_agent" && !isAttestation && (
             <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
               {tx.toolName}
             </span>
@@ -295,6 +314,11 @@ function TxDetailPanel({ tx }: { tx: FlatTx }) {
         </div>
       )}
 
+      {/* Somnia LLM attestation */}
+      {isAttestation && attestation ? (
+        <SomniaAttestationPanel attestation={attestation} compact />
+      ) : null}
+
       {/* Sub-agent thought / summary */}
       {isSubAgent && meta?.summary && (
         <div className="rounded border border-violet-500/20 bg-violet-500/5 px-3 py-2.5">
@@ -319,7 +343,7 @@ function TxDetailPanel({ tx }: { tx: FlatTx }) {
 
       {isDemo && (
         <p className="text-[9px] text-amber-600 dark:text-amber-400">
-          Anvil fork transaction — not on Somnia mainnet.
+          Demo transaction — not on Somnia mainnet.
         </p>
       )}
     </div>
@@ -606,6 +630,39 @@ export default function ExplorerPage() {
           action: flat,
         })
       }
+
+      const hasAttestationAction = cycle.actions.some((action) =>
+        isSomniaAttestationAction(action),
+      )
+      if (cycle.somniaAttestation?.txHash && !hasAttestationAction) {
+        const att = cycle.somniaAttestation
+        const syntheticId = `attestation-${cycle.id}`
+        const flat: FlatTx = {
+          id: syntheticId,
+          cycleId: cycle.id,
+          cycleReason: cycle.reason,
+          cycleMessage: cycle.message,
+          accountMode: cycle.accountMode,
+          type: "tool",
+          toolName: "somnia_attestation",
+          txHash: att.txHash,
+          status: att.status === "failed" ? "failed" : "success",
+          createdAt: cycle.finishedAt ?? cycle.startedAt,
+          tokenIn: null,
+          tokenOut: null,
+          amountIn: null,
+          amountOut: null,
+          poolFrom: null,
+          poolTo: null,
+          metadata: att as unknown as Record<string, unknown>,
+        }
+        merged.push({
+          id: `action-${syntheticId}`,
+          kind: "action",
+          createdAt: flat.createdAt,
+          action: flat,
+        })
+      }
     }
 
     const purchasesResult = await fetchMarketplacePurchases(100)
@@ -671,7 +728,9 @@ export default function ExplorerPage() {
         t.toolName?.toLowerCase().includes(q) ||
         t.type.toLowerCase().includes(q) ||
         agentLabel(t).toLowerCase().includes(q) ||
-        methodLabel(t).toLowerCase().includes(q)
+        methodLabel(t).toLowerCase().includes(q) ||
+        q.includes("attestation") ||
+        q.includes("somnia")
       )
     })
   }, [entries, search])
@@ -742,7 +801,7 @@ export default function ExplorerPage() {
             Arcane Agent Explorer
           </h1>
           <p className="mb-5 font-mono text-xs text-muted-foreground">
-            {mode === "demo" ? "Anvil Fork" : "Somnia Mainnet"} ·{" "}
+            {mode === "demo" ? "Demo" : "Somnia Mainnet"} ·{" "}
             Inspect agent & sub-agent transactions
           </p>
           <form onSubmit={handleSearch} className="relative max-w-2xl">
@@ -786,7 +845,7 @@ export default function ExplorerPage() {
           />
           <Stat
             label="Network"
-            value={mode === "demo" ? "Anvil Fork" : "Somnia"}
+            value={mode === "demo" ? "Demo" : "Somnia"}
             text
           />
         </div>
@@ -901,6 +960,7 @@ export default function ExplorerPage() {
 
                 const tx = entry.action
                 if (!tx) return null
+                const isAttestation = isSomniaAttestationAction(tx)
 
                 return (
                   <div key={uid}>
@@ -914,18 +974,20 @@ export default function ExplorerPage() {
                       <div
                         className={cn(
                           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm",
-                          tx.type === "swap" || tx.type === "rebalance"
-                            ? "bg-[#ea580c]/10 text-[#ea580c]"
-                            : tx.type === "approve"
-                              ? "bg-blue-500/10 text-blue-400"
-                              : tx.type === "sub_agent"
-                                ? "bg-violet-500/10 text-violet-400"
-                                : tx.type === "quote"
-                                  ? "bg-amber-500/10 text-amber-400"
-                                  : "bg-muted text-muted-foreground",
+                          isAttestation
+                            ? "bg-cyan-500/10 text-cyan-400"
+                            : tx.type === "swap" || tx.type === "rebalance"
+                              ? "bg-[#ea580c]/10 text-[#ea580c]"
+                              : tx.type === "approve"
+                                ? "bg-blue-500/10 text-blue-400"
+                                : tx.type === "sub_agent"
+                                  ? "bg-violet-500/10 text-violet-400"
+                                  : tx.type === "quote"
+                                    ? "bg-amber-500/10 text-amber-400"
+                                    : "bg-muted text-muted-foreground",
                         )}
                       >
-                        {typeIcon(tx.type)}
+                        {typeIcon(tx)}
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -933,7 +995,7 @@ export default function ExplorerPage() {
                           <span
                             className={cn(
                               "text-xs font-medium",
-                              typeColor(tx.type),
+                              typeColor(tx),
                             )}
                           >
                             {methodLabel(tx)}
@@ -944,7 +1006,8 @@ export default function ExplorerPage() {
                             </code>
                           )}
                           {tx.toolName &&
-                            tx.type !== "sub_agent" && (
+                            tx.type !== "sub_agent" &&
+                            !isAttestation && (
                               <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
                                 {tx.toolName}
                               </span>
@@ -953,14 +1016,16 @@ export default function ExplorerPage() {
                         <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
                           <span
                             className={
-                              tx.type === "sub_agent"
-                                ? "text-violet-400/70"
-                                : "text-[#ea580c]/70"
+                              isAttestation
+                                ? "text-cyan-400/70"
+                                : tx.type === "sub_agent"
+                                  ? "text-violet-400/70"
+                                  : "text-[#ea580c]/70"
                             }
                           >
-                            {agentLabel(tx)}
+                            {isAttestation ? "On-chain LLM proof" : agentLabel(tx)}
                           </span>
-                          {(tx.tokenIn || tx.poolFrom) && (
+                          {!isAttestation && (tx.tokenIn || tx.poolFrom) && (
                             <>
                               <span>·</span>
                               <span>
@@ -977,6 +1042,11 @@ export default function ExplorerPage() {
                             </>
                           )}
                         </div>
+                        {isAttestation && tx.txHash ? (
+                          <div className="mt-1">
+                            <SomniaAttestationTxLink txHash={tx.txHash} />
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="hidden shrink-0 sm:block">
@@ -1034,7 +1104,7 @@ export default function ExplorerPage() {
             {filtered.length > 0
               ? `Showing ${pageStart}–${pageEnd} of ${filtered.length} transaction${filtered.length !== 1 ? "s" : ""}`
               : "No transactions"}{" "}
-            from {mode === "demo" ? "Anvil Fork (local)" : "Somnia Mainnet"}.
+            from {mode === "demo" ? "demo mode" : "Somnia Mainnet"}.
             {search && ` Filtered by "${search}".`}
           </p>
         </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ArcaneLogo } from '@/components/arcane-logo'
 import { motion } from 'framer-motion'
 import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 
@@ -44,11 +45,7 @@ export default function SignInPage() {
       {/* Header */}
       <header className="relative z-10 w-full border-b border-border">
         <div className="flex items-center justify-between px-12 py-4 lg:px-24">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="text-xs font-mono tracking-[0.15em] uppercase font-bold">
-              ARCANE
-            </div>
-          </Link>
+          <ArcaneLogo height={28} priority />
           <Link
             href="/"
             className="text-xs font-mono tracking-[0.1em] uppercase text-muted-foreground hover:text-foreground transition-colors"

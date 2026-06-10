@@ -5,6 +5,7 @@ import type { LastTradeInfo } from "@/lib/trading-helpers"
 import { tradingHistoryFilterHref } from "@/lib/trading-helpers"
 import { TxHashDisplay } from "@/components/trading/tx-hash-display"
 import { MarketplaceTxLink } from "@/components/trading/marketplace-tx-link"
+import { SomniaAttestationTxLink } from "@/components/trading/somnia-attestation-tx-link"
 import { formatSttWei } from "@/lib/marketplace-display"
 import { APP_ROUTES } from "@/lib/routing/app-routes"
 import { cn } from "@/lib/utils"
@@ -18,6 +19,13 @@ type RecentTradesCardProps = {
 }
 
 function executionBadge(trade: LastTradeInfo) {
+  if (trade.executionKind === "attestation") {
+    return (
+      <span className="rounded border border-cyan-500/30 bg-cyan-500/5 px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-cyan-500">
+        Somnia attestation
+      </span>
+    )
+  }
   if (trade.executionKind === "marketplace") {
     return (
       <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-muted-foreground">
@@ -46,7 +54,7 @@ export function RecentTradesCard({
         <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
           Recent activity
           {mode === "demo" && (
-            <span className="ml-2 text-[10px] text-amber-600">(demo fork)</span>
+            <span className="ml-2 text-[10px] text-amber-600">(demo)</span>
           )}
         </p>
         <div className="flex items-center gap-2">
@@ -118,6 +126,10 @@ export function RecentTradesCard({
               {trade.executionKind === "marketplace" && trade.txHash ? (
                 <div className="mt-1">
                   <MarketplaceTxLink txHash={trade.txHash} />
+                </div>
+              ) : trade.executionKind === "attestation" && trade.txHash ? (
+                <div className="mt-1">
+                  <SomniaAttestationTxLink txHash={trade.txHash} />
                 </div>
               ) : trade.txHash ? (
                 <div className="mt-1">

@@ -19,7 +19,13 @@ import { resolvePostAuthRoute } from "@/lib/routing/resolve-post-auth"
 import { MarkdownContent } from "@/components/agent/markdown-content"
 import { TxHashDisplay } from "@/components/trading/tx-hash-display"
 import { MarketplaceTxLink } from "@/components/trading/marketplace-tx-link"
+import { SomniaAttestationTxLink } from "@/components/trading/somnia-attestation-tx-link"
+import { SomniaAttestationPanel } from "@/components/trading/somnia-attestation-panel"
 import { somniaTxUrl } from "@/lib/somnia-explorer"
+import {
+  attestationFromActionMetadata,
+  isSomniaAttestationAction,
+} from "@/lib/somnia-attestation"
 import {
   cycleMatchesExecutionFilter,
   formatReason,
@@ -104,31 +110,16 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
     <div className="border-t border-border bg-muted/20 px-4 py-4 space-y-4">
       {isDemo && (
         <p className="font-mono text-[10px] text-amber-700 dark:text-amber-400">
-          Anvil fork transaction — not on Somnia mainnet.
+          Demo transaction — not on Somnia mainnet.
         </p>
       )}
 
-      {!isDemo && detail.somniaAttestation?.txHash && (
+      {detail.somniaAttestation?.txHash && (
         <div>
-          <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            Somnia on-chain agent (attestation)
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Somnia on-chain LLM attestation
           </p>
-          <p className="font-mono text-xs text-muted-foreground">
-            {detail.somniaAttestation.message}
-          </p>
-          {detail.somniaAttestation.requestId && (
-            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-              Request #{detail.somniaAttestation.requestId}
-            </p>
-          )}
-          <a
-            href={somniaTxUrl(detail.somniaAttestation.txHash)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 inline-block font-mono text-xs text-[#ea580c] hover:underline"
-          >
-            View Somnia attestation tx ↗
-          </a>
+          <SomniaAttestationPanel attestation={detail.somniaAttestation} compact />
         </div>
       )}
 
@@ -224,6 +215,8 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
                 action.type === "marketplace_purchase"
                   ? marketplaceReceiptFromAction(action)
                   : null
+              const attestationReceipt = attestationFromActionMetadata(action)
+              const isAttestation = isSomniaAttestationAction(action)
 
               return (
                 <div
@@ -232,14 +225,17 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="uppercase text-foreground">
-                      {action.type === "marketplace_purchase"
-                        ? `marketplace · ${marketplaceProductLabel(
-                            marketplaceReceipt?.productId ??
-                              action.toolName ??
-                              "",
-                          )}`
-                        : action.type}
-                      {action.type !== "marketplace_purchase" &&
+                      {isAttestation
+                        ? "Somnia LLM attestation"
+                        : action.type === "marketplace_purchase"
+                          ? `marketplace · ${marketplaceProductLabel(
+                              marketplaceReceipt?.productId ??
+                                action.toolName ??
+                                "",
+                            )}`
+                          : action.type}
+                      {!isAttestation &&
+                      action.type !== "marketplace_purchase" &&
                       action.toolName
                         ? ` · ${action.toolName}`
                         : ""}
@@ -265,10 +261,15 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
                     >
                       {action.status}
                     </span>
+                    {action.txHash && isAttestation && (
+                      <SomniaAttestationTxLink txHash={action.txHash} />
+                    )}
                     {action.txHash && action.type === "marketplace_purchase" && (
                       <MarketplaceTxLink txHash={action.txHash} />
                     )}
-                    {action.txHash && action.type !== "marketplace_purchase" && (
+                    {action.txHash &&
+                      !isAttestation &&
+                      action.type !== "marketplace_purchase" && (
                       <TxHashDisplay
                         txHash={action.txHash}
                         accountMode={detail.accountMode}
@@ -276,6 +277,14 @@ function CycleDetailPanel({ detail }: { detail: TradingHistoryDetail }) {
                       />
                     )}
                   </div>
+                  {isAttestation && attestationReceipt ? (
+                    <div className="mt-2 border-t border-border/50 pt-2">
+                      <SomniaAttestationPanel
+                        attestation={attestationReceipt}
+                        compact
+                      />
+                    </div>
+                  ) : null}
                 </div>
               )
             })}
@@ -430,8 +439,8 @@ function TradingHistoryContent() {
         title="Trading history"
         subtitle={
           accountMode === "demo"
-            ? "Demo fork cycles only — separate from live mainnet transactions"
-            : "Live mainnet cycles only — demo fork transactions are listed separately"
+            ? "Demo cycles only — separate from live mainnet transactions"
+            : "Live mainnet cycles only — demo transactions are listed separately"
         }
         badge={accountMode ? <AccountModeBadge mode={accountMode} /> : undefined}
         backHref={APP_ROUTES.dashboard}

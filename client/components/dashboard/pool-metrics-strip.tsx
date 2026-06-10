@@ -32,7 +32,7 @@ export function PoolMetricsStrip({
   return (
     <div className="border border-border">
       <p className="border-b border-border px-4 py-3 text-xs font-mono tracking-widest uppercase text-muted-foreground">
-        {isDemo ? "Pool metrics (fork reference)" : "Live pool metrics"}
+        {isDemo ? "Pool metrics (demo reference)" : "Live pool metrics"}
       </p>
       <div className="flex gap-px overflow-x-auto bg-border">
         {activeEntries.map(([poolId]) => {

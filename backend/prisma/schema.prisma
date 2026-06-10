@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountMode {
+  demo
+  live
+}
+
+enum StrategyType {
+  auto
+  custom
+}
+
+enum StrategyStatus {
+  draft
+  active
+  paused
+}
+
+enum TradingCycleStatus {
+  completed
+  failed
+}
+
+enum TradingActionType {
+  approve
+  swap
+  rebalance
+  quote
+  tool
+  sub_agent
+  marketplace_purchase
+}
+
+enum MarketplacePurchaseStatus {
+  success
+  failed
+  skipped
+}
+
+enum TradingActionStatus {
+  success
+  failed
+  reverted
+}
+
+model User {
+  id                   String         @id @default(uuid()) @db.Uuid
+  email                String         @unique @db.Text
+  passwordHash         String         @map("password_hash") @db.Text
+  walletAddress        String         @unique @map("wallet_address") @db.Text
+  walletDerivationPath String         @map("wallet_derivation_path") @db.Text
+  encryptedPrivateKey  String         @map("encrypted_private_key") @db.Text
+  encryptionIv         String         @map("encryption_iv") @db.Text
+  encryptionAuthTag    String         @map("encryption_auth_tag") @db.Text
+  /// Demo = shared Anvil paper wallet; live = per-user custodial agent wallet; null until onboarding.
+  accountMode          AccountMode?   @map("account_mode")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+  agentStrategies      AgentStrategy[]
+  portfolioSnapshots   PortfolioSnapshot[]
+  marketplacePurchases MarketplacePurchase[]
+
+  @@map("user")
+}
+
+model PortfolioSnapshot {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountMode   AccountMode @map("account_mode")
+  walletAddress String      @map("wallet_address") @db.Text
+  totalValueUsd Float       @map("total_value_usd")
+  balancesJson  Json        @map("balances_json")
+  capturedAt    DateTime    @default(now()) @map("captured_at") @db.Timestamptz
+
+  @@index([userId, capturedAt(sort: Desc)], map: "idx_portfolio_snapshot_user_captured")
+  @@map("portfolio_snapshot")
+}
+
+model AgentStrategy {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Separate strategy config per account mode (demo fork vs live mainnet).
+  accountMode      AccountMode      @default(live) @map("account_mode")
+  strategyType     StrategyType     @map("strategy_type")
+  status           StrategyStatus   @default(draft)
+  depositAmount    Float            @default(0) @map("deposit_amount")
+  subAgentConfig   Json?            @map("sub_agent_config")
+  tradingEnabledAt DateTime?        @map("trading_enabled_at") @db.Timestamptz
+  lastCycleAt      DateTime?        @map("last_cycle_at") @db.Timestamptz
+  /// Custom agents: user-defined interval; auto uses env default when null.
+  cycleIntervalMinutes Int?         @map("cycle_interval_minutes")
+  /// Max STT (wei) sub-agents may spend on Marketplace x402 purchases per cycle.
+  subAgentX402BudgetSttWei BigInt?   @map("sub_agent_x402_budget_stt_wei")
+  /// Fingerprint of last observed wallet balances (deposit detection).
+  lastObservedBalanceFingerprint String? @map("last_observed_balance_fingerprint") @db.Text
+  /// First detected wallet value (USD) after activation.
+  detectedDepositUsd Float?       @map("detected_deposit_usd")
+  /// P&L baseline = max(manual depositAmount, detectedDepositUsd).
+  baselineUsd        Float?        @map("baseline_usd")
+  baselineSetAt      DateTime?     @map("baseline_set_at") @db.Timestamptz
+  poolAllocations  PoolAllocation[]
+  tradingCycles    TradingCycle[]
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([userId, accountMode], map: "uk_agent_strategy_user_account_mode")
+  @@map("agent_strategy")
+}
+
+model TradingCycle {
+  id          String             @id @default(uuid()) @db.Uuid
+  userId      String             @map("user_id") @db.Uuid
+  strategyId  String             @map("strategy_id") @db.Uuid
+  strategy    AgentStrategy      @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  accountMode AccountMode        @default(live) @map("account_mode")
+  reason      String             @db.Text
+  status      TradingCycleStatus @default(completed)
+  message     String             @db.Text
+  llmPending  Boolean            @default(true) @map("llm_pending")
+  llmResponse String?            @map("llm_response") @db.Text
+  llmSummary  String?            @map("llm_summary") @db.Text
+  /// Somnia on-chain LLM attestation (tx proof — not used for trading decisions).
+  somniaAttestation Json?        @map("somnia_attestation")
+  poolDrift   Json?              @map("pool_drift")
+  startedAt   DateTime           @map("started_at") @db.Timestamptz
+  finishedAt  DateTime           @map("finished_at") @db.Timestamptz
+  actions     TradingAction[]
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId, startedAt(sort: Desc)], map: "idx_trading_cycle_user_started")
+  @@index([strategyId], map: "idx_trading_cycle_strategy_id")
+  @@map("trading_cycle")
+}
+
+model TradingAction {
+  id        String              @id @default(uuid()) @db.Uuid
+  cycleId   String              @map("cycle_id") @db.Uuid
+  cycle     TradingCycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  type      TradingActionType
+  toolName  String?             @map("tool_name") @db.Text
+  tokenIn   String?             @map("token_in") @db.Text
+  tokenOut  String?             @map("token_out") @db.Text
+  amountIn  String?             @map("amount_in") @db.Text
+  amountOut String?             @map("amount_out") @db.Text
+  poolFrom  String?             @map("pool_from") @db.Text
+  poolTo    String?             @map("pool_to") @db.Text
+  txHash    String?             @map("tx_hash") @db.Text
+  status    TradingActionStatus @default(success)
+  metadata  Json?
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([cycleId], map: "idx_trading_action_cycle_id")
+  @@map("trading_action")
+}
+
+/// QuickSwap pool capital allocation (pool id e.g. usdce-wsomi).
+model PoolAllocation {
+  id         String        @id @default(uuid()) @db.Uuid
+  strategyId String        @map("strategy_id") @db.Uuid
+  strategy   AgentStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  poolId     String        @map("pool_id") @db.Text
+  amount     Float
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([strategyId, poolId], map: "uk_pool_allocation_strategy_pool")
+  @@index([poolId], map: "idx_pool_allocation_pool_id")
+  @@map("pool_allocation")
+}
+
+/// x402 Marketplace purchase receipts (STT wei only).
+model MarketplacePurchase {
+  id            String                    @id @default(uuid()) @db.Uuid
+  userId        String                    @map("user_id") @db.Uuid
+  user          User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycleId       String?                   @map("cycle_id") @db.Uuid
+  subAgentId    String?                   @map("sub_agent_id") @db.Text
+  productId     String                    @map("product_id") @db.Text
+  amountSttWei  BigInt                    @map("amount_stt_wei")
+  txHash        String?                   @map("tx_hash") @db.Text
+  payerAddress  String                    @map("payer_address") @db.Text
+  correlationId String                    @map("correlation_id") @db.Text
+  status        MarketplacePurchaseStatus @default(success)
+  metadata      Json?
+  createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_marketplace_purchase_user_created")
+  @@index([cycleId], map: "idx_marketplace_purchase_cycle_id")
+  @@map("marketplace_purchase")
+}

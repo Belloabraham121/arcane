@@ -14,16 +14,29 @@ export default function SignInPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Authentication logic would go here
-    setTimeout(() => {
+    setError(null)
+
+    try {
+      const { login } = await import('@/lib/api/auth')
+      const result = await login(email, password)
+
+      if (!result.success || !result.data) {
+        setError(result.error?.message ?? 'Sign in failed')
+        return
+      }
+
+      const { resolvePostAuthRoute } = await import('@/lib/routing/resolve-post-auth')
+      router.push(await resolvePostAuthRoute())
+    } catch {
+      setError('Unable to reach the server. Is the backend running?')
+    } finally {
       setIsLoading(false)
-      // Redirect to dashboard after successful sign in
-      router.push('/dashboard')
-    }, 1000)
+    }
   }
 
   return (
@@ -118,6 +131,9 @@ export default function SignInPage() {
               </div>
 
               {/* Submit Button */}
+              {error && (
+                <p className="text-xs font-mono text-[#ea580c]">{error}</p>
+              )}
               <motion.button
                 type="submit"
                 disabled={isLoading}

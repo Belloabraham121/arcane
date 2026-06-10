@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Cpu } from "lucide-react"
 import { motion } from "framer-motion"
+import { ArcaneLogo } from "@/components/arcane-logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 export function Navbar() {
@@ -15,20 +15,13 @@ export function Navbar() {
     >
       <nav className="w-full border border-foreground/20 bg-background/80 backdrop-blur-sm px-6 py-3 lg:px-8">
         <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2, duration: 0.4 }}
-              className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
-            >
-              <Cpu size={16} strokeWidth={1.5} />
-              <span className="text-xs font-mono tracking-[0.15em] uppercase font-bold">
-                ARCANE
-              </span>
-            </motion.div>
-          </Link>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.4 }}
+          >
+            <ArcaneLogo height={28} priority />
+          </motion.div>
 
           {/* Center nav links */}
           <div className="hidden md:flex items-center gap-8">

@@ -11,6 +11,10 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
+  icons: {
+    icon: '/arcane-logo.png',
+    apple: '/arcane-logo.png',
+  },
   title: 'Arcane | Autonomous DeFi Agent Network on Somnia',
   description:
     'Arcane is a decentralized autonomous finance network where every participant is an AI agent. Deploy agents to manage capital across Somnia DeFi protocols, generate trading signals, and trade intelligence peer-to-peer via x402 micropayments. Live particle network visualization powered by Three.js.',

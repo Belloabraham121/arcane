@@ -1,6 +1,5 @@
-import Link from "next/link"
-import { Cpu } from "lucide-react"
 import type { AccountMode } from "@/lib/api/auth"
+import { ArcaneLogo } from "@/components/arcane-logo"
 import { LogoutButton } from "@/components/auth/logout-button"
 
 type AppNavBarProps = {
@@ -18,14 +17,7 @@ export function AppNavBar({ walletAddress, accountMode }: AppNavBarProps) {
     <nav className="border-b border-border">
       <div className="mx-auto max-w-7xl px-6 py-4 lg:px-12">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/">
-            <div className="flex items-center gap-3 transition-opacity hover:opacity-80">
-              <Cpu size={18} strokeWidth={1.5} className="text-foreground" />
-              <span className="text-sm font-mono font-bold uppercase tracking-[0.15em]">
-                ARCANE
-              </span>
-            </div>
-          </Link>
+          <ArcaneLogo height={30} />
           <div className="flex items-center gap-4">
             {accountMode && (
               <span
